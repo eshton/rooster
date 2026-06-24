@@ -1,0 +1,26 @@
+{
+  "name": "@rooster/config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Environment loading/validation and deployment/db-driver selection for Rooster.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@rooster/schema": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

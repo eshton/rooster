@@ -1,0 +1,157 @@
+import { z } from 'zod'
+import {
+  agentKindSchema,
+  agentStatusSchema,
+  enrollmentPolicySchema,
+  principalTypeSchema,
+  roleSchema,
+  ticketPrioritySchema,
+  ticketStatusSchema,
+} from './enums.js'
+import { idSchema, ticketKeySchema, timestampSchema } from './ids.js'
+
+const base = {
+  id: idSchema,
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+}
+
+/** Tenant root. Every other row is scoped by `orgId`. */
+export const orgSchema = z.object({
+  ...base,
+  slug: z
+    .string()
+    .min(2)
+    .max(48)
+    .regex(/^[a-z0-9][a-z0-9-]*$/, 'Lowercase letters, digits and hyphens only'),
+  name: z.string().min(1).max(120),
+  enrollmentPolicy: enrollmentPolicySchema,
+})
+export type Org = z.infer<typeof orgSchema>
+
+export const teamSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  key: z
+    .string()
+    .min(2)
+    .max(10)
+    .regex(/^[A-Z][A-Z0-9]*$/, 'Uppercase ticket-key prefix, e.g. "ROOST"'),
+  name: z.string().min(1).max(120),
+})
+export type Team = z.infer<typeof teamSchema>
+
+export const projectSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  teamId: idSchema,
+  name: z.string().min(1).max(120),
+  description: z.string().max(4000).nullable(),
+  archived: z.boolean(),
+})
+export type Project = z.infer<typeof projectSchema>
+
+/**
+ * A Principal is the shared supertype of User and Agent. Tickets are assigned
+ * to, and audited against, a principal — so "which agent closed this?" is a
+ * first-class query.
+ */
+export const principalSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  type: principalTypeSchema,
+  displayName: z.string().min(1).max(120),
+})
+export type Principal = z.infer<typeof principalSchema>
+
+export const userSchema = z.object({
+  ...base,
+  principalId: idSchema,
+  email: z.email(),
+  name: z.string().min(1).max(120),
+  avatarUrl: z.url().nullable(),
+})
+export type User = z.infer<typeof userSchema>
+
+/**
+ * An Agent is an AI principal backed 1:1 by an OAuth client. The trusted
+ * identity is `id` (bound into every issued token). `kind`/`vendor`/`version`
+ * are self-reported descriptive metadata and MUST NOT drive authorization.
+ */
+export const agentSchema = z.object({
+  ...base,
+  principalId: idSchema,
+  orgId: idSchema,
+  ownerUserId: idSchema,
+  displayName: z.string().min(1).max(120),
+  kind: agentKindSchema,
+  vendor: z.string().max(120).nullable(),
+  version: z.string().max(60).nullable(),
+  oauthClientId: z.string().min(1).nullable(),
+  scopes: z.array(z.string()),
+  status: agentStatusSchema,
+})
+export type Agent = z.infer<typeof agentSchema>
+
+export const membershipSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  principalId: idSchema,
+  /** null = org-level membership; set = scoped to a single team. */
+  teamId: idSchema.nullable(),
+  role: roleSchema,
+})
+export type Membership = z.infer<typeof membershipSchema>
+
+export const ticketSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  projectId: idSchema,
+  key: ticketKeySchema,
+  number: z.number().int().positive(),
+  title: z.string().min(1).max(300),
+  description: z.string().max(50_000).nullable(),
+  status: ticketStatusSchema,
+  priority: ticketPrioritySchema,
+  labels: z.array(z.string().min(1).max(60)),
+  assigneeId: idSchema.nullable(),
+  parentId: idSchema.nullable(),
+})
+export type Ticket = z.infer<typeof ticketSchema>
+
+export const commentSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  ticketId: idSchema,
+  authorId: idSchema,
+  body: z.string().min(1).max(50_000),
+})
+export type Comment = z.infer<typeof commentSchema>
+
+/**
+ * Self-reported MCP client metadata captured from the `initialize` request.
+ * Untrusted — stored only as an audit snapshot, never used for authorization.
+ */
+export const clientInfoSchema = z.object({
+  name: z.string().max(200),
+  version: z.string().max(60),
+})
+export type ClientInfo = z.infer<typeof clientInfoSchema>
+
+/**
+ * Append-only audit record. Every mutating action is attributed to the trusted
+ * `principalId`, with an optional untrusted `clientInfo` snapshot for display.
+ */
+export const auditLogSchema = z.object({
+  id: idSchema,
+  orgId: idSchema,
+  principalId: idSchema,
+  action: z.string().min(1).max(120),
+  targetType: z.string().min(1).max(60),
+  targetId: idSchema.nullable(),
+  before: z.unknown().nullable(),
+  after: z.unknown().nullable(),
+  clientInfo: clientInfoSchema.nullable(),
+  createdAt: timestampSchema,
+})
+export type AuditLog = z.infer<typeof auditLogSchema>
