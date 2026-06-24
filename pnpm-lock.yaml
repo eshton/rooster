@@ -30,6 +30,22 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/core:
+    dependencies:
+      '@rooster/db':
+        specifier: workspace:*
+        version: link:../db
+      '@rooster/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@rooster/config':
+        specifier: workspace:*
+        version: link:../config
+
   packages/db:
     dependencies:
       '@libsql/client':
