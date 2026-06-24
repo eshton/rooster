@@ -16,13 +16,24 @@ import {
   type Ticket,
   type UpdateTicketInput,
   updateTicketInput,
+  z,
 } from './deps.js'
+
+/** A ticket tag/label (same shape as a single entry of `ticket.labels`). */
+const labelSchema = z.string().min(1).max(60)
+
+/** Guard against runaway ancestry walks on pre-existing malformed data. */
+const MAX_PARENT_DEPTH = 100
 
 export interface TicketService {
   create(actor: Actor, input: CreateTicketInput): Promise<Ticket>
   get(actor: Actor, id: Id): Promise<Ticket>
   getByKey(actor: Actor, key: string): Promise<Ticket>
   list(actor: Actor, projectId: Id, opts?: ListOptions): Promise<Ticket[]>
+  /** Find related tickets across the org that carry a given tag. */
+  findByLabel(actor: Actor, label: string, opts?: ListOptions): Promise<Ticket[]>
+  /** List the direct subtasks (children) of a ticket. */
+  listSubtasks(actor: Actor, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(actor: Actor, id: Id, input: UpdateTicketInput): Promise<Ticket>
   changeStatus(actor: Actor, input: ChangeStatusInput): Promise<Ticket>
   assign(actor: Actor, input: AssignTicketInput): Promise<Ticket>
@@ -40,6 +51,33 @@ export function createTicketService(repos: Repositories): TicketService {
     const ticket = await repos.tickets.getById(actor.orgId, id)
     if (!ticket) throw new NotFoundError(`Ticket ${id} not found`)
     return ticket
+  }
+
+  /**
+   * Validate that linking `ticketId` under `parentId` won't form a cycle: the
+   * parent must exist, not be the ticket itself, and not be a descendant of it.
+   */
+  async function requireAcyclicParent(
+    actor: Actor,
+    ticketId: Id,
+    parentId: Id | null,
+  ): Promise<void> {
+    if (parentId == null) return
+    if (parentId === ticketId) {
+      throw new ValidationError('A ticket cannot be its own parent')
+    }
+    let cursor: Id | null = parentId
+    for (let depth = 0; cursor && depth < MAX_PARENT_DEPTH; depth++) {
+      if (cursor === ticketId) {
+        throw new ValidationError('Parent relationship would create a cycle')
+      }
+      const node: Ticket | null = await repos.tickets.getById(actor.orgId, cursor)
+      if (!node) {
+        if (cursor === parentId) throw new NotFoundError(`Parent ticket ${parentId} not found`)
+        break
+      }
+      cursor = node.parentId
+    }
   }
 
   return {
@@ -98,12 +136,25 @@ export function createTicketService(repos: Repositories): TicketService {
       return repos.tickets.list(actor.orgId, projectId, opts)
     },
 
+    async findByLabel(actor, rawLabel, opts) {
+      authorize(actor, 'ticket:read')
+      const label = parse(labelSchema, rawLabel)
+      return repos.tickets.listByLabel(actor.orgId, label, opts)
+    },
+
+    async listSubtasks(actor, parentId, opts) {
+      authorize(actor, 'ticket:read')
+      await load(actor, parentId) // 404 if the parent doesn't exist in this org
+      return repos.tickets.listChildren(actor.orgId, parentId, opts)
+    },
+
     async update(actor, id, rawInput) {
       authorize(actor, 'ticket:write')
       const input = parse(updateTicketInput, rawInput)
       const before = await load(actor, id)
 
       if ('assigneeId' in input) await requireAssignee(actor, input.assigneeId ?? null)
+      if ('parentId' in input) await requireAcyclicParent(actor, id, input.parentId ?? null)
 
       const after = await repos.tickets.update(actor.orgId, id, input)
       await recordAudit(repos, actor, {

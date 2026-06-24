@@ -49,6 +49,10 @@ export interface TicketRepository {
   getById(orgId: Id, id: Id): Promise<Ticket | null>
   getByKey(orgId: Id, key: string): Promise<Ticket | null>
   list(orgId: Id, projectId: Id, opts?: ListOptions): Promise<Ticket[]>
+  /** Tickets across the org carrying a given label/tag (exact match). */
+  listByLabel(orgId: Id, label: string, opts?: ListOptions): Promise<Ticket[]>
+  /** Direct children (subtasks) of a parent ticket. */
+  listChildren(orgId: Id, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(orgId: Id, id: Id, patch: Partial<Ticket>): Promise<Ticket>
   /** Allocate the next sequential ticket number for a team's key. */
   nextNumber(orgId: Id, teamId: Id): Promise<number>

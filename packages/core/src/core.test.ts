@@ -175,6 +175,60 @@ describe('ticket lifecycle', () => {
   })
 })
 
+// --- tags + subtask relationships -------------------------------------------
+
+describe('tags and subtasks', () => {
+  it('finds related tickets by tag', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    await services.tickets.create(owner, { projectId: project.id, title: 'a', labels: ['infra'] })
+    await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'b',
+      labels: ['infra', 'urgent'],
+    })
+    await services.tickets.create(owner, { projectId: project.id, title: 'c', labels: ['docs'] })
+
+    const infra = await services.tickets.findByLabel(owner, 'infra')
+    expect(infra.map((t) => t.title).sort()).toEqual(['a', 'b'])
+  })
+
+  it('lists subtasks and links a child to its parent', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const parent = await services.tickets.create(owner, { projectId: project.id, title: 'epic' })
+    const child = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'subtask',
+      parentId: parent.id,
+    })
+    expect(child.parentId).toBe(parent.id)
+
+    const subtasks = await services.tickets.listSubtasks(owner, parent.id)
+    expect(subtasks.map((t) => t.title)).toEqual(['subtask'])
+  })
+
+  it('rejects parent relationships that would form a cycle', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const a = await services.tickets.create(owner, { projectId: project.id, title: 'a' })
+    const b = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'b',
+      parentId: a.id,
+    })
+
+    // a -> b would close the loop a -> b -> a
+    await expect(services.tickets.update(owner, a.id, { parentId: b.id })).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+    // a ticket cannot be its own parent
+    await expect(services.tickets.update(owner, a.id, { parentId: a.id })).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+  })
+})
+
 // --- permission enforcement -------------------------------------------------
 
 describe('permission enforcement', () => {

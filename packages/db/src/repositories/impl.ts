@@ -209,6 +209,36 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .limit(limitOf(opts))
         ).map(toTicket)
       },
+      async listByLabel(orgId, label, opts) {
+        // Prefilter with a LIKE against the JSON-encoded token (escaping LIKE
+        // wildcards so it matches literally), then confirm with an exact
+        // in-memory check — correct for any label, portable across dialects.
+        const needle = enc(label).replace(/([\\%_])/g, '\\$1')
+        const rows = (
+          await db
+            .select()
+            .from(s.tickets)
+            .where(
+              and(
+                eq(s.tickets.orgId, orgId),
+                sql`${s.tickets.labels} LIKE ${`%${needle}%`} ESCAPE '\\'`,
+              ),
+            )
+            .orderBy(desc(s.tickets.createdAt))
+            .limit(limitOf(opts))
+        ).map(toTicket)
+        return rows.filter((t) => t.labels.includes(label))
+      },
+      async listChildren(orgId, parentId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.tickets)
+            .where(and(eq(s.tickets.orgId, orgId), eq(s.tickets.parentId, parentId)))
+            .orderBy(desc(s.tickets.createdAt))
+            .limit(limitOf(opts))
+        ).map(toTicket)
+      },
       async update(orgId, id, patch) {
         const set: Record<string, unknown> = { updatedAt: now() }
         for (const [k, v] of Object.entries(patch)) {

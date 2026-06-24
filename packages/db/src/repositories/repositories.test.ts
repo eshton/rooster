@@ -178,6 +178,58 @@ describe('tenant isolation', () => {
   })
 })
 
+describe('tags + subtask relationships', () => {
+  async function mkTicket(
+    orgId: string,
+    projectId: string,
+    over: Partial<{ key: string; number: number; labels: string[]; parentId: string | null }>,
+  ) {
+    return db.repositories.tickets.create(orgId, {
+      projectId,
+      key: over.key ?? 'ROOST-1',
+      number: over.number ?? 1,
+      title: 'T',
+      description: null,
+      status: 'todo',
+      priority: 'none',
+      labels: over.labels ?? [],
+      assigneeId: null,
+      parentId: over.parentId ?? null,
+    })
+  }
+
+  it('finds tickets by exact tag, ignoring substring near-misses', async () => {
+    const { org, project } = await makeOrgWithTeamProject('acme')
+    await mkTicket(org.id, project.id, { key: 'ROOST-1', number: 1, labels: ['infra', 'urgent'] })
+    await mkTicket(org.id, project.id, { key: 'ROOST-2', number: 2, labels: ['infrastructure'] })
+    await mkTicket(org.id, project.id, { key: 'ROOST-3', number: 3, labels: ['urgent'] })
+
+    const infra = await db.repositories.tickets.listByLabel(org.id, 'infra')
+    expect(infra.map((t) => t.key)).toEqual(['ROOST-1'])
+    const urgent = await db.repositories.tickets.listByLabel(org.id, 'urgent')
+    expect(urgent.map((t) => t.key).sort()).toEqual(['ROOST-1', 'ROOST-3'])
+  })
+
+  it('handles tags containing quotes/wildcards correctly', async () => {
+    const { org, project } = await makeOrgWithTeamProject('acme')
+    await mkTicket(org.id, project.id, { key: 'ROOST-1', number: 1, labels: ['a"b', '50%'] })
+    expect(await db.repositories.tickets.listByLabel(org.id, 'a"b')).toHaveLength(1)
+    expect(await db.repositories.tickets.listByLabel(org.id, '50%')).toHaveLength(1)
+    expect(await db.repositories.tickets.listByLabel(org.id, '5')).toHaveLength(0)
+  })
+
+  it('lists direct subtasks of a parent', async () => {
+    const { org, project } = await makeOrgWithTeamProject('acme')
+    const parent = await mkTicket(org.id, project.id, { key: 'ROOST-1', number: 1 })
+    await mkTicket(org.id, project.id, { key: 'ROOST-2', number: 2, parentId: parent.id })
+    await mkTicket(org.id, project.id, { key: 'ROOST-3', number: 3, parentId: parent.id })
+    await mkTicket(org.id, project.id, { key: 'ROOST-4', number: 4 })
+
+    const children = await db.repositories.tickets.listChildren(org.id, parent.id)
+    expect(children.map((t) => t.key).sort()).toEqual(['ROOST-2', 'ROOST-3'])
+  })
+})
+
 describe('seed', () => {
   it('produces a coherent demo dataset and is idempotent', async () => {
     const first = await seed(db.repositories)
