@@ -30,9 +30,15 @@ describe('describeDriver', () => {
 })
 
 describe('createDatabase', () => {
-  it('reports the selected driver while the impl is pending (phase 2)', async () => {
-    await expect(createDatabase(configFor('file:./local.db'))).rejects.toThrow(
-      /not yet implemented \(phase 2\)/,
-    )
+  it('opens, migrates and closes an in-memory SQLite database', async () => {
+    const db = await createDatabase(configFor('file::memory:'), { migrate: true })
+    expect(db.kind).toBe('sqlite')
+    const org = await db.repositories.orgs.create({
+      slug: 'smoke',
+      name: 'Smoke',
+      enrollmentPolicy: 'open',
+    })
+    expect(org.id).toMatch(/[0-9a-f-]{36}/)
+    await db.close()
   })
 })

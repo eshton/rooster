@@ -9,6 +9,7 @@ import type {
   Project,
   Team,
   Ticket,
+  User,
 } from '@rooster/schema'
 
 /**
@@ -59,7 +60,20 @@ export interface CommentRepository {
 }
 
 export interface PrincipalRepository {
+  create(orgId: Id, input: Omit<Principal, keyof TimestampedId | 'orgId'>): Promise<Principal>
   getById(orgId: Id, id: Id): Promise<Principal | null>
+}
+
+/**
+ * Users are global identities (not org-scoped); a Principal links a user into a
+ * specific org. The user repository is therefore the one place without an
+ * `orgId` argument.
+ */
+export interface UserRepository {
+  create(input: Omit<User, keyof TimestampedId>): Promise<User>
+  getById(id: Id): Promise<User | null>
+  getByEmail(email: string): Promise<User | null>
+  getByPrincipalId(principalId: Id): Promise<User | null>
 }
 
 export interface AgentRepository {
@@ -95,6 +109,7 @@ export interface Repositories {
   tickets: TicketRepository
   comments: CommentRepository
   principals: PrincipalRepository
+  users: UserRepository
   agents: AgentRepository
   memberships: MembershipRepository
   audit: AuditLogRepository

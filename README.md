@@ -42,7 +42,7 @@ apps/
 packages/
   schema/      Shared zod domain types + DTOs — source of truth for validation ✅
   config/      Env loading/validation (zod) + db-driver / platform selection   ✅
-  db/          Drizzle schema + migrations + driver abstraction                 ◐ (contracts)
+  db/          Drizzle schema + migrations + repositories + driver abstraction   ✅
   core/        Domain services, permission checks, audit logging                (phase 3)
   mcp/         MCP server (tools + resources) over Streamable HTTP              (phase 5)
   auth/        better-auth: human OAuth + MCP OAuth 2.1 (DCR/PKCE)              (phase 4)
@@ -80,10 +80,21 @@ database driver is chosen purely from the `DATABASE_URL` scheme:
 | `file:` | local SQLite |
 | `libsql://` / `https://` | libSQL / Turso |
 
+A single repository implementation serves both dialects: the two Drizzle
+schemas are structurally identical (text ids/timestamps, JSON-as-text,
+normalized booleans), so the same query code drives SQLite/libSQL and Postgres.
+Migrations are generated per dialect into `packages/db/migrations/{sqlite,pg}`:
+
+```bash
+pnpm --filter @rooster/db db:generate:sqlite   # regenerate after schema edits
+pnpm --filter @rooster/db db:generate:pg
+pnpm --filter @rooster/db build && pnpm --filter @rooster/db db:seed   # demo data
+```
+
 ## Build phases
 
 1. **Scaffold monorepo** — workspace, `packages/{config,schema,db}`, tooling, CI ✅
-2. **Data layer** — Drizzle schema, PG + SQLite migrations, repositories, seed
+2. **Data layer** — Drizzle schema, PG + SQLite migrations, repositories, seed ✅
 3. **Core services** — CRUD + status transitions, permissions, audit logging
 4. **Auth** — better-auth human OAuth + MCP OAuth 2.1 (DCR/PKCE), enrollment
 5. **MCP server** — tools/resources over Streamable HTTP, `whoami`

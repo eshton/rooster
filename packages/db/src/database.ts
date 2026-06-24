@@ -1,4 +1,6 @@
 import type { DbKind, RoosterConfig } from '@rooster/config'
+import { createLibsqlDatabase } from './drivers/libsql.js'
+import { createPostgresDatabase } from './drivers/postgres.js'
 import type { Repositories } from './repositories.js'
 
 /** A connected database handle: the chosen driver plus its repositories. */
@@ -6,6 +8,11 @@ export interface Database {
   readonly kind: DbKind
   readonly repositories: Repositories
   close(): Promise<void>
+}
+
+export interface CreateDatabaseOptions {
+  /** Apply pending migrations on the same connection before returning. */
+  migrate?: boolean
 }
 
 /** Static description of the driver a given config will use. */
@@ -32,16 +39,18 @@ export function describeDriver(config: Pick<RoosterConfig, 'database'>): DriverP
 }
 
 /**
- * Open a database connection and return its repositories.
- *
- * NOTE: the concrete Drizzle-backed drivers are implemented in phase 2 (data
- * layer). The contract and driver selection are defined here so the core
- * service layer can be built against `Database`/`Repositories` today.
+ * Open a database connection and return its repositories. The concrete driver
+ * is selected purely from the resolved `DATABASE_URL` scheme.
  */
-export async function createDatabase(config: RoosterConfig): Promise<Database> {
-  const plan = describeDriver(config)
-  throw new Error(
-    `createDatabase: ${plan.label} driver not yet implemented (phase 2). ` +
-      `Selected kind="${plan.kind}" via DATABASE_URL.`,
-  )
+export function createDatabase(
+  config: RoosterConfig,
+  opts: CreateDatabaseOptions = {},
+): Promise<Database> {
+  switch (config.database.kind) {
+    case 'sqlite':
+    case 'libsql':
+      return createLibsqlDatabase(config, opts)
+    case 'postgres':
+      return createPostgresDatabase(config, opts)
+  }
 }
