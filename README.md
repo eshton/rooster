@@ -45,7 +45,7 @@ packages/
   db/          Drizzle schema + migrations + repositories + driver abstraction   ✅
   core/        Domain services, permission checks, audit logging                ✅
   mcp/         MCP server (tools + resources) over Streamable HTTP              (phase 5)
-  auth/        better-auth: human OAuth + MCP OAuth 2.1 (DCR/PKCE)              (phase 4)
+  auth/        better-auth: human OAuth + MCP OAuth 2.1 (DCR/PKCE)              ✅
 ```
 
 ## Getting started
@@ -96,7 +96,7 @@ pnpm --filter @rooster/db build && pnpm --filter @rooster/db db:seed   # demo da
 1. **Scaffold monorepo** — workspace, `packages/{config,schema,db}`, tooling, CI ✅
 2. **Data layer** — Drizzle schema, PG + SQLite migrations, repositories, seed ✅
 3. **Core services** — CRUD + status transitions, permissions, audit logging ✅
-4. **Auth** — better-auth human OAuth + MCP OAuth 2.1 (DCR/PKCE), enrollment
+4. **Auth** — better-auth human OAuth + MCP OAuth 2.1 (DCR/PKCE), enrollment ✅
 5. **MCP server** — tools/resources over Streamable HTTP, `whoami`
 6. **Dashboard** — minimal Hono SSR: orgs/teams/projects/tickets, agent registry, audit log
 7. **Deploy adapters** — Vercel + Cloudflare + Docker

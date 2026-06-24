@@ -1,0 +1,31 @@
+{
+  "name": "@rooster/auth",
+  "version": "0.0.0",
+  "private": true,
+  "description": "better-auth configuration: human OAuth login + MCP OAuth 2.1 authorization server, and the domain identity bridge.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@rooster/config": "workspace:*",
+    "@rooster/core": "workspace:*",
+    "@rooster/db": "workspace:*",
+    "@rooster/schema": "workspace:*",
+    "better-auth": "1.6.20",
+    "drizzle-orm": "0.45.2",
+    "zod": "4.4.3"
+  }
+}
