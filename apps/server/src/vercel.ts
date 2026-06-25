@@ -16,7 +16,10 @@ let handler: ((req: Request) => Response | Promise<Response>) | undefined
 
 async function getHandler() {
   if (!handler) {
-    const ctx = await createServerContext(loadConfig(), { migrate: true })
+    // Do NOT migrate on cold start: serverless invocations can race, and the
+    // schema is applied out of band before deploy (`db:migrate` + `auth:migrate`,
+    // see docs/SELF_HOSTING.md).
+    const ctx = await createServerContext(loadConfig(), { migrate: false })
     handler = handle(createApp(ctx))
   }
   return handler
