@@ -77,3 +77,20 @@ export async function humanIdentityFromEmail(
 
   return { orgId, principalId: user.principalId }
 }
+
+/**
+ * Resolve a logged-in human into their {@link ActorIdentity} by email alone,
+ * discovering their org (each user maps to a single principal → one org).
+ * Returns `null` when the email has no Rooster user/principal yet (signed in
+ * but not onboarded into any org). Used by the dashboard session middleware.
+ */
+export async function humanIdentityFromSessionEmail(
+  repos: Repositories,
+  email: string,
+): Promise<ActorIdentity | null> {
+  const user = await repos.users.getByEmail(email)
+  if (!user) return null
+  const principal = await repos.principals.findById(user.principalId)
+  if (!principal) return null
+  return { orgId: principal.orgId, principalId: user.principalId }
+}

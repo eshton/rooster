@@ -39,7 +39,7 @@ a minimal web dashboard.
 
 ```
 apps/
-  server/      Hono app: MCP endpoint + auth + discovery (dashboard pending)    ◐
+  server/      Hono app: MCP endpoint + auth + discovery + SSR dashboard        ✅
   marketing/   Astro static marketing site                                     ✅
   docs/        Astro Starlight documentation site                              ✅
 packages/
@@ -135,7 +135,7 @@ Full deploy + Postgres setup: **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 4. **Auth** — better-auth human OAuth + MCP OAuth 2.1 (DCR/PKCE), enrollment ✅
 5. **MCP server** — tools/resources over Streamable HTTP, `whoami` ✅
 6. **Server app** — Hono: auth + MCP endpoint + discovery + gated `/onboard` ✅
-7. **Dashboard** — minimal Hono SSR: orgs/teams/projects/tickets, agent registry, audit log
+7. **Dashboard** — Hono SSR: login, org/board/ticket views, agent registry, audit log ✅
 8. **Deploy adapters** — Vercel + Cloudflare + Docker
 9. **Marketing + docs** — Astro site + Starlight docs ✅ (`apps/marketing`, `apps/docs`)
 

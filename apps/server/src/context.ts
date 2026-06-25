@@ -16,7 +16,18 @@ function authDatabaseFor(config: RoosterConfig): AuthDatabase {
   if (config.database.kind === 'postgres') {
     return new pg.Pool({ connectionString: config.database.url })
   }
-  return memoryAdapter({})
+  // The in-memory adapter needs its model tables pre-declared (it doesn't
+  // create them on read). These are better-auth's core + OAuth/MCP models.
+  return memoryAdapter({
+    user: [],
+    session: [],
+    account: [],
+    verification: [],
+    oauthApplication: [],
+    oauthAccessToken: [],
+    oauthConsent: [],
+    jwks: [],
+  })
 }
 
 /** The assembled runtime: config + connected DB + domain services + auth. */

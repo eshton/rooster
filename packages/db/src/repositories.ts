@@ -66,6 +66,12 @@ export interface CommentRepository {
 export interface PrincipalRepository {
   create(orgId: Id, input: Omit<Principal, keyof TimestampedId | 'orgId'>): Promise<Principal>
   getById(orgId: Id, id: Id): Promise<Principal | null>
+  /**
+   * Look up a principal by id WITHOUT an org filter. For resolving a caller's
+   * own principal (and thus their org) from a session; never use it to bypass
+   * tenant scoping on tenant data.
+   */
+  findById(id: Id): Promise<Principal | null>
 }
 
 /**

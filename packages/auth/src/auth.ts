@@ -65,6 +65,9 @@ export function createAuth({
     baseURL: config.baseUrl,
     secret: config.authSecret,
     database,
+    // Email/password lets the dashboard work without external OAuth providers
+    // configured; GitHub/Google are added on top when credentials are present.
+    emailAndPassword: { enabled: true },
     socialProviders,
     plugins: [
       mcp({

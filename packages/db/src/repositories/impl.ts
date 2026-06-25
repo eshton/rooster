@@ -300,6 +300,13 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           ).map(toPrincipal),
         )
       },
+      async findById(id) {
+        return first(
+          (await db.select().from(s.principals).where(eq(s.principals.id, id)).limit(1)).map(
+            toPrincipal,
+          ),
+        )
+      },
     },
 
     users: {

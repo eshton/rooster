@@ -34,16 +34,19 @@ Not done yet (good next tasks):
 1. **Vercel adapter** — `vercel.json` + a function entry wrapping the Hono app
    (Node runtime, because the pg pool needs Node). The app is already Web-
    standard `fetch`, so this is thin.
-2. **Dashboard** — the human SSR UI (login, org/team/project/ticket views, agent
-   registry, audit-log viewer). Nothing exists yet.
-3. **MCP-over-HTTP clientInfo capture** — the audit snapshot is wired through the
+2. **MCP-over-HTTP clientInfo capture** — the audit snapshot is wired through the
    actor but the HTTP `/mcp` route currently passes `clientInfo: null`; capturing
    the MCP `initialize` clientInfo would complete it.
+3. **Live deploy validation** — the Vercel + Cloudflare Workers + Postgres/Turso
+   paths are built production-shaped but only exercised on a real deploy.
 
 Done since the original plan: marketing + docs sites (`apps/marketing`,
 `apps/docs`; Cloudflare Pages bundle via `pnpm build:web`), Docker
-(`apps/server/Dockerfile` + `docker-compose.yml`), and per-agent MCP rate
-limiting. The image build itself was not exercised in CI yet.
+(`apps/server/Dockerfile` + `docker-compose.yml`), per-agent MCP rate limiting,
+a **Cloudflare Workers** server entry (`apps/server/src/worker.ts` + the
+`@rooster/db/web` libSQL-HTTP driver), and the **human SSR dashboard**
+(`apps/server/src/dashboard/`: email/password + OAuth login, org overview,
+project board, ticket detail, agent registry, audit viewer).
 
 **The north-star milestone:** deploy to Vercel + Postgres, then connect Claude
 Code's MCP client to the deployed `/mcp` so Rooster tracks its own development.

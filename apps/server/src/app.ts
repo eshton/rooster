@@ -4,6 +4,7 @@ import { createRoosterMcpServer, handleStatelessMcpRequest } from '@rooster/mcp'
 import { registerTenantInput } from '@rooster/schema'
 import { Hono } from 'hono'
 import type { ServerContext } from './context.js'
+import { mountDashboard } from './dashboard/routes.js'
 import { discoveryDocument, landingHtml, llmsText } from './discovery.js'
 import { signupAllowed } from './gate.js'
 import { RateLimiter } from './rate-limit.js'
@@ -36,6 +37,8 @@ export function createApp(ctx: ServerContext): Hono {
 
   app.get('/', (c) => c.html(landingHtml(ctx)))
   app.get('/.well-known/rooster', (c) => c.json(discoveryDocument(ctx)))
+  // Human dashboard (server-rendered) under /app.
+  mountDashboard(app, ctx)
   app.get('/llms.txt', (c) => c.text(llmsText(ctx)))
   app.get('/healthz', (c) => c.json({ ok: true }))
 
