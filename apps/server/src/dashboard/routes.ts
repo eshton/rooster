@@ -1,5 +1,6 @@
 import { humanIdentityFromSessionEmail } from '@rooster/auth'
-import { type Actor, CoreError } from '@rooster/core'
+import { type Actor, allowedTransitions, CoreError, can } from '@rooster/core'
+import type { AgentStatus, TicketStatus } from '@rooster/schema'
 import type { Context, Hono } from 'hono'
 import type { ServerContext } from '../context.js'
 import * as v from './views.js'
@@ -77,7 +78,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         ctx.services.projects.get(actor, id),
         ctx.services.tickets.list(actor, id),
       ])
-      return v.projectBoard({ project, tickets, actor })
+      return v.projectBoard({ project, tickets, actor, canWrite: can(actor, 'ticket:write') })
     }),
   )
 
@@ -86,17 +87,115 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       const id = c.req.param('id')
       const ticket = await ctx.services.tickets.get(actor, id)
       const comments = await ctx.services.comments.list(actor, id)
-      return v.ticketDetail({ ticket, comments, actor })
+      return v.ticketDetail({
+        ticket,
+        comments,
+        actor,
+        canWrite: can(actor, 'ticket:write'),
+        allowedStatuses: allowedTransitions(ticket.status),
+      })
     }),
   )
 
   app.get('/app/agents', (c) =>
     page(c, async (actor) =>
-      v.agentsList({ agents: await ctx.services.agents.list(actor), actor }),
+      v.agentsList({
+        agents: await ctx.services.agents.list(actor),
+        actor,
+        canManage: can(actor, 'agent:write'),
+      }),
     ),
   )
 
   app.get('/app/audit', (c) =>
     page(c, async (actor) => v.auditList({ entries: await ctx.services.audit.list(actor), actor })),
+  )
+
+  // --- write actions (POST) -------------------------------------------------
+
+  // Run a mutation for the authenticated actor, then redirect. Domain errors
+  // render the friendly message page with the right status.
+  const action = async (c: Context, run: (actor: Actor) => Promise<string>) => {
+    const r = await resolveSession(ctx, c.req.raw.headers)
+    if (!r) return c.redirect('/app/login')
+    if ('noOrg' in r) return c.html(v.noOrgPage(null, r.noOrg))
+    try {
+      return c.redirect(await run(r.actor))
+    } catch (err) {
+      if (err instanceof CoreError) {
+        return c.html(
+          v.messagePage(r.actor, 'Action failed', err.message),
+          (STATUS_BY_CODE[err.code] ?? 500) as 400,
+        )
+      }
+      throw err
+    }
+  }
+
+  app.post('/app/projects/:id/tickets', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      const labels = String(body.labels ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      await ctx.services.tickets.create(actor, {
+        projectId: id,
+        title: String(body.title ?? ''),
+        priority: 'none',
+        labels,
+      })
+      return `/app/projects/${id}`
+    }),
+  )
+
+  app.post('/app/tickets/:id/status', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.tickets.changeStatus(actor, {
+        ticketId: id,
+        status: String(body.status) as TicketStatus,
+      })
+      return `/app/tickets/${id}`
+    }),
+  )
+
+  app.post('/app/tickets/:id/assign', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      const assigneeId = body.assigneeId ? String(body.assigneeId) : null
+      await ctx.services.tickets.assign(actor, { ticketId: id, assigneeId })
+      return `/app/tickets/${id}`
+    }),
+  )
+
+  app.post('/app/tickets/:id/comments', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.comments.create(actor, { ticketId: id, body: String(body.body ?? '') })
+      return `/app/tickets/${id}`
+    }),
+  )
+
+  app.post('/app/agents/:id/status', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.agents.setStatus(actor, id, String(body.status) as AgentStatus)
+      return '/app/agents'
+    }),
+  )
+
+  app.post('/app/agents/:id/bind', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.agents.bindOAuthClient(actor, id, String(body.clientId ?? ''))
+      return '/app/agents'
+    }),
   )
 }

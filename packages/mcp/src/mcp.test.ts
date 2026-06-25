@@ -115,4 +115,23 @@ describe('MCP server end-to-end', () => {
     expect(bad.isError).toBe(true)
     expect(bad.content[0]?.text).toContain('validation')
   })
+
+  it('registers, lists and suspends an agent', async () => {
+    const reg = payload(
+      (await call('register_agent', {
+        displayName: 'Worker Bot',
+        kind: 'custom',
+        scopes: ['ticket:read'],
+      })) as never,
+    )
+    expect(reg.status).toBe('active')
+
+    const agents = payload((await call('list_agents')) as never) as Array<{ id: string }>
+    expect(agents.some((a) => a.id === reg.id)).toBe(true)
+
+    const suspended = payload(
+      (await call('set_agent_status', { id: reg.id, status: 'suspended' })) as never,
+    )
+    expect(suspended.status).toBe('suspended')
+  })
 })

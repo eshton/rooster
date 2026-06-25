@@ -1,10 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Actor, Services } from '@rooster/core'
 import {
+  agentStatusSchema,
   assignTicketInput,
   changeStatusInput,
   commentInput,
   createTicketInput,
+  registerAgentInput,
   updateTicketInput,
 } from '@rooster/schema'
 import { z } from 'zod'
@@ -160,5 +162,36 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { ticketId: z.uuid() },
     },
     async ({ ticketId }) => runTool(() => services.tickets.crow(actor, ticketId)),
+  )
+
+  server.registerTool(
+    'list_agents',
+    {
+      title: 'List agents',
+      description: 'List the agents registered in your org.',
+      inputSchema: {},
+    },
+    async () => runTool(() => services.agents.list(actor)),
+  )
+
+  server.registerTool(
+    'register_agent',
+    {
+      title: 'Register agent',
+      description:
+        'Register a new agent in your org (admin only). Returns the agent; bind its OAuth client separately once registered.',
+      inputSchema: registerAgentInput.shape,
+    },
+    async (args) => runTool(() => services.agents.register(actor, args)),
+  )
+
+  server.registerTool(
+    'set_agent_status',
+    {
+      title: 'Set agent status',
+      description: 'Activate, suspend or revoke an agent (admin only).',
+      inputSchema: { id: z.uuid(), status: agentStatusSchema },
+    },
+    async ({ id, status }) => runTool(() => services.agents.setStatus(actor, id, status)),
   )
 }

@@ -49,6 +49,15 @@ h1{font-size:1.5rem;margin:0 0 .25rem}h2{font-size:1.15rem;margin:1.75rem 0 .75r
 form.auth{max-width:22rem}form.auth input{width:100%;padding:.55rem .65rem;border:1px solid var(--line);border-radius:8px;margin:.35rem 0}
 table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{text-align:left;padding:.45rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
 .empty{color:var(--muted);font-style:italic}
+.actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.6rem 0}
+.actions input,.actions select,.actions textarea{padding:.45rem .6rem;border:1px solid var(--line);border-radius:8px;font:inherit}
+.actions input,.actions textarea{flex:1;min-width:10rem}
+.actions textarea{min-height:3.5rem}
+.btn.sm{padding:.35rem .7rem;font-size:.85rem}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.ghost:hover{border-color:var(--amber);color:var(--amber-dark);background:transparent}
+fieldset{border:1px solid var(--line);border-radius:12px;padding:.75rem 1rem;margin:.75rem 0}
+fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:0 .35rem}
 `
 
 function chrome(title: string, actor: Actor | null, body: string): string {
@@ -171,7 +180,19 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   canceled: 'Canceled',
 }
 
-export function projectBoard(data: { project: Project; tickets: Ticket[]; actor: Actor }): string {
+export function projectBoard(data: {
+  project: Project
+  tickets: Ticket[]
+  actor: Actor
+  canWrite: boolean
+}): string {
+  const createForm = data.canWrite
+    ? `<form method="post" action="/app/projects/${esc(data.project.id)}/tickets" class="actions">
+        <input name="title" placeholder="New ticket title" required maxlength="300">
+        <input name="labels" placeholder="tags, comma-separated">
+        <button class="btn" type="submit">Create ticket</button>
+      </form>`
+    : ''
   const cols = TICKET_STATUSES.map((status) => {
     const inCol = data.tickets.filter((t) => t.status === status)
     const cards = inCol.length
@@ -191,11 +212,18 @@ export function projectBoard(data: { project: Project; tickets: Ticket[]; actor:
     data.actor,
     `<p class="muted"><a href="/app">← Overview</a></p><h1>${esc(data.project.name)}</h1>
     ${data.project.description ? `<p class="muted">${esc(data.project.description)}</p>` : ''}
+    ${createForm}
     <div class="board">${cols}</div>`,
   )
 }
 
-export function ticketDetail(data: { ticket: Ticket; comments: Comment[]; actor: Actor }): string {
+export function ticketDetail(data: {
+  ticket: Ticket
+  comments: Comment[]
+  actor: Actor
+  canWrite: boolean
+  allowedStatuses: readonly TicketStatus[]
+}): string {
   const t = data.ticket
   const comments = data.comments.length
     ? data.comments
@@ -205,6 +233,30 @@ export function ticketDetail(data: { ticket: Ticket; comments: Comment[]; actor:
         )
         .join('')
     : '<div class="empty">No comments.</div>'
+
+  const statusForm =
+    data.canWrite && data.allowedStatuses.length
+      ? `<form method="post" action="/app/tickets/${esc(t.id)}/status" class="actions">
+          <select name="status">${data.allowedStatuses.map((s) => `<option value="${esc(s)}">${esc(STATUS_LABEL[s])}</option>`).join('')}</select>
+          <button class="btn sm" type="submit">Move</button>
+        </form>`
+      : ''
+  const assignForm = data.canWrite
+    ? `<form method="post" action="/app/tickets/${esc(t.id)}/assign" class="actions">
+        <input name="assigneeId" placeholder="principal id (blank = unassign)" value="${esc(t.assigneeId ?? '')}">
+        <button class="btn sm ghost" type="submit">Assign</button>
+      </form>`
+    : ''
+  const commentForm = data.canWrite
+    ? `<form method="post" action="/app/tickets/${esc(t.id)}/comments" class="actions">
+        <textarea name="body" placeholder="Add a comment" required maxlength="50000"></textarea>
+        <button class="btn sm" type="submit">Comment</button>
+      </form>`
+    : ''
+  const controls = data.canWrite
+    ? `<fieldset><legend>Actions</legend>${statusForm}${assignForm}</fieldset>`
+    : ''
+
   return chrome(
     t.key,
     data.actor,
@@ -215,25 +267,40 @@ export function ticketDetail(data: { ticket: Ticket; comments: Comment[]; actor:
       ${t.assigneeId ? `<span class="badge">assignee: ${esc(t.assigneeId)}</span>` : '<span class="badge">unassigned</span>'}</div>
     ${t.description ? `<div class="card">${esc(t.description)}</div>` : ''}
     ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}
-    <h2>Comments</h2>${comments}`,
+    ${controls}
+    <h2>Comments</h2>${comments}${commentForm}`,
   )
 }
 
-export function agentsList(data: { agents: Agent[]; actor: Actor }): string {
+const AGENT_STATUS_OPTIONS = ['active', 'suspended', 'revoked'] as const
+
+export function agentsList(data: { agents: Agent[]; actor: Actor; canManage: boolean }): string {
+  const actionsCol = data.canManage ? '<th>Manage</th>' : ''
   const rows = data.agents.length
     ? data.agents
-        .map(
-          (a) =>
-            `<tr><td><strong>${esc(a.displayName)}</strong></td><td>${esc(a.kind)}</td>
+        .map((a) => {
+          const manage = data.canManage
+            ? `<td>
+                <form method="post" action="/app/agents/${esc(a.id)}/status" class="actions" style="margin:0">
+                  <select name="status">${AGENT_STATUS_OPTIONS.map((s) => `<option value="${s}"${s === a.status ? ' selected' : ''}>${s}</option>`).join('')}</select>
+                  <button class="btn sm ghost" type="submit">Set</button>
+                </form>
+                <form method="post" action="/app/agents/${esc(a.id)}/bind" class="actions" style="margin:.3rem 0 0">
+                  <input name="clientId" placeholder="OAuth client id" value="${esc(a.oauthClientId ?? '')}">
+                  <button class="btn sm ghost" type="submit">Bind</button>
+                </form>
+              </td>`
+            : ''
+          return `<tr><td><strong>${esc(a.displayName)}</strong></td><td>${esc(a.kind)}</td>
             <td><span class="badge ${a.status === 'active' ? 'amber' : ''}">${esc(a.status)}</span></td>
-            <td class="muted">${esc(a.oauthClientId ?? '—')}</td></tr>`,
-        )
+            <td class="muted">${esc(a.oauthClientId ?? '—')}</td>${manage}</tr>`
+        })
         .join('')
-    : '<tr><td colspan="4" class="empty">No agents registered.</td></tr>'
+    : `<tr><td colspan="${data.canManage ? 5 : 4}" class="empty">No agents registered.</td></tr>`
   return chrome(
     'Agents',
     data.actor,
-    `<h1>Agent registry</h1><table><thead><tr><th>Name</th><th>Kind</th><th>Status</th><th>OAuth client</th></tr></thead><tbody>${rows}</tbody></table>`,
+    `<h1>Agent registry</h1><table><thead><tr><th>Name</th><th>Kind</th><th>Status</th><th>OAuth client</th>${actionsCol}</tr></thead><tbody>${rows}</tbody></table>`,
   )
 }
 

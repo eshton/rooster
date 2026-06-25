@@ -1,3 +1,4 @@
+import { humanIdentityFromSessionEmail } from '@rooster/auth'
 import { loadConfig } from '@rooster/config'
 import type { Actor } from '@rooster/core'
 import type { Project, Ticket } from '@rooster/schema'
@@ -97,5 +98,103 @@ describe('dashboard (authenticated)', () => {
     const res = await app.request(`${base}/app/agents`, { headers: { cookie } })
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Agent registry')
+  })
+
+  // --- write actions --------------------------------------------------------
+
+  function form(fields: Record<string, string>) {
+    return {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields).toString(),
+    }
+  }
+
+  it('creates a ticket, moves it, comments on it — all from the UI', async () => {
+    // discover the project id from the overview
+    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
+    const projectId = overview.match(/\/app\/projects\/([0-9a-f-]{36})/)?.[1]
+    expect(projectId).toBeTruthy()
+
+    const created = await app.request(`${base}/app/projects/${projectId}/tickets`, {
+      ...form({ title: 'Dashboard-made ticket', labels: 'ui, infra' }),
+    })
+    expect(created.status).toBe(302)
+
+    const board = await (
+      await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
+    ).text()
+    expect(board).toContain('Dashboard-made ticket')
+    const ticketId = board.match(/\/app\/tickets\/([0-9a-f-]{36})/)?.[1]
+    expect(ticketId).toBeTruthy()
+
+    const moved = await app.request(`${base}/app/tickets/${ticketId}/status`, {
+      ...form({ status: 'todo' }),
+    })
+    expect(moved.status).toBe(302)
+
+    const commented = await app.request(`${base}/app/tickets/${ticketId}/comments`, {
+      ...form({ body: 'looks good' }),
+    })
+    expect(commented.status).toBe(302)
+
+    const detail = await (
+      await app.request(`${base}/app/tickets/${ticketId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain('To do') // status moved
+    expect(detail).toContain('looks good') // comment shown
+  })
+
+  it('rejects an illegal status move with a 400', async () => {
+    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
+    const projectId = overview.match(/\/app\/projects\/([0-9a-f-]{36})/)?.[1]
+    await app.request(`${base}/app/projects/${projectId}/tickets`, {
+      ...form({ title: 'Another ticket' }),
+    })
+    const board = await (
+      await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
+    ).text()
+    // newest ticket is first in each column; grab any ticket id
+    const ticketId = board.match(/\/app\/tickets\/([0-9a-f-]{36})/)?.[1]
+    const res = await app.request(`${base}/app/tickets/${ticketId}/status`, {
+      ...form({ status: 'done' }), // backlog -> done is illegal
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('manages an agent (suspend + bind) from the registry', async () => {
+    // Register an agent in this tenant via the core services (owner actor).
+    const identity = await humanIdentityFromSessionEmail(ctx.db.repositories, 'ada@acme.test')
+    const owner = await ctx.services.resolveActor(identity ?? { orgId: '', principalId: '' })
+    const agent = await ctx.services.agents.register(owner, {
+      displayName: 'Registry Bot',
+      kind: 'custom',
+      scopes: ['ticket:read'],
+    })
+
+    const suspended = await app.request(`${base}/app/agents/${agent.id}/status`, {
+      ...form({ status: 'suspended' }),
+    })
+    expect(suspended.status).toBe(302)
+
+    const bound = await app.request(`${base}/app/agents/${agent.id}/bind`, {
+      ...form({ clientId: 'cf-client-123' }),
+    })
+    expect(bound.status).toBe(302)
+
+    const page = await (await app.request(`${base}/app/agents`, { headers: { cookie } })).text()
+    expect(page).toContain('Registry Bot')
+    expect(page).toContain('suspended')
+    expect(page).toContain('cf-client-123')
+  })
+
+  it('redirects anonymous write attempts to login', async () => {
+    const res = await app.request(`${base}/app/tickets/whatever/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ body: 'x' }).toString(),
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/app/login')
   })
 })
