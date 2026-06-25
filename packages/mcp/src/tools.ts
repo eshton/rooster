@@ -1,10 +1,16 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { Actor, Services } from '@rooster/core'
+import {
+  type Actor,
+  type ProvisionalIdentity,
+  provisionTenantForAccount,
+  type Services,
+} from '@rooster/core'
 import {
   agentStatusSchema,
   assignTicketInput,
   changeStatusInput,
   commentInput,
+  createTenantInput,
   createTicketInput,
   registerAgentInput,
   updateTicketInput,
@@ -15,6 +21,67 @@ import { errorResult, jsonResult, runTool } from './result.js'
 export interface ToolDeps {
   services: Services
   actor: Actor
+}
+
+export interface ProvisioningToolDeps {
+  services: Services
+  provisional: ProvisionalIdentity
+}
+
+/**
+ * Register the minimal toolset exposed to an authenticated-but-orgless caller:
+ * `whoami` (reports the provisional status) and `create_tenant` (bootstraps the
+ * workspace, after which a full token resolves to the new org). Nothing here
+ * touches tenant data, so no {@link Actor} is required.
+ */
+export function registerProvisioningTools(
+  server: McpServer,
+  { services, provisional }: ProvisioningToolDeps,
+): void {
+  server.registerTool(
+    'whoami',
+    {
+      title: 'Who am I',
+      description: 'Report your authenticated identity and onboarding status.',
+      inputSchema: {},
+    },
+    async () =>
+      jsonResult({
+        authUserId: provisional.authUserId,
+        email: provisional.email,
+        name: provisional.name,
+        status: 'provisional',
+        hint: 'You are authenticated but have no workspace yet. Call create_tenant to make one.',
+      }),
+  )
+
+  server.registerTool(
+    'create_tenant',
+    {
+      title: 'Create your workspace',
+      description:
+        'Create your workspace (org) with its first project, then start filing tickets. Call this once; reconnecting later from any MCP client lands you back in the same workspace. Provide a workspace name and the first project name + key (the uppercase ticket prefix, e.g. "ROOST").',
+      inputSchema: createTenantInput.shape,
+    },
+    async (args) =>
+      runTool(async () => {
+        const result = await provisionTenantForAccount(
+          services,
+          {
+            authUserId: provisional.authUserId,
+            email: provisional.email,
+            name: provisional.name,
+          },
+          args,
+        )
+        return {
+          workspace: { id: result.org.id, slug: result.org.slug, name: result.org.name },
+          team: { id: result.team.id, key: result.team.key },
+          project: { id: result.project.id, name: result.project.name },
+          message: `Workspace '${result.org.name}' is ready. Create tickets in '${result.project.name}' — they'll be keyed ${result.team.key}-1, ${result.team.key}-2, …`,
+        }
+      }),
+  )
 }
 
 /**

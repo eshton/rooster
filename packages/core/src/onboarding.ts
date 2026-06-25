@@ -1,12 +1,14 @@
 import type {
   Agent,
   AgentKind,
+  CreateTenantInput,
   EnrollmentPolicy,
   Org,
   Principal,
   Project,
   Team,
 } from '@rooster/schema'
+import { ConflictError } from './errors.js'
 import type { Services } from './services/index.js'
 
 /**
@@ -15,7 +17,7 @@ import type { Services } from './services/index.js'
  */
 export interface ProvisionTenantSpec {
   org: { slug: string; name: string; enrollmentPolicy?: EnrollmentPolicy }
-  founder: { name: string; email: string }
+  founder: { name: string; email: string; authUserId?: string | null }
   team: { key: string; name: string }
   project: { name: string; description?: string }
   /** Optional first agent; if `oauthClientId` is set it is bound 1:1. */
@@ -46,7 +48,13 @@ export async function provisionTenant(
       name: spec.org.name,
       enrollmentPolicy: spec.org.enrollmentPolicy ?? 'token',
     },
-    founder: { displayName: spec.founder.name, ...spec.founder, avatarUrl: null },
+    founder: {
+      displayName: spec.founder.name,
+      name: spec.founder.name,
+      email: spec.founder.email,
+      authUserId: spec.founder.authUserId ?? null,
+      avatarUrl: null,
+    },
   })
 
   const owner = await services.resolveActor({ orgId: org.id, principalId: founder.id })
@@ -77,4 +85,59 @@ export async function provisionTenant(
   }
 
   return { org, founder, team, project, agent }
+}
+
+/** The verified account a {@link provisionTenantForAccount} call belongs to. */
+export interface FounderAccount {
+  /** Stable better-auth account id → the new user's `authUserId`. */
+  authUserId: string
+  email: string
+  name: string
+}
+
+/** Derive a valid org slug from a free-text workspace name. */
+export function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  return base.length >= 2 ? base : 'workspace'
+}
+
+/**
+ * Self-service tenant bootstrap for an authenticated, orgless account (the
+ * `create_tenant` MCP tool). Founder identity comes from the OAuth token, not
+ * user input; the new owner user is anchored to `account.authUserId` so every
+ * one of that human's OAuth clients later resolves to this same tenant. The org
+ * slug is derived from the workspace name and de-duplicated on collision.
+ */
+export async function provisionTenantForAccount(
+  services: Services,
+  account: FounderAccount,
+  input: CreateTenantInput,
+): Promise<ProvisionTenantResult> {
+  const baseSlug = input.workspace.slug ?? slugify(input.workspace.name)
+  const founder = {
+    name: account.name || account.email,
+    email: account.email,
+    authUserId: account.authUserId,
+  }
+
+  for (let attempt = 0; attempt <= 25; attempt++) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`
+    try {
+      return await provisionTenant(services, {
+        org: { slug, name: input.workspace.name, enrollmentPolicy: 'open' },
+        founder,
+        team: { key: input.project.key, name: input.workspace.name },
+        project: { name: input.project.name },
+      })
+    } catch (err) {
+      // Only a slug collision is retryable; surface anything else immediately.
+      if (err instanceof ConflictError && err.message.includes('slug')) continue
+      throw err
+    }
+  }
+  throw new ConflictError(`Could not find an available workspace slug near '${baseSlug}'`)
 }

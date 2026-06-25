@@ -1,5 +1,5 @@
 import { resolveMcpIdentity } from '@rooster/auth'
-import { CoreError, provisionTenant } from '@rooster/core'
+import { CoreError, isProvisional, provisionTenant } from '@rooster/core'
 import { createRoosterMcpServer, handleStatelessMcpRequest } from '@rooster/mcp'
 import { type ClientInfo, registerTenantInput } from '@rooster/schema'
 import { Hono } from 'hono'
@@ -117,7 +117,25 @@ export function createApp(ctx: ServerContext): Hono {
           },
         })
       }
-      // Per-agent rate limiting (keyed by the trusted principal).
+
+      // An authenticated-but-orgless caller gets the minimal bootstrap server
+      // (whoami + create_tenant); rate-limit by the stable account id.
+      if (isProvisional(identity)) {
+        const rl = mcpRateLimiter.check(identity.authUserId, Date.now())
+        if (!rl.allowed) {
+          return new Response(JSON.stringify({ error: 'rate_limited' }), {
+            status: 429,
+            headers: {
+              'content-type': 'application/json',
+              'Retry-After': String(rl.retryAfterSeconds),
+            },
+          })
+        }
+        const server = createRoosterMcpServer({ services: ctx.services, provisional: identity })
+        return await handleStatelessMcpRequest(server, req)
+      }
+
+      // Per-principal rate limiting (keyed by the trusted principal).
       const rl = mcpRateLimiter.check(identity.principalId, Date.now())
       if (!rl.allowed) {
         return new Response(JSON.stringify({ error: 'rate_limited' }), {

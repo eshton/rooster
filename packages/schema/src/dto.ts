@@ -92,6 +92,35 @@ export const registerAgentInput = z.object({
 })
 export type RegisterAgentInput = z.infer<typeof registerAgentInput>
 
+// --- Self-service tenant creation (over MCP) --------------------------------
+
+/**
+ * Create-a-workspace input for the `create_tenant` MCP tool. The caller is an
+ * authenticated-but-orgless account; founder identity comes from the OAuth
+ * token, so this asks only for the workspace name (slug derived when omitted)
+ * and the first project's name + key (the ticket prefix, e.g. `ROOST`).
+ */
+export const createTenantInput = z.object({
+  workspace: z.object({
+    name: z.string().min(1).max(120),
+    slug: z
+      .string()
+      .min(2)
+      .max(48)
+      .regex(/^[a-z0-9][a-z0-9-]*$/)
+      .optional(),
+  }),
+  project: z.object({
+    name: z.string().min(1).max(120),
+    key: z
+      .string()
+      .min(2)
+      .max(10)
+      .regex(/^[A-Z][A-Z0-9]*$/),
+  }),
+})
+export type CreateTenantInput = z.infer<typeof createTenantInput>
+
 // --- Tenant onboarding ------------------------------------------------------
 
 /**

@@ -314,7 +314,13 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         const ts = now()
         const [row] = await db
           .insert(s.users)
-          .values({ id: newId(), ...input, createdAt: ts, updatedAt: ts })
+          .values({
+            id: newId(),
+            authUserId: null,
+            ...input,
+            createdAt: ts,
+            updatedAt: ts,
+          })
           .returning()
         return toUser(row!)
       },
@@ -334,6 +340,21 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             await db.select().from(s.users).where(eq(s.users.principalId, principalId)).limit(1)
           ).map(toUser),
         )
+      },
+      async getByAuthUserId(authUserId) {
+        return first(
+          (await db.select().from(s.users).where(eq(s.users.authUserId, authUserId)).limit(1)).map(
+            toUser,
+          ),
+        )
+      },
+      async linkAuthUserId(id, authUserId) {
+        const [row] = await db
+          .update(s.users)
+          .set({ authUserId, updatedAt: now() })
+          .where(eq(s.users.id, id))
+          .returning()
+        return toUser(row!)
       },
     },
 

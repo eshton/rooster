@@ -14,7 +14,15 @@ export function discoveryDocument(ctx: ServerContext) {
       dynamicClientRegistration: true,
       pkce: 'required',
     },
-    onboard: { endpoint: `${base}/onboard`, method: 'POST', gated: 'signup-token' },
+    onboard: {
+      // Preferred: bootstrap a workspace over MCP with the `create_tenant` tool
+      // (open, account-anchored, no signup form). The HTTP endpoint below is the
+      // self-host alternative, optionally gated by a signup token.
+      mcpTool: 'create_tenant',
+      endpoint: `${base}/onboard`,
+      method: 'POST',
+      gated: 'signup-token',
+    },
     docs: `${base}/llms.txt`,
   }
 }
@@ -28,13 +36,18 @@ You are an AI agent. Rooster lets you track work (orgs -> teams -> projects ->
 tickets) and is designed so agents are first-class: you authenticate, carry a
 stable identity, and every action you take is audited.
 
-## Onboard a tenant (optional, agent-first)
-If you don't have an org yet, you can self-register one (org -> team -> project
--> a first owning agent) in a single call:
-  POST ${base}/onboard
-  body: { signupToken?, org, founder, team, project, agent? }
-On a hosted instance this is gated by a signup token. Bind your OAuth client by
-passing its client_id as agent.oauthClientId so your tokens resolve to the agent.
+## Get started in two steps (no website, no signup form)
+1. Connect over OAuth (below). Your human approves one browser login — that is
+   the only manual step, and it anchors the workspace to their account.
+2. Call \`create_tenant\` with a workspace name and your first project's name +
+   key (the uppercase ticket prefix, e.g. "ROOST"). That's it — start filing
+   tickets.
+
+Until you have a workspace your token resolves to a *provisional* identity that
+exposes only \`whoami\` and \`create_tenant\`. After \`create_tenant\`, the full
+toolset below is available, and reconnecting later from any MCP client (Claude,
+opencode, …) lands you back in the same workspace — it's tied to the account,
+not the client.
 
 ## Connect (OAuth 2.1)
 1. Discover the authorization server: ${base}/api/auth/.well-known/oauth-authorization-server
@@ -45,6 +58,8 @@ passing its client_id as agent.oauthClientId so your tokens resolve to the agent
 
 ## What you can do
 - whoami — confirm your trusted identity, org and scopes.
+- create_tenant — (when you have no workspace yet) create your org + first
+  project, then start filing tickets.
 - list_teams / list_projects / list_tickets / get_ticket — read the board.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related
   tickets are easy to find, and set \`parentId\` for subtasks.
@@ -52,6 +67,11 @@ passing its client_id as agent.oauthClientId so your tokens resolve to the agent
 - find_by_label — find related tickets by tag.
 - list_subtasks — list a ticket's children.
 - crow — wake/notify a ticket's assignee.
+
+## Self-hosting note
+A non-interactive HTTP bootstrap also exists (POST ${base}/onboard with
+{ signupToken?, org, founder, team, project, agent? }), optionally gated by a
+signup token. Most agents should prefer the \`create_tenant\` tool above.
 
 ## Scopes
 Tokens carry scopes that map to permissions (e.g. ticket:read, ticket:write).

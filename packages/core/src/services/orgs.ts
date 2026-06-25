@@ -17,6 +17,8 @@ const founderInput = z.object({
   email: z.email(),
   name: z.string().min(1).max(120),
   avatarUrl: z.url().nullable().default(null),
+  /** better-auth account id this founding user is anchored to (if known). */
+  authUserId: z.string().min(1).nullable().default(null),
 })
 export type FounderInput = z.infer<typeof founderInput>
 
@@ -65,6 +67,7 @@ export function createOrgService(repos: Repositories): OrgService {
         email: founder.email,
         name: founder.name,
         avatarUrl: founder.avatarUrl,
+        authUserId: founder.authUserId,
       })
       await repos.memberships.upsert(created.id, {
         principalId: principal.id,

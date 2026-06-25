@@ -116,25 +116,29 @@ describe('identity bridge', () => {
       { clientId: 'client-1', scopes: 'ticket:read ticket:write audit:read' },
       { name: 'Claude Code', version: '1.0' },
     )
-    expect(identity.orgId).toBe(org.id)
-    expect(identity.principalId).toBe(principal.id)
+    expect(identity).not.toBeNull()
+    expect(identity?.orgId).toBe(org.id)
+    expect(identity?.principalId).toBe(principal.id)
     // audit:read is not in the agent's allowance, so it is dropped.
-    expect(identity.scopes).toEqual(['ticket:read', 'ticket:write'])
-    expect(identity.clientInfo).toEqual({ name: 'Claude Code', version: '1.0' })
+    expect(identity?.scopes).toEqual(['ticket:read', 'ticket:write'])
+    expect(identity?.clientInfo).toEqual({ name: 'Claude Code', version: '1.0' })
   })
 
-  it('refuses unknown clients and non-active agents', async () => {
+  it('returns null for unknown clients and refuses non-active agents', async () => {
     await seedAgent({ clientId: 'client-2', scopes: ['ticket:read'], status: 'suspended' })
-    await expect(
-      agentIdentityFromToken(db.repositories, { clientId: 'nope', scopes: '' }),
-    ).rejects.toBeInstanceOf(ForbiddenError)
+    // No agent bound to this client → null (lets the caller fall through to the
+    // account-anchored / provisional path).
+    expect(
+      await agentIdentityFromToken(db.repositories, { clientId: 'nope', scopes: '' }),
+    ).toBeNull()
+    // Bound but suspended → hard refusal.
     await expect(
       agentIdentityFromToken(db.repositories, { clientId: 'client-2', scopes: 'ticket:read' }),
     ).rejects.toBeInstanceOf(ForbiddenError)
   })
 
   it('resolveMcpIdentity returns null without a session', async () => {
-    const fakeAuth = { api: { getMcpSession: async () => null } } as never
+    const fakeAuth = { api: { getMcpUser: async () => null } } as never
     expect(await resolveMcpIdentity(fakeAuth, db.repositories, new Headers())).toBeNull()
   })
 

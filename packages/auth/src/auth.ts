@@ -18,6 +18,20 @@ export interface RoosterAuth {
     getSession: (input: {
       headers: Headers
     }) => Promise<{ user: { id: string; email: string; name: string } } | null>
+    /**
+     * Resolve an MCP bearer token to the authenticated better-auth *account*
+     * (id/email/name) plus the token's client + scopes. Unlike `getMcpSession`
+     * (which returns only the token record), this joins in the user row so the
+     * identity bridge can anchor a Rooster user to a stable account id. Returns
+     * `null` when the request carries no valid MCP session.
+     */
+    getMcpUser: (input: { headers: Headers }) => Promise<{
+      id: string
+      email: string
+      name: string
+      clientId: string
+      scopes: string
+    } | null>
     [endpoint: string]: unknown
   }
   options: unknown
@@ -85,5 +99,32 @@ export function createAuth({
 
   // better-auth's inferred instance type is not portable in .d.ts output; the
   // runtime object matches RoosterAuth (handler + the api endpoints we use).
-  return auth as unknown as RoosterAuth
+  const rooster = auth as unknown as RoosterAuth
+
+  // Join the MCP token's user id to the better-auth user row. `$context`
+  // resolves the (adapter-backed) internal adapter, so this stays portable
+  // across the memory, drizzle and pg adapters.
+  const authContext = (auth as unknown as { $context: Promise<AuthContextLike> }).$context
+  rooster.api.getMcpUser = async ({ headers }) => {
+    const token = await rooster.api.getMcpSession({ headers })
+    if (!token) return null
+    const user = await (await authContext).internalAdapter.findUserById(token.userId)
+    if (!user) return null
+    return {
+      id: token.userId,
+      email: user.email ?? '',
+      name: user.name ?? '',
+      clientId: token.clientId,
+      scopes: token.scopes,
+    }
+  }
+
+  return rooster
+}
+
+/** Minimal shape of better-auth's resolved `$context` that we depend on. */
+interface AuthContextLike {
+  internalAdapter: {
+    findUserById: (id: string) => Promise<{ email?: string; name?: string } | null>
+  }
 }

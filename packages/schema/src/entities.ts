@@ -70,6 +70,13 @@ export const userSchema = z.object({
   email: z.email(),
   name: z.string().min(1).max(120),
   avatarUrl: z.url().nullable(),
+  /**
+   * The better-auth account id (`getMcpSession().userId`) this Rooster user is
+   * anchored to. Stable across a human's OAuth clients (Claude, opencode, …) so
+   * every client of the same account maps to the same tenant. Null for users
+   * created before the account link (lazily backfilled on first MCP call).
+   */
+  authUserId: z.string().min(1).nullable().default(null),
 })
 export type User = z.infer<typeof userSchema>
 

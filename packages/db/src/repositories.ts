@@ -80,10 +80,16 @@ export interface PrincipalRepository {
  * `orgId` argument.
  */
 export interface UserRepository {
-  create(input: Omit<User, keyof TimestampedId>): Promise<User>
+  create(
+    input: Omit<User, keyof TimestampedId | 'authUserId'> & { authUserId?: string | null },
+  ): Promise<User>
   getById(id: Id): Promise<User | null>
   getByEmail(email: string): Promise<User | null>
   getByPrincipalId(principalId: Id): Promise<User | null>
+  /** Resolve a Rooster user by the better-auth account id it is anchored to. */
+  getByAuthUserId(authUserId: string): Promise<User | null>
+  /** Lazily anchor an existing (email-created) user to its better-auth account. */
+  linkAuthUserId(id: Id, authUserId: string): Promise<User>
 }
 
 export interface AgentRepository {

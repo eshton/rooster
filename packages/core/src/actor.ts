@@ -28,6 +28,29 @@ export interface ActorIdentity {
 }
 
 /**
+ * An authenticated caller who is anchored to a verified account but does not yet
+ * belong to any org. They may only bootstrap a tenant (`create_tenant`) or read
+ * their own identity (`whoami`) — never act on tenant data. Carries the
+ * better-auth account fields needed to provision the founding user.
+ */
+export interface ProvisionalIdentity {
+  kind: 'provisional'
+  /** Stable better-auth account id; becomes the new user's `authUserId`. */
+  authUserId: string
+  email: string
+  name: string
+  scopes?: readonly string[]
+  clientInfo?: ClientInfo | null
+}
+
+/** Narrow a resolved MCP identity to the orgless, tenant-bootstrap-only case. */
+export function isProvisional(
+  identity: ActorIdentity | ProvisionalIdentity,
+): identity is ProvisionalIdentity {
+  return 'kind' in identity && identity.kind === 'provisional'
+}
+
+/**
  * Resolve a trusted identity into an {@link Actor}, computing the effective org
  * role as the highest role across the principal's memberships in that org. A
  * principal with no membership in the org cannot act there.
