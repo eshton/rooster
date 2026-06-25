@@ -10,8 +10,11 @@ import {
   assignTicketInput,
   changeStatusInput,
   commentInput,
+  createProjectInput,
+  createTeamInput,
   createTenantInput,
   createTicketInput,
+  inviteMemberInput,
   registerAgentInput,
   updateTicketInput,
 } from '@rooster/schema'
@@ -126,6 +129,27 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'create_team',
+    {
+      title: 'Create team',
+      description:
+        'Create a team in your org (admin only). The team `key` is the uppercase ticket prefix (e.g. "ROOST" → ROOST-1, ROOST-2).',
+      inputSchema: createTeamInput.shape,
+    },
+    async (args) => runTool(() => services.teams.create(actor, args)),
+  )
+
+  server.registerTool(
+    'create_project',
+    {
+      title: 'Create project',
+      description: 'Create a project under a team. Tickets are filed into projects.',
+      inputSchema: createProjectInput.shape,
+    },
+    async (args) => runTool(() => services.projects.create(actor, args)),
+  )
+
+  server.registerTool(
     'list_tickets',
     {
       title: 'List tickets',
@@ -229,6 +253,28 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { ticketId: z.uuid() },
     },
     async ({ ticketId }) => runTool(() => services.tickets.crow(actor, ticketId)),
+  )
+
+  server.registerTool(
+    'invite_member',
+    {
+      title: 'Invite teammate',
+      description:
+        'Invite a human teammate into your workspace by email (admin only). They join the shared workspace; their account links on first login. Re-inviting an existing member updates their role.',
+      inputSchema: inviteMemberInput.shape,
+    },
+    async (args) => runTool(() => services.members.invite(actor, args)),
+  )
+
+  server.registerTool(
+    'read_audit',
+    {
+      title: 'Read audit log',
+      description:
+        'Read the append-only audit log for your org (admin only) — who did what, attributed to the trusted principal.',
+      inputSchema: { limit: z.number().int().min(1).max(200).optional() },
+    },
+    async ({ limit }) => runTool(() => services.audit.list(actor, { limit })),
   )
 
   server.registerTool(

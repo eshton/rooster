@@ -189,35 +189,55 @@ describe('MCP onboarding e2e (account-anchored)', () => {
     expect(tickets.map((t: { key: string }) => t.key)).toContain('ROOST-1')
   })
 
-  it('lets a second user share the tenant once added as a member', async () => {
-    // Bob joins the org as a member (a human invited by the owner). We seed the
-    // principal/user/membership directly; resolveMcpIdentity then anchors his
-    // token (account id `acct-bob`) to this user.
-    const principal = await ctx.db.repositories.principals.create(orgId, {
-      type: 'user',
-      displayName: 'Bob',
-    })
-    await ctx.db.repositories.users.create({
-      principalId: principal.id,
-      email: 'bob@acme.test',
-      name: 'Bob',
-      avatarUrl: null,
-      authUserId: 'acct-bob',
-    })
-    await ctx.db.repositories.memberships.upsert(orgId, {
-      principalId: principal.id,
-      teamId: null,
-      role: 'member',
-    })
+  it('grows the workspace: create_team + create_project', async () => {
+    const team = payload(
+      await callTool('tok-ada-claude', 'create_team', { key: 'OPS', name: 'Operations' }),
+    )
+    expect(team.key).toBe('OPS')
 
+    const project = payload(
+      await callTool('tok-ada-claude', 'create_project', { teamId: team.id, name: 'Runbooks' }),
+    )
+    expect(project.name).toBe('Runbooks')
+
+    // A ticket in the new project is keyed off the new team.
+    const ticket = payload(
+      await callTool('tok-ada-claude', 'create_ticket', {
+        projectId: project.id,
+        title: 'Write the on-call runbook',
+      }),
+    )
+    expect(ticket.key).toBe('OPS-1')
+  })
+
+  it('invites a teammate by email; their account links on first login', async () => {
+    // Owner invites Bob — no principal/user seeding; the tool provisions them.
+    const invite = payload(
+      await callTool('tok-ada-claude', 'invite_member', {
+        email: 'bob@acme.test',
+        name: 'Bob',
+        role: 'member',
+      }),
+    )
+    expect(invite.status).toBe('created')
+    expect(invite.role).toBe('member')
+
+    // Bob connects for the first time (account id `acct-bob`). resolveMcpIdentity
+    // finds his unanchored user by email and links it — he lands in the tenant.
     const who = payload(await callTool('tok-bob', 'whoami'))
     expect(who.orgId).toBe(orgId)
     expect(who.role).toBe('member')
 
-    // A member can file work in the shared tenant.
+    // And he can file work in the shared workspace.
     const ticket = payload(
       await callTool('tok-bob', 'create_ticket', { projectId, title: "Bob's task" }),
     )
     expect(ticket.key).toBe('ROOST-2')
+
+    // The owner can read the audit trail and see the invite + Bob's ticket.
+    const audit = payload(await callTool('tok-ada-claude', 'read_audit', { limit: 50 }))
+    const actions = (audit as Array<{ action: string }>).map((a) => a.action)
+    expect(actions).toContain('member.invite')
+    expect(actions).toContain('ticket.create')
   })
 })

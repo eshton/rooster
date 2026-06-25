@@ -82,6 +82,18 @@ export type CommentInput = z.infer<typeof commentInput>
 
 // --- Agents -----------------------------------------------------------------
 
+/**
+ * Invite a human teammate into the org by email. If the email is new, a member
+ * user is created and linked to their account on first login; an existing
+ * member's role is updated. `role` defaults to `member`.
+ */
+export const inviteMemberInput = z.object({
+  email: z.email(),
+  name: z.string().min(1).max(120).optional(),
+  role: z.enum(['viewer', 'member', 'admin']).default('member'),
+})
+export type InviteMemberInput = z.infer<typeof inviteMemberInput>
+
 export const registerAgentInput = z.object({
   displayName: z.string().min(1).max(120),
   kind: agentKindSchema.default('custom'),

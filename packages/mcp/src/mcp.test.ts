@@ -116,6 +116,27 @@ describe('MCP server end-to-end', () => {
     expect(bad.content[0]?.text).toContain('validation')
   })
 
+  it('creates teams + projects and invites a teammate by email', async () => {
+    const team = payload((await call('create_team', { key: 'OPS', name: 'Ops' })) as never)
+    expect(team.key).toBe('OPS')
+
+    const project = payload(
+      (await call('create_project', { teamId: team.id, name: 'Runbooks' })) as never,
+    )
+    expect(project.name).toBe('Runbooks')
+
+    const invite = payload(
+      (await call('invite_member', { email: 'bob@acme.test', name: 'Bob' })) as never,
+    )
+    expect(invite.status).toBe('created')
+    expect(invite.role).toBe('member')
+
+    const audit = payload((await call('read_audit', { limit: 50 })) as never) as Array<{
+      action: string
+    }>
+    expect(audit.map((a) => a.action)).toEqual(expect.arrayContaining(['member.invite']))
+  })
+
   it('registers, lists and suspends an agent', async () => {
     const reg = payload(
       (await call('register_agent', {

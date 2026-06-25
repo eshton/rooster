@@ -13,6 +13,7 @@ export type {
   CreateTeamInput,
   CreateTicketInput,
   Id,
+  InviteMemberInput,
   Membership,
   Org,
   Principal,
@@ -33,6 +34,7 @@ export {
   createProjectInput,
   createTeamInput,
   createTicketInput,
+  inviteMemberInput,
   registerAgentInput,
   updateTicketInput,
 } from '@rooster/schema'
