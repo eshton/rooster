@@ -37,6 +37,8 @@ export interface TicketService {
   update(actor: Actor, id: Id, input: UpdateTicketInput): Promise<Ticket>
   changeStatus(actor: Actor, input: ChangeStatusInput): Promise<Ticket>
   assign(actor: Actor, input: AssignTicketInput): Promise<Ticket>
+  /** Wake/notify the ticket's assignee (records an audited wake intent). */
+  crow(actor: Actor, ticketId: Id): Promise<{ ticket: Ticket; assigneeId: Id | null }>
 }
 
 export function createTicketService(repos: Repositories): TicketService {
@@ -209,6 +211,20 @@ export function createTicketService(repos: Repositories): TicketService {
         after: { assigneeId: after.assigneeId },
       })
       return after
+    },
+
+    async crow(actor, ticketId) {
+      authorize(actor, 'ticket:write')
+      const ticket = await load(actor, ticketId)
+      // "crow" = wake/notify the ticket's assignee. Delivery channels are a
+      // future integration; for now the wake is recorded as an audited intent.
+      await recordAudit(repos, actor, {
+        action: 'ticket.crow',
+        targetType: 'ticket',
+        targetId: ticket.id,
+        after: { assigneeId: ticket.assigneeId },
+      })
+      return { ticket, assigneeId: ticket.assigneeId }
     },
   }
 }

@@ -44,7 +44,7 @@ packages/
   config/      Env loading/validation (zod) + db-driver / platform selection   ✅
   db/          Drizzle schema + migrations + repositories + driver abstraction   ✅
   core/        Domain services, permission checks, audit logging                ✅
-  mcp/         MCP server (tools + resources) over Streamable HTTP              (phase 5)
+  mcp/         MCP server (tools + resources) over Streamable HTTP              ✅
   auth/        better-auth: human OAuth + MCP OAuth 2.1 (DCR/PKCE)              ✅
 ```
 
@@ -97,7 +97,7 @@ pnpm --filter @rooster/db build && pnpm --filter @rooster/db db:seed   # demo da
 2. **Data layer** — Drizzle schema, PG + SQLite migrations, repositories, seed ✅
 3. **Core services** — CRUD + status transitions, permissions, audit logging ✅
 4. **Auth** — better-auth human OAuth + MCP OAuth 2.1 (DCR/PKCE), enrollment ✅
-5. **MCP server** — tools/resources over Streamable HTTP, `whoami`
+5. **MCP server** — tools/resources over Streamable HTTP, `whoami` ✅
 6. **Dashboard** — minimal Hono SSR: orgs/teams/projects/tickets, agent registry, audit log
 7. **Deploy adapters** — Vercel + Cloudflare + Docker
 8. **Marketing + docs** — Astro site + Starlight docs

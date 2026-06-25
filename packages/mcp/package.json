@@ -1,0 +1,32 @@
+{
+  "name": "@rooster/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Rooster MCP server: tools and resources over Streamable HTTP, wired to the core domain services.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@rooster/core": "workspace:*",
+    "@rooster/schema": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@rooster/config": "workspace:*",
+    "@rooster/db": "workspace:*"
+  }
+}
