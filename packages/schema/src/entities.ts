@@ -138,6 +138,22 @@ export const commentSchema = z.object({
 export type Comment = z.infer<typeof commentSchema>
 
 /**
+ * A shareable workspace join code. An orgless account redeems it to join the
+ * org at `role`. Bounded by `maxUses` and an optional `expiresAt`.
+ */
+export const inviteSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  code: z.string().min(8).max(64),
+  role: roleSchema,
+  createdByPrincipalId: idSchema,
+  maxUses: z.number().int().positive(),
+  uses: z.number().int().nonnegative(),
+  expiresAt: z.string().nullable(),
+})
+export type Invite = z.infer<typeof inviteSchema>
+
+/**
  * Self-reported MCP client metadata captured from the `initialize` request.
  * Untrusted — stored only as an audit snapshot, never used for authorization.
  */

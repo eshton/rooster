@@ -10,11 +10,13 @@ import {
   assignTicketInput,
   changeStatusInput,
   commentInput,
+  createInviteInput,
   createProjectInput,
   createTeamInput,
   createTenantInput,
   createTicketInput,
   inviteMemberInput,
+  joinTenantInput,
   registerAgentInput,
   ticketStatusSchema,
   updateTicketInput,
@@ -83,6 +85,32 @@ export function registerProvisioningTools(
           team: { id: result.team.id, key: result.team.key },
           project: { id: result.project.id, name: result.project.name },
           message: `Workspace '${result.org.name}' is ready. Create tickets in '${result.project.name}' — they'll be keyed ${result.team.key}-1, ${result.team.key}-2, …`,
+        }
+      }),
+  )
+
+  server.registerTool(
+    'join_tenant',
+    {
+      title: 'Join a workspace',
+      description:
+        'Join an existing workspace using an invite code a teammate shared with you. After joining, reconnect and you have full access at the granted role.',
+      inputSchema: joinTenantInput.shape,
+    },
+    async (args) =>
+      runTool(async () => {
+        const result = await services.invites.redeem(
+          {
+            authUserId: provisional.authUserId,
+            email: provisional.email,
+            name: provisional.name,
+          },
+          args,
+        )
+        return {
+          workspace: { id: result.org.id, slug: result.org.slug, name: result.org.name },
+          role: result.role,
+          message: `You've joined '${result.org.name}' as ${result.role}.`,
         }
       }),
   )
@@ -252,6 +280,16 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'search_tickets',
+    {
+      title: 'Search tickets',
+      description: 'Full-text search across ticket titles and descriptions in your org.',
+      inputSchema: { query: z.string().min(1).max(200) },
+    },
+    async ({ query }) => runTool(() => services.tickets.search(actor, query)),
+  )
+
+  server.registerTool(
     'list_subtasks',
     {
       title: 'List subtasks',
@@ -280,6 +318,17 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: inviteMemberInput.shape,
     },
     async (args) => runTool(() => services.members.invite(actor, args)),
+  )
+
+  server.registerTool(
+    'create_invite',
+    {
+      title: 'Create invite code',
+      description:
+        'Mint a shareable workspace join code (admin only). Share it with a teammate; they redeem it with join_tenant on first connect to join at the given role.',
+      inputSchema: createInviteInput.shape,
+    },
+    async (args) => runTool(() => services.invites.create(actor, args)),
   )
 
   server.registerTool(

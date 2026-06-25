@@ -5,7 +5,7 @@ import { createLibsqlWebDrizzle, createRepositories, sqliteSchema } from '@roost
 import type { Hono } from 'hono'
 import { createApp } from './app.js'
 import * as authSchema from './auth-schema.js'
-import type { ServerContext } from './context.js'
+import { type ServerContext, webhookCrowNotifier } from './context.js'
 
 /**
  * Cloudflare Workers entry. Backed by libSQL/Turso over HTTP — one drizzle
@@ -29,7 +29,9 @@ function buildApp(env: WorkerEnv): Hono {
   }
   const drizzleDb = createLibsqlWebDrizzle(config.database.url, config.database.authToken)
   const repositories = createRepositories(drizzleDb, sqliteSchema)
-  const services = createServices(repositories)
+  const services = createServices(repositories, {
+    crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
+  })
   const auth = createAuth({
     config,
     database: drizzleAdapter(drizzleDb, { provider: 'sqlite', schema: authSchema }),

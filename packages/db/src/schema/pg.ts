@@ -116,6 +116,19 @@ export const tickets = pgTable(
   (t) => [uniqueIndex('tickets_org_key_uq').on(t.orgId, t.key)],
 )
 
+export const invites = pgTable('invites', {
+  id: id(),
+  orgId: text('org_id').notNull(),
+  code: text('code').notNull().unique(),
+  role: text('role').notNull(),
+  createdByPrincipalId: text('created_by_principal_id').notNull(),
+  maxUses: integer('max_uses').notNull().default(1),
+  uses: integer('uses').notNull().default(0),
+  expiresAt: text('expires_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
 export const comments = pgTable('comments', {
   id: id(),
   orgId: text('org_id').notNull(),
@@ -147,6 +160,7 @@ export const pgSchema = {
   users,
   agents,
   memberships,
+  invites,
   tickets,
   comments,
   auditLog,

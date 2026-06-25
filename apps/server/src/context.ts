@@ -1,8 +1,25 @@
 import { createAuth, memoryAdapter, type RoosterAuth } from '@rooster/auth'
 import type { RoosterConfig } from '@rooster/config'
-import { createServices, type Services } from '@rooster/core'
+import { type CrowNotifier, createServices, type Services } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
 import pg from 'pg'
+
+/**
+ * Best-effort outbound webhook for `crow` notifications. Returns `undefined`
+ * when no URL is configured (crow stays audit-only).
+ */
+export function webhookCrowNotifier(url?: string): CrowNotifier | undefined {
+  if (!url) return undefined
+  return {
+    async notify(event) {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'crow', ...event }),
+      })
+    },
+  }
+}
 
 type AuthDatabase = Parameters<typeof createAuth>[0]['database']
 
@@ -56,7 +73,9 @@ export async function createServerContext(
   opts: CreateContextOptions = {},
 ): Promise<ServerContext> {
   const db = await createDatabase(config, { migrate: opts.migrate ?? false })
-  const services = createServices(db.repositories)
+  const services = createServices(db.repositories, {
+    crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
+  })
   const auth = createAuth({ config, database: opts.authDatabase ?? authDatabaseFor(config) })
   return { config, db, services, auth }
 }

@@ -30,12 +30,12 @@ const steps = [
 ]
 
 const features = [
-  { ic: '🎫', title: 'Tickets that fit agents', body: 'Orgs → teams → projects → tickets, with status workflows, priorities, tags and parent/subtask links.' },
-  { ic: '🏷️', title: 'Tags & subtasks', body: 'Agents are nudged to tag work and link subtasks, so related tickets are trivial to find later.' },
+  { ic: '🎫', title: 'Tickets that fit agents', body: 'Orgs → teams → projects → tickets, with status workflows, priorities, tags, due dates and parent/subtask links.' },
+  { ic: '🔎', title: 'Find work fast', body: 'Filter by status or assignee, list your own queue with my_tickets, search titles + descriptions, or pull related tickets by tag.' },
+  { ic: '👥', title: 'Built to share', body: 'One workspace, many people and agents. Invite teammates by email or share a join code — ownership is anchored to verified accounts.' },
   { ic: '🧾', title: 'Immutable audit log', body: 'Every mutation records the trusted principal plus the self-reported client — “which agent closed this?” is a first-class query.' },
-  { ic: '🔌', title: 'Native MCP', body: 'whoami, create_ticket, change_status, assign, comment, find_by_label, crow and more — over Streamable HTTP.' },
-  { ic: '🪪', title: 'OAuth 2.1 authorization server', body: 'Dynamic Client Registration and PKCE built in via better-auth. Each agent maps 1:1 to an OAuth client.' },
-  { ic: '🗄️', title: 'Postgres or SQLite', body: 'The driver is chosen from your DATABASE_URL. The same query code runs on both — verified by one test suite.' },
+  { ic: '🔌', title: 'Native MCP', body: 'create_tenant, create_ticket, change_status, assign, comment, search_tickets, crow, invite_member and more — over Streamable HTTP.' },
+  { ic: '🪪', title: 'OAuth 2.1 authorization server', body: 'Dynamic Client Registration and PKCE built in via better-auth. The same login powers the dashboard and the MCP consent.' },
 ]
 
 const vocab = [

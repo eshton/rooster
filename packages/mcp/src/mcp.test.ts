@@ -144,6 +144,12 @@ describe('MCP server end-to-end', () => {
     // my_tickets returns tickets assigned to the caller.
     const mine = payload((await call('my_tickets')) as never) as Array<{ id: string }>
     expect(mine.some((t) => t.id === created.id)).toBe(true)
+
+    // search_tickets matches title text (case-insensitive).
+    const hits = payload((await call('search_tickets', { query: 'DEADLINE' })) as never) as Array<{
+      id: string
+    }>
+    expect(hits.some((t) => t.id === created.id)).toBe(true)
   })
 
   it('creates teams + projects and invites a teammate by email', async () => {

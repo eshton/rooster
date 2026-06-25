@@ -40,6 +40,20 @@ const ACCOUNTS: Record<
     clientId: 'client-bob',
     scopes: '*',
   },
+  'tok-carol': {
+    id: 'acct-carol',
+    email: 'carol@acme.test',
+    name: 'Carol',
+    clientId: 'client-carol',
+    scopes: '*',
+  },
+  'tok-dave': {
+    id: 'acct-dave',
+    email: 'dave@acme.test',
+    name: 'Dave',
+    clientId: 'client-dave',
+    scopes: '*',
+  },
 }
 
 const stubAuth = {
@@ -131,7 +145,7 @@ describe('MCP onboarding e2e (account-anchored)', () => {
 
   it('exposes only whoami + create_tenant to an orgless account', async () => {
     const names = await listToolNames('tok-ada-claude')
-    expect(names.sort()).toEqual(['create_tenant', 'whoami'])
+    expect(names.sort()).toEqual(['create_tenant', 'join_tenant', 'whoami'])
 
     // whoami reports the provisional status, not an org actor.
     const who = payload(await callTool('tok-ada-claude', 'whoami'))
@@ -239,5 +253,28 @@ describe('MCP onboarding e2e (account-anchored)', () => {
     const actions = (audit as Array<{ action: string }>).map((a) => a.action)
     expect(actions).toContain('member.invite')
     expect(actions).toContain('ticket.create')
+  })
+
+  it('lets a stranger join via a shared invite code', async () => {
+    // Owner mints a join code.
+    const invite = payload(await callTool('tok-ada-claude', 'create_invite', { role: 'member' }))
+    expect(invite.code).toBeTruthy()
+
+    // Carol is orgless — her provisional toolset offers join_tenant.
+    const names = await listToolNames('tok-carol')
+    expect(names.sort()).toEqual(['create_tenant', 'join_tenant', 'whoami'])
+
+    const joined = payload(await callTool('tok-carol', 'join_tenant', { code: invite.code }))
+    expect(joined.workspace.id).toBe(orgId)
+    expect(joined.role).toBe('member')
+
+    // On reconnect she resolves to a full member of the shared workspace.
+    const who = payload(await callTool('tok-carol', 'whoami'))
+    expect(who.orgId).toBe(orgId)
+    expect(who.role).toBe('member')
+
+    // A used-up single-use code is rejected for the next (still-provisional) person.
+    const reuse = await callTool('tok-dave', 'join_tenant', { code: invite.code })
+    expect(reuse.error ?? reuse.result?.isError).toBeTruthy()
   })
 })

@@ -4,6 +4,7 @@ import type { Role } from '@rooster/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Actor } from './actor.js'
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js'
+import type { CrowEvent } from './notify.js'
 import { provisionTenant } from './onboarding.js'
 import { authorize, can } from './permissions.js'
 import { createServices, type Services } from './services/index.js'
@@ -355,6 +356,40 @@ describe('audit logging', () => {
     const { org, owner } = await bootstrap()
     const member = await makeUser(org.id, owner, 'member')
     await expect(services.audit.list(member)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+})
+
+// --- crow notifications -----------------------------------------------------
+
+describe('crow notifier', () => {
+  it('delivers a crow event to a wired notifier', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const events: CrowEvent[] = []
+    const notified = createServices(db.repositories, {
+      crowNotifier: { notify: (e) => void events.push(e) },
+    })
+    const ticket = await notified.tickets.create(owner, { projectId: project.id, title: 'wake me' })
+
+    await notified.tickets.crow(owner, ticket.id)
+    expect(events).toHaveLength(1)
+    expect(events[0]?.ticketKey).toBe(ticket.key)
+    expect(events[0]?.byPrincipalId).toBe(owner.principalId)
+  })
+
+  it('never fails the crow when delivery throws', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const boom = createServices(db.repositories, {
+      crowNotifier: {
+        notify: () => {
+          throw new Error('webhook down')
+        },
+      },
+    })
+    const ticket = await boom.tickets.create(owner, { projectId: project.id, title: 'x' })
+    const res = await boom.tickets.crow(owner, ticket.id)
+    expect(res.ticket.id).toBe(ticket.id)
   })
 })
 

@@ -3,6 +3,7 @@ import type {
   AuditLog,
   Comment,
   Id,
+  Invite,
   Membership,
   Org,
   Principal,
@@ -57,6 +58,8 @@ export interface TicketRepository {
   listAssigned(orgId: Id, assigneeId: Id, opts?: ListOptions): Promise<Ticket[]>
   /** Tickets across the org carrying a given label/tag (exact match). */
   listByLabel(orgId: Id, label: string, opts?: ListOptions): Promise<Ticket[]>
+  /** Full-text-ish search across title + description (case-insensitive). */
+  search(orgId: Id, query: string, opts?: ListOptions): Promise<Ticket[]>
   /** Direct children (subtasks) of a parent ticket. */
   listChildren(orgId: Id, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(orgId: Id, id: Id, patch: Partial<Ticket>): Promise<Ticket>
@@ -111,6 +114,14 @@ export interface MembershipRepository {
   upsert(orgId: Id, input: Omit<Membership, keyof TimestampedId | 'orgId'>): Promise<Membership>
 }
 
+export interface InviteRepository {
+  create(orgId: Id, input: Omit<Invite, keyof TimestampedId | 'orgId' | 'uses'>): Promise<Invite>
+  /** Look up a code WITHOUT an org filter (codes are globally unique). */
+  getByCode(code: string): Promise<Invite | null>
+  /** Atomically record one redemption. */
+  incrementUses(orgId: Id, id: Id): Promise<Invite>
+}
+
 export interface AuditLogRepository {
   /** Append-only: there is intentionally no update or delete. */
   append(orgId: Id, entry: Omit<AuditLog, 'id' | 'createdAt' | 'orgId'>): Promise<AuditLog>
@@ -134,5 +145,6 @@ export interface Repositories {
   users: UserRepository
   agents: AgentRepository
   memberships: MembershipRepository
+  invites: InviteRepository
   audit: AuditLogRepository
 }

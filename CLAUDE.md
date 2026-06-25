@@ -124,7 +124,7 @@ regenerate both migrations.
 ```bash
 pnpm install
 pnpm build            # tsc -b (all packages)
-pnpm test             # vitest run  (96 tests today; in-memory SQLite)
+pnpm test             # vitest run  (102 tests today; in-memory SQLite)
 pnpm lint             # biome check
 pnpm check            # lint + build + test  ← run before every commit
 

@@ -107,6 +107,22 @@ export const registerAgentInput = z.object({
 })
 export type RegisterAgentInput = z.infer<typeof registerAgentInput>
 
+// --- Workspace join codes ---------------------------------------------------
+
+/** Create a shareable join code (admin). `expiresInDays` omitted = no expiry. */
+export const createInviteInput = z.object({
+  role: z.enum(['viewer', 'member', 'admin']).default('member'),
+  maxUses: z.number().int().min(1).max(1000).default(1),
+  expiresInDays: z.number().int().min(1).max(365).optional(),
+})
+export type CreateInviteInput = z.infer<typeof createInviteInput>
+
+/** Redeem a join code to join its workspace (called by an orgless account). */
+export const joinTenantInput = z.object({
+  code: z.string().min(8).max(64),
+})
+export type JoinTenantInput = z.infer<typeof joinTenantInput>
+
 // --- Self-service tenant creation (over MCP) --------------------------------
 
 /**

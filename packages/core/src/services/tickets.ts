@@ -2,6 +2,7 @@ import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
 import { NotFoundError, ValidationError } from '../errors.js'
+import type { CrowNotifier } from '../notify.js'
 import { authorize } from '../permissions.js'
 import { canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
 import { parse } from '../validate.js'
@@ -41,6 +42,8 @@ export interface TicketService {
   myTickets(actor: Actor, opts?: ListOptions): Promise<Ticket[]>
   /** Find related tickets across the org that carry a given tag. */
   findByLabel(actor: Actor, label: string, opts?: ListOptions): Promise<Ticket[]>
+  /** Search tickets across the org by free text (title + description). */
+  search(actor: Actor, query: string, opts?: ListOptions): Promise<Ticket[]>
   /** List the direct subtasks (children) of a ticket. */
   listSubtasks(actor: Actor, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(actor: Actor, id: Id, input: UpdateTicketInput): Promise<Ticket>
@@ -50,7 +53,10 @@ export interface TicketService {
   crow(actor: Actor, ticketId: Id): Promise<{ ticket: Ticket; assigneeId: Id | null }>
 }
 
-export function createTicketService(repos: Repositories): TicketService {
+export function createTicketService(
+  repos: Repositories,
+  crowNotifier?: CrowNotifier,
+): TicketService {
   /** Ensure an assignee principal exists in this org (or is being cleared). */
   async function requireAssignee(actor: Actor, assigneeId: Id | null): Promise<void> {
     if (assigneeId == null) return
@@ -159,6 +165,12 @@ export function createTicketService(repos: Repositories): TicketService {
       return repos.tickets.listByLabel(actor.orgId, label, opts)
     },
 
+    async search(actor, rawQuery, opts) {
+      authorize(actor, 'ticket:read')
+      const query = parse(z.string().min(1).max(200), rawQuery)
+      return repos.tickets.search(actor.orgId, query, opts)
+    },
+
     async listSubtasks(actor, parentId, opts) {
       authorize(actor, 'ticket:read')
       await load(actor, parentId) // 404 if the parent doesn't exist in this org
@@ -231,14 +243,29 @@ export function createTicketService(repos: Repositories): TicketService {
     async crow(actor, ticketId) {
       authorize(actor, 'ticket:write')
       const ticket = await load(actor, ticketId)
-      // "crow" = wake/notify the ticket's assignee. Delivery channels are a
-      // future integration; for now the wake is recorded as an audited intent.
+      // "crow" = wake/notify the ticket's assignee. The wake is always recorded
+      // as an audited intent; if a notifier is wired, it is also delivered
+      // out-of-band (best-effort — a delivery failure never fails the crow).
       await recordAudit(repos, actor, {
         action: 'ticket.crow',
         targetType: 'ticket',
         targetId: ticket.id,
         after: { assigneeId: ticket.assigneeId },
       })
+      if (crowNotifier) {
+        try {
+          await crowNotifier.notify({
+            orgId: actor.orgId,
+            ticketId: ticket.id,
+            ticketKey: ticket.key,
+            title: ticket.title,
+            assigneeId: ticket.assigneeId,
+            byPrincipalId: actor.principalId,
+          })
+        } catch {
+          // best-effort delivery; the audited crow already succeeded
+        }
+      }
       return { ticket, assigneeId: ticket.assigneeId }
     },
   }

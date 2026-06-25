@@ -26,6 +26,8 @@ body {
   background: var(--bg);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  /* Safety net: nothing should ever scroll the page sideways on mobile. */
+  overflow-x: hidden;
 }
 
 a { color: var(--amber-dark); text-decoration: none; }
@@ -87,6 +89,9 @@ h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0; }
   padding: 5.5rem 0 5rem;
 }
 .hero .wrap { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 3rem; align-items: center; }
+/* Let grid cells shrink below their content so inner overflow-x scrolls
+   (instead of forcing the whole page wider than the viewport). */
+.hero .wrap > * { min-width: 0; }
 @media (max-width: 880px) { .hero .wrap { grid-template-columns: 1fr; gap: 2.5rem; } }
 .eyebrow {
   display: inline-block;
@@ -119,6 +124,10 @@ h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0; }
   box-shadow: 0 20px 50px -20px rgba(0,0,0,0.6);
   font-family: var(--mono);
   font-size: 0.82rem;
+  /* Keep the card within its (possibly shrunk) grid cell; the <pre> below
+     scrolls horizontally on its own when code lines are long. */
+  min-width: 0;
+  max-width: 100%;
 }
 .terminal .bar { display: flex; gap: 0.4rem; padding: 0.75rem 1rem; border-bottom: 1px solid #44403c; }
 .terminal .bar i { width: 11px; height: 11px; border-radius: 50%; background: #57534e; display: inline-block; }
@@ -185,3 +194,16 @@ section { padding: 5rem 0; }
 .site-footer { border-top: 1px solid var(--line); padding: 2.5rem 0; color: var(--muted); font-size: 0.92rem; }
 .site-footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .site-footer a { color: var(--ink-2); }
+
+/* --- mobile overrides (kept LAST so they win over equal-specificity base
+   rules above on small screens) --- */
+@media (max-width: 880px) {
+  .hero { padding: 3.5rem 0 3rem; }
+  /* The install command and the terminal demo wrap on phones instead of
+     forcing the page wider than the viewport (desktop keeps the single-line,
+     horizontally-scrolling look). Selectors are intentionally extra-specific
+     so they beat the base rules regardless of how the bundler orders media
+     blocks. */
+  .hero .install code { white-space: normal; word-break: break-word; }
+  .hero .terminal pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+}

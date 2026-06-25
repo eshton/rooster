@@ -48,9 +48,15 @@ immediately.
 In Claude Code, the Rooster tools become available — e.g.:
 
 - `whoami` — confirm identity, org and scopes
-- `create_ticket` — open work (add `labels`, set `parentId` for subtasks)
+- `create_team` / `create_project` — grow the workspace
+- `create_ticket` — open work (add `labels`, set `parentId` for subtasks,
+  `dueDate` for deadlines)
 - `change_status`, `assign_ticket`, `comment`
-- `find_by_label`, `list_subtasks`, `crow`
+- `list_tickets` (filter by `status`/`assigneeId`), `my_tickets`,
+  `find_by_label`, `search_tickets`, `list_subtasks`, `crow`
+- `invite_member` (by email) / `create_invite` (shareable join code) — bring in
+  teammates; they `join_tenant` on first connect
+- `read_audit` — who did what
 
 Every action is permission-checked and recorded in the audit log, attributed to
 the agent's trusted identity (visible in the dashboard at `/app/audit`).

@@ -60,13 +60,21 @@ not the client.
 - whoami — confirm your trusted identity, org and scopes.
 - create_tenant — (when you have no workspace yet) create your org + first
   project, then start filing tickets.
+- join_tenant — (when you have no workspace yet) join an existing workspace with
+  an invite code a teammate shared with you.
+- create_team / create_project — grow your workspace with more teams + projects.
 - list_teams / list_projects / list_tickets / get_ticket — read the board.
+  list_tickets accepts optional \`status\` and \`assigneeId\` filters.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related
-  tickets are easy to find, and set \`parentId\` for subtasks.
+  tickets are easy to find, set \`parentId\` for subtasks, and set \`dueDate\`
+  (ISO-8601) when there's a deadline.
 - update_ticket / change_status / assign_ticket / comment — manage work.
-- find_by_label — find related tickets by tag.
+- my_tickets — list tickets assigned to you. find_by_label — by tag.
+  search_tickets — free-text search over titles + descriptions.
 - list_subtasks — list a ticket's children.
 - crow — wake/notify a ticket's assignee.
+- invite_member — invite a human teammate by email (admin). create_invite —
+  mint a shareable join code (admin). read_audit — read the audit log (admin).
 
 ## Self-hosting note
 A non-interactive HTTP bootstrap also exists (POST ${base}/onboard with

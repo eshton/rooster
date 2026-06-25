@@ -30,6 +30,9 @@ const envSchema = z.object({
   ROOSTER_SIGNUP_TOKEN: z.string().optional(),
 
   ROOSTER_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+
+  /** Optional outbound webhook for `crow` (assignee wake) notifications. */
+  ROOSTER_CROW_WEBHOOK_URL: z.url().optional(),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -64,6 +67,10 @@ export interface RoosterConfig {
   }
   mcp: {
     rateLimitPerMinute: number
+  }
+  /** Outbound notifications. `crowWebhookUrl` unset = crow is audit-only. */
+  notifications: {
+    crowWebhookUrl?: string
   }
 }
 
@@ -112,6 +119,9 @@ export function loadConfig(
     },
     mcp: {
       rateLimitPerMinute: env.ROOSTER_MCP_RATE_LIMIT_PER_MINUTE,
+    },
+    notifications: {
+      crowWebhookUrl: env.ROOSTER_CROW_WEBHOOK_URL,
     },
   }
 }

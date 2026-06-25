@@ -4,6 +4,7 @@ import type {
   ClientInfo,
   Comment,
   Id,
+  Invite,
   Membership,
   Org,
   Principal,
@@ -58,6 +59,7 @@ const toAgent = (r: Rows['agents']): Agent =>
     scopes: dec<string[]>(r.scopes, []),
   }) as Agent
 const toMembership = (r: Rows['memberships']): Membership => r as Membership
+const toInvite = (r: Rows['invites']): Invite => r as Invite
 const toTicket = (r: Rows['tickets']): Ticket =>
   ({
     ...r,
@@ -241,6 +243,25 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .limit(limitOf(opts))
         ).map(toTicket)
         return rows.filter((t) => t.labels.includes(label))
+      },
+      async search(orgId, query, opts) {
+        // Case-insensitive LIKE over title + description, escaping wildcards so
+        // the query matches literally. lower() is portable across both dialects.
+        const needle = query.replace(/([\\%_])/g, '\\$1').toLowerCase()
+        const like = `%${needle}%`
+        return (
+          await db
+            .select()
+            .from(s.tickets)
+            .where(
+              and(
+                eq(s.tickets.orgId, orgId),
+                sql`(lower(${s.tickets.title}) LIKE ${like} ESCAPE '\\' OR lower(coalesce(${s.tickets.description}, '')) LIKE ${like} ESCAPE '\\')`,
+              ),
+            )
+            .orderBy(desc(s.tickets.createdAt))
+            .limit(limitOf(opts))
+        ).map(toTicket)
       },
       async listChildren(orgId, parentId, opts) {
         return (
@@ -465,6 +486,32 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
           .returning()
         return toMembership(row!)
+      },
+    },
+
+    invites: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.invites)
+          .values({ id: newId(), orgId, ...input, uses: 0, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toInvite(row!)
+      },
+      async getByCode(code) {
+        return first(
+          (await db.select().from(s.invites).where(eq(s.invites.code, code)).limit(1)).map(
+            toInvite,
+          ),
+        )
+      },
+      async incrementUses(orgId, id) {
+        const [row] = await db
+          .update(s.invites)
+          .set({ uses: sql`${s.invites.uses} + 1`, updatedAt: now() })
+          .where(and(eq(s.invites.orgId, orgId), eq(s.invites.id, id)))
+          .returning()
+        return toInvite(row!)
       },
     },
 
