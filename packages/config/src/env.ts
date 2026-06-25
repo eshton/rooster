@@ -26,6 +26,9 @@ const envSchema = z.object({
   ROOSTER_ENROLLMENT_POLICY: enrollmentPolicySchema.default('token'),
   ROOSTER_ENROLLMENT_TOKEN: z.string().optional(),
 
+  /** Gates agent-first tenant self-registration. Unset = open (self-host). */
+  ROOSTER_SIGNUP_TOKEN: z.string().optional(),
+
   ROOSTER_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 })
 
@@ -54,6 +57,10 @@ export interface RoosterConfig {
   enrollment: {
     policy: RawEnv['ROOSTER_ENROLLMENT_POLICY']
     token?: string
+  }
+  /** Tenant self-registration gate. `signupToken` unset = open registration. */
+  onboarding: {
+    signupToken?: string
   }
   mcp: {
     rateLimitPerMinute: number
@@ -99,6 +106,9 @@ export function loadConfig(
     enrollment: {
       policy: env.ROOSTER_ENROLLMENT_POLICY,
       token: env.ROOSTER_ENROLLMENT_TOKEN,
+    },
+    onboarding: {
+      signupToken: env.ROOSTER_SIGNUP_TOKEN,
     },
     mcp: {
       rateLimitPerMinute: env.ROOSTER_MCP_RATE_LIMIT_PER_MINUTE,

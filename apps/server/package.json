@@ -18,7 +18,9 @@
   ],
   "scripts": {
     "build": "tsc -b",
-    "start": "node dist/node.js"
+    "start": "node dist/node.js",
+    "auth:generate": "pnpm dlx @better-auth/cli@latest generate --config better-auth.ts -y",
+    "auth:migrate": "pnpm dlx @better-auth/cli@latest migrate --config better-auth.ts -y"
   },
   "dependencies": {
     "@hono/node-server": "2.0.6",
@@ -29,6 +31,10 @@
     "@rooster/db": "workspace:*",
     "@rooster/mcp": "workspace:*",
     "@rooster/schema": "workspace:*",
-    "hono": "4.12.27"
+    "hono": "4.12.27",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.20.0"
   }
 }

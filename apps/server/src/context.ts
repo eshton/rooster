@@ -2,6 +2,22 @@ import { createAuth, memoryAdapter, type RoosterAuth } from '@rooster/auth'
 import type { RoosterConfig } from '@rooster/config'
 import { createServices, type Services } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
+import pg from 'pg'
+
+type AuthDatabase = Parameters<typeof createAuth>[0]['database']
+
+/**
+ * Choose better-auth's storage. Postgres deploys get a real connection pool
+ * (better-auth owns its own tables there — applied via its CLI; see the
+ * self-host setup docs). Dev / SQLite / tests use the in-memory adapter, which
+ * is fine for a single process but not for serverless.
+ */
+function authDatabaseFor(config: RoosterConfig): AuthDatabase {
+  if (config.database.kind === 'postgres') {
+    return new pg.Pool({ connectionString: config.database.url })
+  }
+  return memoryAdapter({})
+}
 
 /** The assembled runtime: config + connected DB + domain services + auth. */
 export interface ServerContext {
@@ -30,6 +46,6 @@ export async function createServerContext(
 ): Promise<ServerContext> {
   const db = await createDatabase(config, { migrate: opts.migrate ?? false })
   const services = createServices(db.repositories)
-  const auth = createAuth({ config, database: opts.authDatabase ?? memoryAdapter({}) })
+  const auth = createAuth({ config, database: opts.authDatabase ?? authDatabaseFor(config) })
   return { config, db, services, auth }
 }

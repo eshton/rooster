@@ -91,3 +91,48 @@ export const registerAgentInput = z.object({
   enrollmentToken: z.string().optional(),
 })
 export type RegisterAgentInput = z.infer<typeof registerAgentInput>
+
+// --- Tenant onboarding ------------------------------------------------------
+
+/**
+ * Agent-first, gated tenant self-registration: provision an org + team +
+ * project and (optionally) a first owning agent in one call. `signupToken`
+ * gates registration on a hosted instance (omit it when self-hosting open).
+ */
+export const registerTenantInput = z.object({
+  signupToken: z.string().optional(),
+  org: z.object({
+    slug: z
+      .string()
+      .min(2)
+      .max(48)
+      .regex(/^[a-z0-9][a-z0-9-]*$/),
+    name: z.string().min(1).max(120),
+    enrollmentPolicy: enrollmentPolicySchema.default('token'),
+  }),
+  founder: z.object({
+    name: z.string().min(1).max(120),
+    email: z.email(),
+  }),
+  team: z.object({
+    key: z
+      .string()
+      .min(2)
+      .max(10)
+      .regex(/^[A-Z][A-Z0-9]*$/),
+    name: z.string().min(1).max(120),
+  }),
+  project: z.object({
+    name: z.string().min(1).max(120),
+    description: z.string().max(4000).optional(),
+  }),
+  agent: z
+    .object({
+      displayName: z.string().min(1).max(120),
+      kind: agentKindSchema.default('custom'),
+      scopes: z.array(z.string()).default([]),
+      oauthClientId: z.string().min(1).optional(),
+    })
+    .optional(),
+})
+export type RegisterTenantInput = z.infer<typeof registerTenantInput>

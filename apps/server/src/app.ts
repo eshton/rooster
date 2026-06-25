@@ -1,9 +1,11 @@
 import { resolveMcpIdentity } from '@rooster/auth'
-import { CoreError } from '@rooster/core'
+import { CoreError, provisionTenant } from '@rooster/core'
 import { createRoosterMcpServer, handleStatelessMcpRequest } from '@rooster/mcp'
+import { registerTenantInput } from '@rooster/schema'
 import { Hono } from 'hono'
 import type { ServerContext } from './context.js'
 import { discoveryDocument, landingHtml, llmsText } from './discovery.js'
+import { signupAllowed } from './gate.js'
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -34,6 +36,37 @@ export function createApp(ctx: ServerContext): Hono {
   app.get('/.well-known/rooster', (c) => c.json(discoveryDocument(ctx)))
   app.get('/llms.txt', (c) => c.text(llmsText(ctx)))
   app.get('/healthz', (c) => c.json({ ok: true }))
+
+  // Agent-first, gated tenant self-registration: provision org+team+project
+  // (+ optional first owning agent) in one call. Gated by the signup token on
+  // a hosted instance; open when no token is configured (self-host).
+  app.post('/onboard', async (c) => {
+    const parsed = registerTenantInput.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
+      return c.json({ error: 'validation', issues: parsed.error.issues }, 400)
+    }
+    if (!signupAllowed(ctx.config.onboarding.signupToken, parsed.data.signupToken)) {
+      return c.json({ error: 'forbidden', message: 'Invalid or missing signup token' }, 403)
+    }
+    const { signupToken: _omit, ...spec } = parsed.data
+    try {
+      const result = await provisionTenant(ctx.services, spec)
+      return c.json(
+        {
+          org: { id: result.org.id, slug: result.org.slug, name: result.org.name },
+          team: { id: result.team.id, key: result.team.key },
+          project: { id: result.project.id, name: result.project.name },
+          agent: result.agent
+            ? { id: result.agent.id, principalId: result.agent.principalId }
+            : null,
+          mcpEndpoint: `${ctx.config.baseUrl}/mcp`,
+        },
+        201,
+      )
+    } catch (err) {
+      return errorResponse(err)
+    }
+  })
 
   // All better-auth routes (OAuth metadata, DCR, token, social login, sessions).
   app.all('/api/auth/*', (c) => ctx.auth.handler(c.req.raw))

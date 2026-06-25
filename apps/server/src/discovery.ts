@@ -14,6 +14,7 @@ export function discoveryDocument(ctx: ServerContext) {
       dynamicClientRegistration: true,
       pkce: 'required',
     },
+    onboard: { endpoint: `${base}/onboard`, method: 'POST', gated: 'signup-token' },
     docs: `${base}/llms.txt`,
   }
 }
@@ -26,6 +27,14 @@ export function llmsText(ctx: ServerContext): string {
 You are an AI agent. Rooster lets you track work (orgs -> teams -> projects ->
 tickets) and is designed so agents are first-class: you authenticate, carry a
 stable identity, and every action you take is audited.
+
+## Onboard a tenant (optional, agent-first)
+If you don't have an org yet, you can self-register one (org -> team -> project
+-> a first owning agent) in a single call:
+  POST ${base}/onboard
+  body: { signupToken?, org, founder, team, project, agent? }
+On a hosted instance this is gated by a signup token. Bind your OAuth client by
+passing its client_id as agent.oauthClientId so your tokens resolve to the agent.
 
 ## Connect (OAuth 2.1)
 1. Discover the authorization server: ${base}/api/auth/.well-known/oauth-authorization-server

@@ -58,6 +58,81 @@ describe('mounted auth', () => {
   })
 })
 
+describe('tenant onboarding', () => {
+  const tenant = (over: Record<string, unknown> = {}) => ({
+    org: { slug: 'acme', name: 'Acme' },
+    founder: { name: 'Ada', email: 'ada@acme.test' },
+    team: { key: 'ROOST', name: 'Roost' },
+    project: { name: 'Henhouse' },
+    agent: { displayName: 'Backend Claude', kind: 'claude-code', oauthClientId: 'client-xyz' },
+    ...over,
+  })
+
+  it('provisions org + team + project + bound agent (open self-host)', async () => {
+    const res = await app.request(`${base}/onboard`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(tenant({ org: { slug: 'flock', name: 'Flock' } })),
+    })
+    expect(res.status).toBe(201)
+    const out = (await res.json()) as {
+      org: { slug: string }
+      team: { key: string }
+      agent: { id: string } | null
+    }
+    expect(out.org.slug).toBe('flock')
+    expect(out.team.key).toBe('ROOST')
+    expect(out.agent).not.toBeNull()
+
+    // The bound agent is now resolvable by its OAuth client id.
+    const bound = await ctx.db.repositories.agents.getByOAuthClientId('client-xyz')
+    expect(bound?.id).toBe(out.agent?.id)
+  })
+
+  it('rejects invalid input with 400', async () => {
+    const res = await app.request(`${base}/onboard`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ org: { slug: 'x' } }),
+    })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('onboarding signup-token gate', () => {
+  it('requires a matching signup token when configured', async () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'file::memory:',
+      ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
+      ROOSTER_BASE_URL: base,
+      ROOSTER_SIGNUP_TOKEN: 'let-me-in',
+    })
+    const gatedCtx = await createServerContext(cfg, { migrate: true })
+    const gatedApp = createApp(gatedCtx)
+    const body = {
+      org: { slug: 'acme', name: 'Acme' },
+      founder: { name: 'Ada', email: 'ada@acme.test' },
+      team: { key: 'ROOST', name: 'Roost' },
+      project: { name: 'Henhouse' },
+    }
+
+    const denied = await gatedApp.request(`${base}/onboard`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    expect(denied.status).toBe(403)
+
+    const allowed = await gatedApp.request(`${base}/onboard`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, signupToken: 'let-me-in' }),
+    })
+    expect(allowed.status).toBe(201)
+    await gatedCtx.db.close()
+  })
+})
+
 describe('MCP endpoint', () => {
   it('challenges unauthenticated requests with a 401 + resource metadata', async () => {
     const res = await app.request(`${base}/mcp`, {

@@ -4,6 +4,7 @@ import type { Role } from '@rooster/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Actor } from './actor.js'
 import { ForbiddenError, NotFoundError, ValidationError } from './errors.js'
+import { provisionTenant } from './onboarding.js'
 import { authorize, can } from './permissions.js'
 import { createServices, type Services } from './services/index.js'
 import { canTransition } from './transitions.js'
@@ -226,6 +227,43 @@ describe('tags and subtasks', () => {
     await expect(services.tickets.update(owner, a.id, { parentId: a.id })).rejects.toBeInstanceOf(
       ValidationError,
     )
+  })
+})
+
+// --- tenant onboarding ------------------------------------------------------
+
+describe('provisionTenant', () => {
+  it('bootstraps org + team + project + an owner agent bound to its client', async () => {
+    const result = await provisionTenant(services, {
+      org: { slug: 'rooster', name: 'Rooster' },
+      founder: { name: 'Al', email: 'al@rooster.test' },
+      team: { key: 'ROOST', name: 'Roost' },
+      project: { name: 'Rooster Core' },
+      agent: {
+        displayName: 'Dev Claude',
+        kind: 'claude-code',
+        scopes: ['ticket:read', 'ticket:write'],
+        oauthClientId: 'client-abc',
+      },
+    })
+
+    expect(result.org.slug).toBe('rooster')
+    expect(result.team.key).toBe('ROOST')
+    expect(result.agent?.oauthClientId).toBe('client-abc')
+
+    // The agent is a co-owner and can act immediately within its token scopes.
+    const agentActor = await services.resolveActor({
+      orgId: result.org.id,
+      principalId: result.agent?.principalId ?? '',
+      scopes: ['ticket:read', 'ticket:write'],
+    })
+    expect(agentActor.role).toBe('owner')
+    const ticket = await services.tickets.create(agentActor, {
+      projectId: result.project.id,
+      title: 'First self-filed ticket',
+      labels: ['bootstrap'],
+    })
+    expect(ticket.key).toBe('ROOST-1')
   })
 })
 

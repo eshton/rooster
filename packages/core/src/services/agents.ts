@@ -24,6 +24,8 @@ export interface AgentService {
   list(actor: Actor, opts?: ListOptions): Promise<Agent[]>
   get(actor: Actor, id: Id): Promise<Agent>
   setStatus(actor: Actor, id: Id, status: AgentStatus): Promise<Agent>
+  /** Bind an agent to its OAuth client (1:1) so tokens resolve to it. */
+  bindOAuthClient(actor: Actor, id: Id, oauthClientId: string): Promise<Agent>
 }
 
 export function createAgentService(repos: Repositories): AgentService {
@@ -92,6 +94,21 @@ export function createAgentService(repos: Repositories): AgentService {
         targetId: id,
         before: { status: before.status },
         after: { status: after.status },
+      })
+      return after
+    },
+
+    async bindOAuthClient(actor, id, oauthClientId) {
+      authorize(actor, 'agent:write')
+      const before = await repos.agents.getById(actor.orgId, id)
+      if (!before) throw new NotFoundError(`Agent ${id} not found`)
+
+      const after = await repos.agents.update(actor.orgId, id, { oauthClientId })
+      await recordAudit(repos, actor, {
+        action: 'agent.bind_client',
+        targetType: 'agent',
+        targetId: id,
+        after: { oauthClientId },
       })
       return after
     },

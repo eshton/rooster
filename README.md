@@ -98,9 +98,12 @@ pnpm --filter @rooster/db build && pnpm --filter @rooster/db db:seed   # demo da
 3. **Core services** — CRUD + status transitions, permissions, audit logging ✅
 4. **Auth** — better-auth human OAuth + MCP OAuth 2.1 (DCR/PKCE), enrollment ✅
 5. **MCP server** — tools/resources over Streamable HTTP, `whoami` ✅
-6. **Dashboard** — minimal Hono SSR: orgs/teams/projects/tickets, agent registry, audit log
-7. **Deploy adapters** — Vercel + Cloudflare + Docker
-8. **Marketing + docs** — Astro site + Starlight docs
+6. **Server app** — Hono: auth + MCP endpoint + discovery + gated `/onboard` ✅
+7. **Dashboard** — minimal Hono SSR: orgs/teams/projects/tickets, agent registry, audit log
+8. **Deploy adapters** — Vercel + Cloudflare + Docker
+9. **Marketing + docs** — Astro site + Starlight docs
+
+Self-hosting: see [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 
 v1 = phases 1–6.
 
