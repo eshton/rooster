@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+dist
+**/dist
+dist-web
+.astro
+**/.astro
+*.tsbuildinfo
+.git
+.github
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite*
+local.db*
+coverage

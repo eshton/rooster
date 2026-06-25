@@ -36,11 +36,14 @@ Not done yet (good next tasks):
    standard `fetch`, so this is thin.
 2. **Dashboard** — the human SSR UI (login, org/team/project/ticket views, agent
    registry, audit-log viewer). Nothing exists yet.
-3. **Docker** — `Dockerfile` + `docker-compose.yml` (server + Postgres).
-4. **Marketing + docs sites** — Astro + Starlight (plan phase 8).
-5. **MCP-over-HTTP clientInfo capture** — the audit snapshot is wired through the
+3. **MCP-over-HTTP clientInfo capture** — the audit snapshot is wired through the
    actor but the HTTP `/mcp` route currently passes `clientInfo: null`; capturing
    the MCP `initialize` clientInfo would complete it.
+
+Done since the original plan: marketing + docs sites (`apps/marketing`,
+`apps/docs`; Cloudflare Pages bundle via `pnpm build:web`), Docker
+(`apps/server/Dockerfile` + `docker-compose.yml`), and per-agent MCP rate
+limiting. The image build itself was not exercised in CI yet.
 
 **The north-star milestone:** deploy to Vercel + Postgres, then connect Claude
 Code's MCP client to the deployed `/mcp` so Rooster tracks its own development.

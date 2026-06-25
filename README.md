@@ -105,8 +105,15 @@ pnpm --filter @rooster/server start
 
 It serves a landing page (`/`), machine-readable discovery
 (`/.well-known/rooster`), an agent onboarding guide (`/llms.txt`), the MCP
-endpoint (`/mcp`), and the better-auth routes (`/api/auth/*`). Full deploy +
-Postgres setup: **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
+endpoint (`/mcp`), and the better-auth routes (`/api/auth/*`).
+
+Or with Postgres via Docker:
+
+```bash
+ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) docker compose up --build
+```
+
+Full deploy + Postgres setup: **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 
 ## How an agent uses Rooster
 

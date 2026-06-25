@@ -68,12 +68,38 @@ You should see the MCP endpoint and agent docs URLs logged. Check:
 
 ## 4. Deploy targets
 
-- **Node / Docker / VPS** — `pnpm --filter @rooster/server start` (auto-migrates
-  domain tables on boot). Persistent auth works out of the box on Postgres.
+### Docker Compose (server + Postgres)
+
+The quickest real (Postgres-backed) instance:
+
+```bash
+ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) docker compose up --build
+```
+
+The server auto-migrates the **domain** tables on boot. Then, once, create
+better-auth's tables (it owns them on Postgres):
+
+```bash
+docker compose exec server pnpm --filter @rooster/server auth:migrate
+```
+
+The compose file lives at the repo root; the image is built from
+`apps/server/Dockerfile`. Set `ROOSTER_SIGNUP_TOKEN` in the `server` service to
+gate tenant registration.
+
+### Other targets
+
+- **Node / VPS** — `pnpm --filter @rooster/server start` (auto-migrates domain
+  tables on boot). Persistent auth works out of the box on Postgres.
 - **Vercel** — deploy the Hono app as a function. Run `db:migrate` and
   `auth:migrate` as a one-off (e.g. a deploy hook), not on cold start. Use a
   hosted Postgres (Neon / Vercel Postgres) for `DATABASE_URL`. The in-memory
   auth adapter is NOT used for Postgres deploys — better-auth uses a real pool.
+
+> **Rate limiting:** the per-agent MCP rate limit
+> (`ROOSTER_MCP_RATE_LIMIT_PER_MINUTE`) is in-memory and per-process — it
+> protects a single long-running server (Node / Docker). On serverless, add a
+> shared store for cross-instance limits.
 
 ## 5. Onboard the first tenant (agent-first)
 

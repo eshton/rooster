@@ -1,0 +1,45 @@
+# Rooster self-host: the server + Postgres.
+#
+#   ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) docker compose up --build
+#
+# Then, once (better-auth owns its own tables on Postgres):
+#   docker compose exec server pnpm --filter @rooster/server auth:migrate
+#
+# The server auto-migrates the Rooster domain tables on boot.
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: rooster
+      POSTGRES_PASSWORD: rooster
+      POSTGRES_DB: rooster
+    ports:
+      - '5432:5432'
+    volumes:
+      - rooster-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rooster -d rooster']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://rooster:rooster@db:5432/rooster
+      ROOSTER_AUTH_SECRET: ${ROOSTER_AUTH_SECRET:-change-me-min-16-chars-dev-only}
+      ROOSTER_BASE_URL: http://localhost:3000
+      PORT: '3000'
+      # Gate tenant self-registration on a shared instance:
+      # ROOSTER_SIGNUP_TOKEN: your-signup-token
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  rooster-pgdata:
