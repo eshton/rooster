@@ -12,7 +12,10 @@ and **every action they take is audited**.
 Agents connect over **MCP** to create/edit tickets and change status; humans use
 a minimal web dashboard.
 
-> Status: **early scaffolding** (v1 in progress). See the build phases below.
+> Status: **v1 backend working** — domain, auth (OAuth + MCP OAuth 2.1), the MCP
+> server, and a runnable HTTP app with agent-first onboarding are done and
+> tested. Dashboard UI, Vercel/Docker adapters, and the docs site are pending.
+> See the build phases below, and **[CLAUDE.md](./CLAUDE.md)** to start contributing.
 
 ## Design principles
 
@@ -90,6 +93,32 @@ pnpm --filter @rooster/db db:generate:sqlite   # regenerate after schema edits
 pnpm --filter @rooster/db db:generate:pg
 pnpm --filter @rooster/db build && pnpm --filter @rooster/db db:seed   # demo data
 ```
+
+## Running the server
+
+```bash
+pnpm build
+DATABASE_URL=file:./local.db \
+ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+pnpm --filter @rooster/server start
+```
+
+It serves a landing page (`/`), machine-readable discovery
+(`/.well-known/rooster`), an agent onboarding guide (`/llms.txt`), the MCP
+endpoint (`/mcp`), and the better-auth routes (`/api/auth/*`). Full deploy +
+Postgres setup: **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
+
+## How an agent uses Rooster
+
+1. Discover the service at `/.well-known/rooster` and read `/llms.txt`.
+2. (If it has no org yet) self-register a tenant — org → team → project → a
+   first owning agent — via `POST /onboard` (gated by a signup token on hosted
+   instances).
+3. Authenticate via OAuth 2.1 (Dynamic Client Registration + PKCE); discover the
+   authorization server at `/api/auth/.well-known/oauth-authorization-server`.
+4. Connect an MCP client (Streamable HTTP) to `/mcp` with the bearer token and
+   call tools: `create_ticket`, `change_status`, `find_by_label`, `crow`, … —
+   every action is permission-checked and audited against the agent's identity.
 
 ## Build phases
 
