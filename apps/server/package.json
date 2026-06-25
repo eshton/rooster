@@ -20,7 +20,7 @@
     "build": "tsc -b",
     "start": "node dist/node.js",
     "deploy:worker": "tsc -b && pnpm dlx wrangler@4 deploy",
-    "auth:generate": "pnpm dlx @better-auth/cli@latest generate --config better-auth.ts -y",
+    "auth:generate": "pnpm dlx @better-auth/cli@latest generate --config better-auth.drizzle.ts --output src/auth-schema.ts -y",
     "auth:migrate": "pnpm dlx @better-auth/cli@latest migrate --config better-auth.ts -y"
   },
   "dependencies": {
@@ -32,10 +32,12 @@
     "@rooster/db": "workspace:*",
     "@rooster/mcp": "workspace:*",
     "@rooster/schema": "workspace:*",
+    "drizzle-orm": "0.45.2",
     "hono": "4.12.27",
     "pg": "8.22.0"
   },
   "devDependencies": {
+    "@libsql/kysely-libsql": "0.4.1",
     "@types/pg": "8.20.0"
   }
 }

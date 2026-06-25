@@ -4,6 +4,7 @@ import { createServices } from '@rooster/core'
 import { createLibsqlWebDrizzle, createRepositories, sqliteSchema } from '@rooster/db/web'
 import type { Hono } from 'hono'
 import { createApp } from './app.js'
+import * as authSchema from './auth-schema.js'
 import type { ServerContext } from './context.js'
 
 /**
@@ -29,7 +30,10 @@ function buildApp(env: WorkerEnv): Hono {
   const drizzleDb = createLibsqlWebDrizzle(config.database.url, config.database.authToken)
   const repositories = createRepositories(drizzleDb, sqliteSchema)
   const services = createServices(repositories)
-  const auth = createAuth({ config, database: drizzleAdapter(drizzleDb, { provider: 'sqlite' }) })
+  const auth = createAuth({
+    config,
+    database: drizzleAdapter(drizzleDb, { provider: 'sqlite', schema: authSchema }),
+  })
 
   const ctx: ServerContext = {
     config,

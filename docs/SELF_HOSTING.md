@@ -100,21 +100,21 @@ gate tenant registration.
 
 Workers can't run `pg` or the native libSQL client, so the edge build uses
 **libSQL/Turso over HTTP** — one connection serves both the domain repositories
-and better-auth. The entry is `apps/server/src/worker.ts`; config is in
-`apps/server/wrangler.toml` (note `compatibility_flags = ["nodejs_compat"]`,
-required for `node:crypto`).
+and better-auth (via its drizzle adapter, with the committed
+`apps/server/src/auth-schema.ts`). The entry is `apps/server/src/worker.ts`;
+config is in `apps/server/wrangler.toml` (note
+`compatibility_flags = ["nodejs_compat"]`, required for `node:crypto`).
 
 1. Create a Turso database and get its `libsql://…` URL + auth token.
-2. Migrate from Node/CI (the Worker never migrates at runtime):
+2. Migrate **both** sets of tables from Node/CI (the Worker never migrates at
+   runtime). The libSQL `auth:migrate` creates better-auth's tables with the
+   exact camelCase names the runtime drizzle adapter expects:
    ```bash
-   DATABASE_URL=libsql://… DATABASE_AUTH_TOKEN=… pnpm --filter @rooster/db db:migrate
+   export DATABASE_URL=libsql://YOUR-DB.turso.io DATABASE_AUTH_TOKEN=…
+   pnpm --filter @rooster/db db:migrate          # domain tables
+   pnpm --filter @rooster/server auth:migrate    # better-auth tables
    ```
-3. Create better-auth's tables in the same Turso DB. The runtime uses
-   better-auth's **drizzle adapter** (no custom schema, `provider: 'sqlite'`);
-   generate its SQL with `pnpm --filter @rooster/server auth:generate` and apply
-   it to Turso. (This step is the one not yet exercised end-to-end — validate it
-   on your first deploy.)
-4. Set secrets and deploy:
+3. Set secrets and deploy:
    ```bash
    cd apps/server
    pnpm dlx wrangler@4 secret put ROOSTER_AUTH_SECRET
@@ -123,11 +123,15 @@ required for `node:crypto`).
    pnpm --filter @rooster/server deploy:worker
    ```
 
-> **Status:** the Workers runtime (Hono + MCP + the libSQL-web driver) builds
-> and is structurally Workers-ready, but the live Workers run and the
-> better-auth-on-Turso table setup have not been exercised in this environment.
-> The fully verified production paths today are Node/Docker and Vercel
-> (both Node-runtime, Postgres-backed).
+> **Status:** the auth flow is verified — `auth:migrate` against libSQL plus the
+> runtime drizzle adapter (sign-up + session) was exercised against a real
+> libSQL database. What remains unexercised here is only the live Cloudflare
+> Workers runtime itself and Turso-over-HTTP (no Workers/Turso in the build
+> sandbox). Node/Docker and Vercel remain fully verified end to end.
+>
+> If you ever regenerate `auth-schema.ts` (e.g. after a better-auth upgrade),
+> keep its table/column names **camelCase** to match `auth:migrate` — see the
+> note at the top of that file.
 
 > **Rate limiting:** the per-agent MCP rate limit
 > (`ROOSTER_MCP_RATE_LIMIT_PER_MINUTE`) is in-memory and per-process — it
