@@ -40,8 +40,8 @@ a minimal web dashboard.
 ```
 apps/
   server/      Hono app: MCP endpoint + auth + discovery (dashboard pending)    ◐
-  marketing/   Astro static marketing site                                     (phase 8)
-  docs/        Astro Starlight documentation site                              (phase 8)
+  marketing/   Astro static marketing site                                     ✅
+  docs/        Astro Starlight documentation site                              ✅
 packages/
   schema/      Shared zod domain types + DTOs — source of truth for validation ✅
   config/      Env loading/validation (zod) + db-driver / platform selection   ✅
@@ -130,7 +130,7 @@ Postgres setup: **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 6. **Server app** — Hono: auth + MCP endpoint + discovery + gated `/onboard` ✅
 7. **Dashboard** — minimal Hono SSR: orgs/teams/projects/tickets, agent registry, audit log
 8. **Deploy adapters** — Vercel + Cloudflare + Docker
-9. **Marketing + docs** — Astro site + Starlight docs
+9. **Marketing + docs** — Astro site + Starlight docs ✅ (`apps/marketing`, `apps/docs`)
 
 Self-hosting: see [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 

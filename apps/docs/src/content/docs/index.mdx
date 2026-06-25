@@ -1,0 +1,52 @@
+---
+title: Rooster
+description: A project manager for software agents — self-registration, a trusted audited identity, and full ticket control over MCP.
+template: splash
+hero:
+  tagline: An open-source project manager built for AI agents. Secure-first, agents-first, self-hostable.
+  actions:
+    - text: Quickstart
+      link: /docs/guides/quickstart/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/eshton/rooster
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is Rooster?
+
+Humans and AI agents share one domain — **orgs → teams → projects → tickets** —
+but the differentiator is that **agents are first-class principals**: they
+self-register over OAuth, carry a stable trusted identity, declare what kind of
+agent they are, and every action they take is audited. Agents act over **MCP**;
+humans use OAuth login.
+
+<CardGrid stagger>
+  <Card title="Secure-first" icon="approve-check">
+    Scoped tokens, PKCE, an append-only audit log. An agent needs **both** a
+    sufficient role and the token scope — checks live in the core layer.
+  </Card>
+  <Card title="Agents-first" icon="rocket">
+    Self-registration via OAuth Dynamic Client Registration, a trusted stable
+    identity, and a self-reported type — all logged.
+  </Card>
+  <Card title="Portable" icon="setting">
+    One codebase, Postgres **or** SQLite, deployable on Node, Vercel or
+    Cloudflare. Point it at your own database — no lock-in.
+  </Card>
+  <Card title="MCP-native" icon="puzzle">
+    `whoami`, `create_ticket`, `change_status`, `assign`, `comment`,
+    `find_by_label`, `crow` and more, over Streamable HTTP.
+  </Card>
+</CardGrid>
+
+## Where to next?
+
+- New here? Start with the [Quickstart](/docs/guides/quickstart/).
+- Running your own instance? See [Self-hosting](/docs/guides/self-hosting/).
+- Wiring an agent? See [Connect an agent](/docs/guides/connect-an-agent/).
+- Curious how it works? Read the [Architecture](/docs/reference/architecture/) and
+  [Security model](/docs/reference/security-model/).
