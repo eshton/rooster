@@ -6,6 +6,7 @@ import { Hono } from 'hono'
 import type { ServerContext } from './context.js'
 import { discoveryDocument, landingHtml, llmsText } from './discovery.js'
 import { signupAllowed } from './gate.js'
+import { RateLimiter } from './rate-limit.js'
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -31,6 +32,7 @@ function errorResponse(err: unknown): Response {
  */
 export function createApp(ctx: ServerContext): Hono {
   const app = new Hono()
+  const mcpRateLimiter = new RateLimiter(ctx.config.mcp.rateLimitPerMinute)
 
   app.get('/', (c) => c.html(landingHtml(ctx)))
   app.get('/.well-known/rooster', (c) => c.json(discoveryDocument(ctx)))
@@ -83,6 +85,17 @@ export function createApp(ctx: ServerContext): Hono {
           headers: {
             'content-type': 'application/json',
             'WWW-Authenticate': `Bearer resource_metadata="${ctx.config.baseUrl}/api/auth/.well-known/oauth-protected-resource"`,
+          },
+        })
+      }
+      // Per-agent rate limiting (keyed by the trusted principal).
+      const rl = mcpRateLimiter.check(identity.principalId, Date.now())
+      if (!rl.allowed) {
+        return new Response(JSON.stringify({ error: 'rate_limited' }), {
+          status: 429,
+          headers: {
+            'content-type': 'application/json',
+            'Retry-After': String(rl.retryAfterSeconds),
           },
         })
       }
