@@ -1,13 +1,33 @@
 import { resolveMcpIdentity } from '@rooster/auth'
 import { CoreError, provisionTenant } from '@rooster/core'
 import { createRoosterMcpServer, handleStatelessMcpRequest } from '@rooster/mcp'
-import { registerTenantInput } from '@rooster/schema'
+import { type ClientInfo, registerTenantInput } from '@rooster/schema'
 import { Hono } from 'hono'
 import type { ServerContext } from './context.js'
 import { mountDashboard } from './dashboard/routes.js'
 import { discoveryDocument, landingHtml, llmsText } from './discovery.js'
 import { signupAllowed } from './gate.js'
 import { RateLimiter } from './rate-limit.js'
+
+/**
+ * Best-effort capture of the calling MCP client's identity for the audit log
+ * (untrusted, display-only). Prefers the structured `clientInfo` from an MCP
+ * `initialize` body; falls back to the HTTP `User-Agent`, which — unlike the
+ * MCP clientInfo — is present on every request including stateless tool calls.
+ */
+export async function extractClientInfo(req: Request): Promise<ClientInfo | null> {
+  try {
+    const body = (await req.clone().json()) as { params?: { clientInfo?: ClientInfo } }
+    const ci = body?.params?.clientInfo
+    if (ci?.name) {
+      return { name: String(ci.name).slice(0, 200), version: String(ci.version ?? '').slice(0, 60) }
+    }
+  } catch {
+    // not a JSON body (e.g. a GET/SSE request) — fall through to User-Agent
+  }
+  const ua = req.headers.get('user-agent')
+  return ua ? { name: ua.slice(0, 200), version: '' } : null
+}
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -81,7 +101,13 @@ export function createApp(ctx: ServerContext): Hono {
   app.all('/mcp', async (c) => {
     const req = c.req.raw
     try {
-      const identity = await resolveMcpIdentity(ctx.auth, ctx.db.repositories, req.headers)
+      const clientInfo = await extractClientInfo(req)
+      const identity = await resolveMcpIdentity(
+        ctx.auth,
+        ctx.db.repositories,
+        req.headers,
+        clientInfo,
+      )
       if (!identity) {
         return new Response(JSON.stringify({ error: 'unauthorized' }), {
           status: 401,

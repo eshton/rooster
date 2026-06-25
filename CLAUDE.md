@@ -34,11 +34,12 @@ Not done yet (good next tasks):
 1. **Vercel adapter** — `vercel.json` + a function entry wrapping the Hono app
    (Node runtime, because the pg pool needs Node). The app is already Web-
    standard `fetch`, so this is thin.
-2. **MCP-over-HTTP clientInfo capture** — the audit snapshot is wired through the
-   actor but the HTTP `/mcp` route currently passes `clientInfo: null`; capturing
-   the MCP `initialize` clientInfo would complete it.
-3. **Live deploy validation** — the Vercel + Cloudflare Workers + Postgres/Turso
+2. **Live deploy validation** — the Vercel + Cloudflare Workers + Postgres/Turso
    paths are built production-shaped but only exercised on a real deploy.
+
+Audit `clientInfo` is captured at the `/mcp` route (`extractClientInfo`):
+structured MCP `initialize` clientInfo when present, else the HTTP `User-Agent`
+(the only attribution available on stateless tool-call requests).
 
 Done since the original plan: marketing + docs sites (`apps/marketing`,
 `apps/docs`; Cloudflare Pages bundle via `pnpm build:web`), Docker

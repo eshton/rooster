@@ -1,7 +1,31 @@
 import { loadConfig } from '@rooster/config'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createApp } from './app.js'
+import { createApp, extractClientInfo } from './app.js'
 import { createServerContext, type ServerContext } from './context.js'
+
+describe('extractClientInfo', () => {
+  it('reads structured clientInfo from an MCP initialize body', async () => {
+    const req = new Request('http://x/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'initialize',
+        params: { clientInfo: { name: 'Claude Code', version: '2.0' } },
+      }),
+    })
+    expect(await extractClientInfo(req)).toEqual({ name: 'Claude Code', version: '2.0' })
+  })
+
+  it('falls back to the User-Agent when there is no MCP clientInfo', async () => {
+    const req = new Request('http://x/mcp', { headers: { 'user-agent': 'rooster-agent/1.2' } })
+    expect(await extractClientInfo(req)).toEqual({ name: 'rooster-agent/1.2', version: '' })
+  })
+
+  it('returns null when neither is present', async () => {
+    expect(await extractClientInfo(new Request('http://x/mcp'))).toBeNull()
+  })
+})
 
 let ctx: ServerContext
 let app: ReturnType<typeof createApp>
