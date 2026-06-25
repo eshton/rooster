@@ -17,7 +17,9 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "biome check . && tsc -b && vitest run",
-    "clean": "tsc -b --clean"
+    "clean": "tsc -b --clean",
+    "build:web": "pnpm --filter @rooster/marketing build && pnpm --filter @rooster/docs build && node scripts/build-web.mjs",
+    "deploy:web": "pnpm build:web && pnpm dlx wrangler@4 pages deploy dist-web"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.1",

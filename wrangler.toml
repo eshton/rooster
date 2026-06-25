@@ -1,0 +1,15 @@
+# Cloudflare Pages — Rooster static web bundle (marketing + docs).
+#
+# Deploy the marketing site at "/" and the documentation site at "/docs" from a
+# single Pages project.
+#
+#   Build command:        pnpm install && pnpm build:web
+#   Build output dir:     dist-web
+#
+# Or from the CLI:        pnpm deploy:web   (runs build:web + wrangler pages deploy)
+#
+# NOTE: this config is for the STATIC sites only. The @rooster/server app
+# (Hono + MCP) is a separate deployable with its own adapter.
+name = "rooster-web"
+compatibility_date = "2026-06-25"
+pages_build_output_dir = "dist-web"

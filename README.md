@@ -136,6 +136,24 @@ Self-hosting: see [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 
 v1 = phases 1–6.
 
+## Deploying the websites (Cloudflare Pages)
+
+The marketing and docs sites build into one static bundle — marketing at `/`,
+docs at `/docs`:
+
+```bash
+pnpm build:web      # builds both Astro sites → dist-web/
+pnpm deploy:web     # build + wrangler pages deploy dist-web
+```
+
+For a Cloudflare Pages project (dashboard or CI), set:
+
+- **Build command:** `pnpm install && pnpm build:web`
+- **Build output directory:** `dist-web`
+
+See [`wrangler.toml`](./wrangler.toml). The `@rooster/server` app (Hono + MCP)
+is a separate deployable with its own adapter.
+
 ## License
 
 [MIT](./LICENSE)
