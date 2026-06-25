@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/*.tsbuildinfo", "!**/coverage"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/*.tsbuildinfo",
+      "!**/coverage",
+      "!apps/marketing",
+      "!apps/docs",
+      "!**/.astro"
+    ]
   },
   "formatter": {
     "enabled": true,

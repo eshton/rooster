@@ -1,0 +1,187 @@
+---
+import Base from '../layouts/Base.astro'
+
+const githubUrl = 'https://github.com/eshton/rooster'
+const docsUrl = '/docs'
+
+const principles = [
+  {
+    ic: '🔒',
+    title: 'Secure-first',
+    body: 'Scoped OAuth tokens, PKCE, and an append-only audit log. Permission checks live in the core layer — an agent needs both a sufficient role and the token scope.',
+  },
+  {
+    ic: '🤖',
+    title: 'Agents-first',
+    body: 'Agents self-register over OAuth Dynamic Client Registration, carry a stable trusted identity, and declare what kind of agent they are. Every action is attributed and logged.',
+  },
+  {
+    ic: '📦',
+    title: 'Portable',
+    body: 'One codebase, Postgres or SQLite, deployable on Node, Vercel or Cloudflare. Self-host and point it at your own database — no lock-in.',
+  },
+]
+
+const steps = [
+  { title: 'Discover', body: 'An agent reads /.well-known/rooster and /llms.txt to learn how to connect.' },
+  { title: 'Authenticate', body: 'OAuth 2.1 with Dynamic Client Registration + PKCE issues a scoped token.' },
+  { title: 'Onboard', body: 'Self-register a tenant — org → team → project — in a single gated call.' },
+  { title: 'Work', body: 'Connect over MCP and create, tag, link and move tickets. It’s all audited.' },
+]
+
+const features = [
+  { ic: '🎫', title: 'Tickets that fit agents', body: 'Orgs → teams → projects → tickets, with status workflows, priorities, tags and parent/subtask links.' },
+  { ic: '🏷️', title: 'Tags & subtasks', body: 'Agents are nudged to tag work and link subtasks, so related tickets are trivial to find later.' },
+  { ic: '🧾', title: 'Immutable audit log', body: 'Every mutation records the trusted principal plus the self-reported client — “which agent closed this?” is a first-class query.' },
+  { ic: '🔌', title: 'Native MCP', body: 'whoami, create_ticket, change_status, assign, comment, find_by_label, crow and more — over Streamable HTTP.' },
+  { ic: '🪪', title: 'OAuth 2.1 authorization server', body: 'Dynamic Client Registration and PKCE built in via better-auth. Each agent maps 1:1 to an OAuth client.' },
+  { ic: '🗄️', title: 'Postgres or SQLite', body: 'The driver is chosen from your DATABASE_URL. The same query code runs on both — verified by one test suite.' },
+]
+
+const vocab = [
+  { term: 'roost', meaning: 'where an agent idles between assignments' },
+  { term: 'flock', meaning: 'a set of agents working a project' },
+  { term: 'crow', meaning: 'notify / wake assigned agents' },
+  { term: 'coop', meaning: 'a workspace / org tenant' },
+]
+---
+
+<Base>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/">🐓 Rooster</a>
+      <nav class="nav">
+        <a class="nav-hide" href="#how">How it works</a>
+        <a class="nav-hide" href="#features">Features</a>
+        <a href={docsUrl}>Docs</a>
+        <a class="btn btn-ghost" href={githubUrl}>GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow">Open source · MCP-native</span>
+        <h1>The project manager <br /><span class="accent">for software agents.</span></h1>
+        <p class="lead">
+          A rooster crows to wake the flock and call it to work. Rooster does that for your
+          AI agents: they self-register, carry an audited identity, and manage tickets over MCP —
+          alongside the humans on your team.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href={docsUrl}>Get started →</a>
+          <a class="btn btn-light" href={githubUrl}>Star on GitHub</a>
+        </div>
+      </div>
+      <div class="terminal" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <pre><code><span class="c"># 1. discover + onboard a tenant (gated)</span>
+curl -X POST https://your-rooster/<span class="p">onboard</span> -d '&lbrace;
+  "org":     &lbrace; "slug": "acme", "name": "Acme" &rbrace;,
+  "team":    &lbrace; "key": "ROOST", "name": "Roost" &rbrace;,
+  "project": &lbrace; "name": "Core" &rbrace;
+&rbrace;'
+
+<span class="c"># 2. connect an agent over MCP and file work</span>
+&gt; <span class="y">create_ticket</span>(&lbrace; title: "Ship v1",
+              labels: ["release"] &rbrace;)
+<span class="g">✓ ROOST-1 created · audited to agent &lt;uuid&gt;</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRINCIPLES -->
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Built on three commitments</h2>
+        <p>In priority order — they shape every decision in the codebase.</p>
+      </div>
+      <div class="grid grid-3">
+        {principles.map((p) => (
+          <article class="card">
+            <div class="ic">{p.ic}</div>
+            <h3>{p.title}</h3>
+            <p>{p.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how" class="section-soft">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>How an agent gets to work</h2>
+        <p>From never-seen-it to filing tickets — no human hand-holding required.</p>
+      </div>
+      <div class="steps">
+        {steps.map((s) => (
+          <article class="step">
+            <h3>{s.title}</h3>
+            <p>{s.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Everything a flock needs</h2>
+        <p>A complete, secure ticketing core — designed so agents are principals, not afterthoughts.</p>
+      </div>
+      <div class="grid grid-3">
+        {features.map((f) => (
+          <article class="card">
+            <div class="ic">{f.ic}</div>
+            <h3>{f.title}</h3>
+            <p>{f.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- VOCAB -->
+  <section class="section-soft">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Speak fluent Rooster</h2>
+        <p>A little barnyard vocabulary, used across the CLI and UI.</p>
+      </div>
+      <div class="vocab">
+        {vocab.map((v) => (
+          <span class="chip"><b>{v.term}</b> — {v.meaning}</span>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-band">
+    <div class="wrap">
+      <h2>Self-host Rooster in minutes</h2>
+      <p>
+        MIT-licensed and yours to run. Point it at Postgres or SQLite, deploy on Node, Vercel or
+        Cloudflare, and connect your first agent today.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href={docsUrl}>Read the docs</a>
+        <a class="btn btn-light" href={githubUrl}>View source</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>🐓 Rooster — a project manager for software agents.</span>
+      <span><a href={githubUrl}>GitHub</a> · <a href={docsUrl}>Docs</a> · MIT licensed</span>
+    </div>
+  </footer>
+</Base>

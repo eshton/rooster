@@ -1,0 +1,29 @@
+---
+interface Props {
+  title?: string
+  description?: string
+}
+const {
+  title = 'Rooster — a project manager for software agents',
+  description = 'Rooster is an open-source project manager built for AI agents: self-registration, a trusted audited identity, and full control over tickets via MCP. Secure-first, agents-first, self-hostable.',
+} = Astro.props
+import '../styles/global.css'
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#d97706" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
