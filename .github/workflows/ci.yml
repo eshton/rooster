@@ -55,3 +55,11 @@ jobs:
 
       - name: Build marketing + docs sites
         run: pnpm build:web
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the server image
+        run: docker build -f apps/server/Dockerfile -t rooster-server:ci .
