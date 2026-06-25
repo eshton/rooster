@@ -15,6 +15,13 @@
       "when": 1782405920438,
       "tag": "0001_natural_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782407867591,
+      "tag": "0002_many_black_panther",
+      "breakpoints": true
     }
   ]
 }

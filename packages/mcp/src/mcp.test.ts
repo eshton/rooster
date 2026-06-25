@@ -116,6 +116,36 @@ describe('MCP server end-to-end', () => {
     expect(bad.content[0]?.text).toContain('validation')
   })
 
+  it('supports due dates, status filters and my_tickets', async () => {
+    const team = await services.teams.create(owner, { key: 'DUE', name: 'Due' })
+    const project = await services.projects.create(owner, { teamId: team.id, name: 'P' })
+
+    // dueDate + assignee to the owner principal.
+    const created = payload(
+      (await call('create_ticket', {
+        projectId: project.id,
+        title: 'With a deadline',
+        dueDate: '2026-07-01',
+        assigneeId: owner.principalId,
+      })) as never,
+    )
+    expect(created.dueDate).toBe('2026-07-01')
+
+    // Status filter: the new ticket is in the initial status, none are 'done'.
+    const open = payload(
+      (await call('list_tickets', { projectId: project.id, status: created.status })) as never,
+    ) as Array<{ id: string }>
+    expect(open.some((t) => t.id === created.id)).toBe(true)
+    const done = payload(
+      (await call('list_tickets', { projectId: project.id, status: 'done' })) as never,
+    ) as unknown[]
+    expect(done).toHaveLength(0)
+
+    // my_tickets returns tickets assigned to the caller.
+    const mine = payload((await call('my_tickets')) as never) as Array<{ id: string }>
+    expect(mine.some((t) => t.id === created.id)).toBe(true)
+  })
+
   it('creates teams + projects and invites a teammate by email', async () => {
     const team = payload((await call('create_team', { key: 'OPS', name: 'Ops' })) as never)
     expect(team.key).toBe('OPS')

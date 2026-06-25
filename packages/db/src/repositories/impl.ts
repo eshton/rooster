@@ -200,11 +200,24 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         )
       },
       async list(orgId, projectId, opts) {
+        const filters = [eq(s.tickets.orgId, orgId), eq(s.tickets.projectId, projectId)]
+        if (opts?.status) filters.push(eq(s.tickets.status, opts.status))
+        if (opts?.assigneeId) filters.push(eq(s.tickets.assigneeId, opts.assigneeId))
         return (
           await db
             .select()
             .from(s.tickets)
-            .where(and(eq(s.tickets.orgId, orgId), eq(s.tickets.projectId, projectId)))
+            .where(and(...filters))
+            .orderBy(desc(s.tickets.createdAt))
+            .limit(limitOf(opts))
+        ).map(toTicket)
+      },
+      async listAssigned(orgId, assigneeId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.tickets)
+            .where(and(eq(s.tickets.orgId, orgId), eq(s.tickets.assigneeId, assigneeId)))
             .orderBy(desc(s.tickets.createdAt))
             .limit(limitOf(opts))
         ).map(toTicket)

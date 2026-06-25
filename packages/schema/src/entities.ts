@@ -123,6 +123,8 @@ export const ticketSchema = z.object({
   labels: z.array(z.string().min(1).max(60)),
   assigneeId: idSchema.nullable(),
   parentId: idSchema.nullable(),
+  /** Optional ISO-8601 due date/deadline (date or datetime); null = none. */
+  dueDate: z.string().max(40).nullable(),
 })
 export type Ticket = z.infer<typeof ticketSchema>
 

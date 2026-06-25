@@ -109,6 +109,7 @@ export const tickets = pgTable(
     labels: text('labels').notNull().default('[]'),
     assigneeId: text('assignee_id'),
     parentId: text('parent_id'),
+    dueDate: text('due_date'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

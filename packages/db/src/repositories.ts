@@ -48,7 +48,13 @@ export interface TicketRepository {
   create(orgId: Id, input: Omit<Ticket, keyof TimestampedId | 'orgId'>): Promise<Ticket>
   getById(orgId: Id, id: Id): Promise<Ticket | null>
   getByKey(orgId: Id, key: string): Promise<Ticket | null>
-  list(orgId: Id, projectId: Id, opts?: ListOptions): Promise<Ticket[]>
+  list(
+    orgId: Id,
+    projectId: Id,
+    opts?: ListOptions & { status?: string; assigneeId?: Id },
+  ): Promise<Ticket[]>
+  /** Tickets across the org assigned to a given principal. */
+  listAssigned(orgId: Id, assigneeId: Id, opts?: ListOptions): Promise<Ticket[]>
   /** Tickets across the org carrying a given label/tag (exact match). */
   listByLabel(orgId: Id, label: string, opts?: ListOptions): Promise<Ticket[]>
   /** Direct children (subtasks) of a parent ticket. */

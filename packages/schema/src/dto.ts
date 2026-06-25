@@ -47,6 +47,8 @@ export const createTicketInput = z.object({
   labels: z.array(z.string().min(1).max(60)).default([]),
   assigneeId: idSchema.optional(),
   parentId: idSchema.optional(),
+  /** Optional ISO-8601 due date (e.g. "2026-07-01" or a full datetime). */
+  dueDate: z.string().max(40).nullable().optional(),
 })
 export type CreateTicketInput = z.infer<typeof createTicketInput>
 
@@ -58,6 +60,7 @@ export const updateTicketInput = z
     labels: z.array(z.string().min(1).max(60)),
     assigneeId: idSchema.nullable(),
     parentId: idSchema.nullable(),
+    dueDate: z.string().max(40).nullable(),
   })
   .partial()
 export type UpdateTicketInput = z.infer<typeof updateTicketInput>

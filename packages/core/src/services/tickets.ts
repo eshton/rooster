@@ -14,10 +14,17 @@ import {
   createTicketInput,
   type Id,
   type Ticket,
+  type TicketStatus,
   type UpdateTicketInput,
   updateTicketInput,
   z,
 } from './deps.js'
+
+/** Optional server-side filters for {@link TicketService.list}. */
+export interface TicketListFilter {
+  status?: TicketStatus
+  assigneeId?: Id
+}
 
 /** A ticket tag/label (same shape as a single entry of `ticket.labels`). */
 const labelSchema = z.string().min(1).max(60)
@@ -29,7 +36,9 @@ export interface TicketService {
   create(actor: Actor, input: CreateTicketInput): Promise<Ticket>
   get(actor: Actor, id: Id): Promise<Ticket>
   getByKey(actor: Actor, key: string): Promise<Ticket>
-  list(actor: Actor, projectId: Id, opts?: ListOptions): Promise<Ticket[]>
+  list(actor: Actor, projectId: Id, opts?: ListOptions & TicketListFilter): Promise<Ticket[]>
+  /** Tickets across the org assigned to the calling principal. */
+  myTickets(actor: Actor, opts?: ListOptions): Promise<Ticket[]>
   /** Find related tickets across the org that carry a given tag. */
   findByLabel(actor: Actor, label: string, opts?: ListOptions): Promise<Ticket[]>
   /** List the direct subtasks (children) of a ticket. */
@@ -110,6 +119,7 @@ export function createTicketService(repos: Repositories): TicketService {
         labels: input.labels,
         assigneeId: input.assigneeId ?? null,
         parentId: input.parentId ?? null,
+        dueDate: input.dueDate ?? null,
       })
 
       await recordAudit(repos, actor, {
@@ -136,6 +146,11 @@ export function createTicketService(repos: Repositories): TicketService {
     async list(actor, projectId, opts) {
       authorize(actor, 'ticket:read')
       return repos.tickets.list(actor.orgId, projectId, opts)
+    },
+
+    async myTickets(actor, opts) {
+      authorize(actor, 'ticket:read')
+      return repos.tickets.listAssigned(actor.orgId, actor.principalId, opts)
     },
 
     async findByLabel(actor, rawLabel, opts) {

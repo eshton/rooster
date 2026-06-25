@@ -16,6 +16,7 @@ import {
   createTicketInput,
   inviteMemberInput,
   registerAgentInput,
+  ticketStatusSchema,
   updateTicketInput,
 } from '@rooster/schema'
 import { z } from 'zod'
@@ -153,10 +154,25 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     'list_tickets',
     {
       title: 'List tickets',
-      description: 'List tickets in a project.',
-      inputSchema: { projectId: z.uuid() },
+      description: 'List tickets in a project, optionally filtered by status and/or assignee.',
+      inputSchema: {
+        projectId: z.uuid(),
+        status: ticketStatusSchema.optional(),
+        assigneeId: z.uuid().optional(),
+      },
     },
-    async ({ projectId }) => runTool(() => services.tickets.list(actor, projectId)),
+    async ({ projectId, status, assigneeId }) =>
+      runTool(() => services.tickets.list(actor, projectId, { status, assigneeId })),
+  )
+
+  server.registerTool(
+    'my_tickets',
+    {
+      title: 'My tickets',
+      description: 'List tickets across the org assigned to you (the calling principal).',
+      inputSchema: {},
+    },
+    async () => runTool(() => services.tickets.myTickets(actor)),
   )
 
   server.registerTool(
