@@ -1,0 +1,23 @@
+# Cloudflare Workers deployment for the Rooster server (Hono + MCP).
+#
+# Backed by libSQL/Turso over HTTP. Build then deploy:
+#   pnpm --filter @rooster/server build
+#   pnpm --filter @rooster/server deploy:worker
+#
+# Required vars/secrets (set non-secrets in [vars], secrets via `wrangler secret put`):
+#   DATABASE_URL          libsql://<your-db>.turso.io        (var or secret)
+#   DATABASE_AUTH_TOKEN   <turso token>                      (secret)
+#   ROOSTER_AUTH_SECRET   <32-byte random>                   (secret)
+#   ROOSTER_BASE_URL      https://<your-worker-domain>       (var)
+#   ROOSTER_SIGNUP_TOKEN  <tenant signup gate>               (secret, optional)
+#
+# Migrate before first use (from Node/CI, not the Worker):
+#   DATABASE_URL=libsql://… DATABASE_AUTH_TOKEN=… pnpm --filter @rooster/db db:migrate
+#   DATABASE_URL=libsql://… DATABASE_AUTH_TOKEN=… pnpm --filter @rooster/server auth:migrate
+name = "rooster-server"
+main = "dist/worker.js"
+compatibility_date = "2026-06-25"
+compatibility_flags = ["nodejs_compat"]
+
+# [vars]
+# ROOSTER_BASE_URL = "https://rooster-server.<account>.workers.dev"

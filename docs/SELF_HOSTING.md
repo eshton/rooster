@@ -96,6 +96,39 @@ gate tenant registration.
   hosted Postgres (Neon / Vercel Postgres) for `DATABASE_URL`. The in-memory
   auth adapter is NOT used for Postgres deploys — better-auth uses a real pool.
 
+### Cloudflare Workers (Turso)
+
+Workers can't run `pg` or the native libSQL client, so the edge build uses
+**libSQL/Turso over HTTP** — one connection serves both the domain repositories
+and better-auth. The entry is `apps/server/src/worker.ts`; config is in
+`apps/server/wrangler.toml` (note `compatibility_flags = ["nodejs_compat"]`,
+required for `node:crypto`).
+
+1. Create a Turso database and get its `libsql://…` URL + auth token.
+2. Migrate from Node/CI (the Worker never migrates at runtime):
+   ```bash
+   DATABASE_URL=libsql://… DATABASE_AUTH_TOKEN=… pnpm --filter @rooster/db db:migrate
+   ```
+3. Create better-auth's tables in the same Turso DB. The runtime uses
+   better-auth's **drizzle adapter** (no custom schema, `provider: 'sqlite'`);
+   generate its SQL with `pnpm --filter @rooster/server auth:generate` and apply
+   it to Turso. (This step is the one not yet exercised end-to-end — validate it
+   on your first deploy.)
+4. Set secrets and deploy:
+   ```bash
+   cd apps/server
+   pnpm dlx wrangler@4 secret put ROOSTER_AUTH_SECRET
+   pnpm dlx wrangler@4 secret put DATABASE_AUTH_TOKEN
+   # set DATABASE_URL + ROOSTER_BASE_URL as vars (wrangler.toml [vars] or dashboard)
+   pnpm --filter @rooster/server deploy:worker
+   ```
+
+> **Status:** the Workers runtime (Hono + MCP + the libSQL-web driver) builds
+> and is structurally Workers-ready, but the live Workers run and the
+> better-auth-on-Turso table setup have not been exercised in this environment.
+> The fully verified production paths today are Node/Docker and Vercel
+> (both Node-runtime, Postgres-backed).
+
 > **Rate limiting:** the per-agent MCP rate limit
 > (`ROOSTER_MCP_RATE_LIMIT_PER_MINUTE`) is in-memory and per-process — it
 > protects a single long-running server (Node / Docker). On serverless, add a

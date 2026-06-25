@@ -19,6 +19,7 @@
   "scripts": {
     "build": "tsc -b",
     "start": "node dist/node.js",
+    "deploy:worker": "tsc -b && pnpm dlx wrangler@4 deploy",
     "auth:generate": "pnpm dlx @better-auth/cli@latest generate --config better-auth.ts -y",
     "auth:migrate": "pnpm dlx @better-auth/cli@latest migrate --config better-auth.ts -y"
   },
