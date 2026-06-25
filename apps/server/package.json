@@ -1,0 +1,34 @@
+{
+  "name": "@rooster/server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Rooster deployable: Hono app mounting auth, the MCP endpoint and agent discovery.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/node.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.0.6",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@rooster/auth": "workspace:*",
+    "@rooster/config": "workspace:*",
+    "@rooster/core": "workspace:*",
+    "@rooster/db": "workspace:*",
+    "@rooster/mcp": "workspace:*",
+    "@rooster/schema": "workspace:*",
+    "hono": "4.12.27"
+  }
+}

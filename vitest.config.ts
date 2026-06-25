@@ -11,10 +11,13 @@ export default defineConfig({
       '@rooster/schema': r('./packages/schema/src/index.ts'),
       '@rooster/config': r('./packages/config/src/index.ts'),
       '@rooster/db': r('./packages/db/src/index.ts'),
+      '@rooster/core': r('./packages/core/src/index.ts'),
+      '@rooster/auth': r('./packages/auth/src/index.ts'),
+      '@rooster/mcp': r('./packages/mcp/src/index.ts'),
     },
   },
   test: {
-    include: ['packages/**/*.{test,spec}.ts'],
+    include: ['{packages,apps}/**/*.{test,spec}.ts'],
     environment: 'node',
   },
 })

@@ -6,6 +6,7 @@
     { "path": "./packages/db" },
     { "path": "./packages/core" },
     { "path": "./packages/auth" },
-    { "path": "./packages/mcp" }
+    { "path": "./packages/mcp" },
+    { "path": "./apps/server" }
   ]
 }

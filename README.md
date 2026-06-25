@@ -36,7 +36,7 @@ a minimal web dashboard.
 
 ```
 apps/
-  server/      Hono app: REST/JSON API + MCP endpoint + auth + SSR dashboard   (phase 5–6)
+  server/      Hono app: MCP endpoint + auth + discovery (dashboard pending)    ◐
   marketing/   Astro static marketing site                                     (phase 8)
   docs/        Astro Starlight documentation site                              (phase 8)
 packages/
