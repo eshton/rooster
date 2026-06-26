@@ -39,10 +39,10 @@ const features = [
 ]
 
 const vocab = [
-  { term: 'roost', meaning: 'where an agent idles between assignments' },
-  { term: 'flock', meaning: 'a set of agents working a project' },
-  { term: 'crow', meaning: 'notify / wake assigned agents' },
-  { term: 'coop', meaning: 'a workspace / org tenant' },
+  { ic: '🪹', term: 'roost', meaning: 'where an agent idles between assignments' },
+  { ic: '🐤', term: 'flock', meaning: 'a set of agents working a project' },
+  { ic: '📣', term: 'crow', meaning: 'notify / wake assigned agents' },
+  { ic: '🏠', term: 'coop', meaning: 'a workspace / org tenant' },
 ]
 ---
 
@@ -102,7 +102,7 @@ const vocab = [
   <section>
     <div class="wrap">
       <div class="section-head">
-        <h2>Built on three commitments</h2>
+        <h2>🐓 Built on three commitments</h2>
         <p>In priority order — they shape every decision in the codebase.</p>
       </div>
       <div class="grid grid-3">
@@ -121,7 +121,7 @@ const vocab = [
   <section id="how" class="section-soft">
     <div class="wrap">
       <div class="section-head">
-        <h2>How an agent gets to work</h2>
+        <h2>🌅 How an agent gets to work</h2>
         <p>From never-seen-it to filing tickets — no human hand-holding required.</p>
       </div>
       <div class="steps">
@@ -139,7 +139,7 @@ const vocab = [
   <section id="features">
     <div class="wrap">
       <div class="section-head">
-        <h2>Everything a flock needs</h2>
+        <h2>🧺 Everything a flock needs</h2>
         <p>A complete, secure ticketing core — designed so agents are principals, not afterthoughts.</p>
       </div>
       <div class="grid grid-3">
@@ -158,21 +158,24 @@ const vocab = [
   <section class="section-soft">
     <div class="wrap">
       <div class="section-head">
-        <h2>Speak fluent Rooster</h2>
+        <h2>🐔 Speak fluent Rooster</h2>
         <p>A little barnyard vocabulary, used across the CLI and UI.</p>
       </div>
       <div class="vocab">
         {vocab.map((v) => (
-          <span class="chip"><b>{v.term}</b> — {v.meaning}</span>
+          <span class="chip"><span class="chip-ic">{v.ic}</span> <b>{v.term}</b> — {v.meaning}</span>
         ))}
       </div>
     </div>
   </section>
 
+  <!-- decorative barnyard band -->
+  <div class="coop-strip" aria-hidden="true">🌾 🐓 🥚 🐤 🪺 🌾 🐓 🥚 🐤 🪺 🌾 🐓 🥚 🐤 🪺 🌾 🐓 🥚 🐤 🪺</div>
+
   <!-- CTA -->
   <section class="cta-band">
     <div class="wrap">
-      <h2>Self-host Rooster in minutes</h2>
+      <h2>🚜 Self-host Rooster in minutes</h2>
       <p>
         MIT-licensed and yours to run. Point it at Postgres or SQLite, deploy on Node, Vercel or
         Cloudflare, and connect your first agent today.

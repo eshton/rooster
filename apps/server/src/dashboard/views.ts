@@ -66,6 +66,7 @@ fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;c
 .due{font-size:.7rem;color:#92400e;background:#fef3c7;border-radius:999px;padding:.05rem .45rem}
 .due.over{color:#991b1b;background:#fee2e2}
 .filters{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 1rem}
+.coop-foot{text-align:center;letter-spacing:.45rem;opacity:.4;font-size:1.05rem;padding:2.5rem 0 1.4rem;user-select:none;white-space:nowrap;overflow:hidden}
 @media (max-width:640px){
   .grid-2{grid-template-columns:1fr !important}
   header.top{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.6rem 1rem}
@@ -92,6 +93,7 @@ function chrome(title: string, actor: Actor | null, body: string): string {
 <title>${esc(title)} · Rooster</title><style>${STYLES}</style></head>
 <body><header class="top"><a class="brand" href="${actor ? '/app' : '/'}">🐓 Rooster</a>${nav}</header>
 <div class="wrap">${body}</div>
+<footer class="coop-foot" aria-hidden="true">🌾 🐓 🥚 🐤 🪺 🌾 🐓 🥚 🐤 🪺</footer>
 <script>for(const el of document.querySelectorAll('.ts')){const d=new Date((el.textContent||'').trim());if(!Number.isNaN(d.getTime()))el.textContent=d.toLocaleString();}</script>
 </body></html>`
 }
@@ -191,11 +193,11 @@ export function orgOverview(data: {
                     `<div class="row"><a href="/app/projects/${esc(p.id)}">${esc(p.name)}</a>${p.archived ? '<span class="badge">archived</span>' : ''}</div>`,
                 )
                 .join('')
-            : '<div class="empty">No projects</div>'
+            : '<div class="empty">🪹 No projects</div>'
           return `<div class="card"><div class="row"><strong>${esc(t.name)}</strong><span class="key">${esc(t.key)}</span></div><div style="margin-top:.5rem">${items}</div></div>`
         })
         .join('')
-    : '<div class="empty">No teams yet.</div>'
+    : '<div class="empty">🪹 No teams yet.</div>'
   return chrome(
     data.org.name,
     data.actor,
@@ -267,7 +269,7 @@ export function projectBoard(data: {
       const inCol = data.tickets.filter((t) => t.status === status)
       const cards = inCol.length
         ? inCol.map(card).join('')
-        : '<div class="empty" style="font-size:.8rem">—</div>'
+        : '<div class="empty" style="font-size:1.2rem">🪹</div>'
       return `<div class="col"><h3>${esc(STATUS_LABEL[status])} · ${inCol.length}</h3>${cards}</div>`
     })
     .join('')
@@ -305,7 +307,7 @@ export function ticketDetail(data: {
             `<div class="card"><div class="muted" style="font-size:.8rem">${avatar(nameOf(c.authorId))} ${esc(nameOf(c.authorId))} · <span class="ts">${esc(c.createdAt)}</span></div><div>${esc(c.body)}</div></div>`,
         )
         .join('')
-    : '<div class="empty">No comments.</div>'
+    : '<div class="empty">🪶 No comments.</div>'
 
   const statusForm =
     data.canWrite && data.allowedStatuses.length
@@ -392,7 +394,7 @@ export function ticketListPage(data: {
             ${t.dueDate || t.labels.length ? `<div class="row" style="margin-top:.3rem;align-items:center">${dueChip(t.dueDate)}${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}</div>` : ''}</div>`,
         )
         .join('')
-    : `<div class="empty">${data.query !== undefined && data.query !== '' ? 'No matches.' : 'Nothing here yet.'}</div>`
+    : `<div class="empty">${data.query !== undefined && data.query !== '' ? '🪹 No matches.' : '🪹 Nothing here yet.'}</div>`
   return chrome(data.title, data.actor, `<h1>${esc(data.title)}</h1>${searchBar}${rows}`)
 }
 
@@ -420,7 +422,7 @@ export function agentsList(data: { agents: Agent[]; actor: Actor; canManage: boo
             <td class="muted">${esc(a.oauthClientId ?? '—')}</td>${manage}</tr>`
         })
         .join('')
-    : `<tr><td colspan="${data.canManage ? 5 : 4}" class="empty">No agents registered.</td></tr>`
+    : `<tr><td colspan="${data.canManage ? 5 : 4}" class="empty">🐤 No agents registered.</td></tr>`
   return chrome(
     'Agents',
     data.actor,
@@ -438,7 +440,7 @@ export function auditList(data: { entries: AuditLog[]; actor: Actor }): string {
             <td class="muted">${e.clientInfo ? esc(`${e.clientInfo.name} ${e.clientInfo.version}`) : '—'}</td></tr>`,
         )
         .join('')
-    : '<tr><td colspan="5" class="empty">No audit entries.</td></tr>'
+    : '<tr><td colspan="5" class="empty">🐓 No audit entries.</td></tr>'
   return chrome(
     'Audit log',
     data.actor,
@@ -521,7 +523,7 @@ export function membersPage(data: {
     data.actor,
     `<h1>Members</h1><p class="muted">People and agents with access to this workspace.</p>
     ${manage}
-    <table><thead><tr><th>Name</th><th>Email</th><th>Type</th><th>Role</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="empty">No members yet.</td></tr>'}</tbody></table>`,
+    <table><thead><tr><th>Name</th><th>Email</th><th>Type</th><th>Role</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="empty">🪹 No members yet.</td></tr>'}</tbody></table>`,
   )
 }
 
