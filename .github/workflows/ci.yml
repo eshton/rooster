@@ -63,3 +63,118 @@ jobs:
 
       - name: Build the server image
         run: docker build -f apps/server/Dockerfile -t rooster-server:ci .
+
+  # Schema is hand-edited in two dialects; fail if the committed migrations
+  # don't match what drizzle-kit would regenerate (i.e. someone edited a schema
+  # without regenerating both migrations).
+  migrations-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate both dialects
+        run: |
+          pnpm --filter @rooster/db db:generate:sqlite
+          pnpm --filter @rooster/db db:generate:pg
+
+      - name: Fail on uncommitted migration drift
+        run: git diff --exit-code packages/db/migrations
+
+  # The test suite runs against in-memory SQLite; this exercises the OTHER
+  # dialect — applying the committed Postgres migrations against a real server.
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rooster
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/rooster
+      # loadConfig requires an auth secret (>=16 chars); CI-only, not a real key.
+      ROOSTER_AUTH_SECRET: ci-postgres-migration-smoke-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Apply Postgres migrations
+        run: pnpm --filter @rooster/db db:migrate
+
+      - name: Verify schema was created
+        run: |
+          psql "$DATABASE_URL" -c "\dt" | tee /tmp/tables.txt
+          grep -q ' tickets ' /tmp/tables.txt
+          grep -q ' rate_limits ' /tmp/tables.txt
+
+  # The Cloudflare Worker bundle must stay free of `pg` (Node-only) so it runs
+  # on the edge. Build the bundle via a dry-run deploy and assert no pg slipped
+  # in (guards the pg-free crow/email/discovery modules).
+  worker-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build server
+        run: pnpm --filter @rooster/server build
+
+      - name: Bundle the Worker (dry-run, no deploy)
+        working-directory: apps/server
+        run: pnpm dlx wrangler@4 deploy --dry-run --outdir dist-worker
+
+      - name: Assert the edge bundle is pg-free
+        working-directory: apps/server
+        # Grep the emitted bundle only, not the .map (source maps embed the
+        # original `import pg from 'pg'` text from tree-shaken Node-only modules).
+        run: |
+          if grep -rEl "require\(['\"]pg['\"]\)|from[[:space:]]*['\"]pg['\"]|node_modules/pg/" dist-worker --include=worker.js; then
+            echo "::error::Postgres ('pg') leaked into the Cloudflare Worker bundle"
+            exit 1
+          fi
+          echo "Worker bundle is pg-free ✓"
