@@ -26,6 +26,7 @@ field", "Add an MCP tool").
 | 8 | Custom fields | extensibility | L | backlog |
 | 9 | Per-project configurable workflows | workflow | L | backlog |
 | 10 | Cross-workspace membership | identity | L | ✅ done |
+| 11 | CI auto-deploy on merge (ROOST-13 follow-up) | infra | M | backlog |
 
 ---
 
@@ -118,3 +119,21 @@ account's home org. Covered by `core.test.ts` (cross-workspace redeem,
 idempotent re-join) and `auth.test.ts` (multi-org resolution).
 **Not yet:** an MCP-side workspace selector (a token resolves to the home org
 only) and creating a *second* tenant from an already-onboarded account.
+
+## 11. CI auto-deploy on merge — `infra` · M
+**Why:** follow-up to ROOST-13. CI now *verifies* every path (lint/build/test,
+Postgres migrations, migration-drift, pg-free Worker bundle), but deploying is
+still manual — which is exactly how the live Worker drifted behind `main`
+(stale base URL, then the markdown renderer not shipped). Verification without
+deployment leaves the "merged but not live" gap open.
+**Scope:** a GitHub Actions deploy workflow that, on push to `main` (after the
+verify jobs pass), (1) deploys the Worker via `wrangler deploy` using a
+`CLOUDFLARE_API_TOKEN` secret, (2) runs `db:migrate` against the production
+Turso DB so schema changes land with the code, (3) deploys the marketing +
+docs Pages bundle (`build:web` → `dist-web/`), and (4) post-deploy smoke-checks
+`/healthz`, `/.well-known/rooster` (asserting the base URL) and the OAuth
+discovery aliases. Gate prod steps on `main` + environment protection; keep
+secrets in GitHub Environments.
+**Deps:** builds on the CI verification jobs (ROOST-13). Needs the Cloudflare
+API token + Turso credentials as repo/environment secrets.
+**Suggested:** label `roadmap,infra,ci,deploy`, priority `high`.
