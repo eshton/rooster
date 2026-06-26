@@ -41,6 +41,22 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   app.get('/app/login', (c) => c.html(v.loginPage({ providers })))
   app.get('/app/signup', (c) => c.html(v.signupPage()))
 
+  // Password reset (email/password accounts). The reset link emailed by
+  // better-auth points back to `/app/reset-password?token=…`.
+  app.get('/app/forgot-password', (c) =>
+    c.html(v.forgotPasswordPage({ sent: c.req.query('sent') === '1' })),
+  )
+  app.get('/app/reset-password', (c) => {
+    // better-auth signals an invalid/expired token via `?error=…`.
+    const error = c.req.query('error')
+    return c.html(
+      v.resetPasswordPage({
+        token: error ? undefined : c.req.query('token'),
+        error: error ? 'This reset link is invalid or has expired.' : undefined,
+      }),
+    )
+  })
+
   // OAuth login resume: better-auth's MCP authorize endpoint redirects an
   // unauthenticated user to `loginPage` (default `/login`) with the original
   // authorize query. We sign them in, then send the browser back to

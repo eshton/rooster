@@ -4,6 +4,7 @@ import { createServices, type Services } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
 import pg from 'pg'
 import { webhookCrowNotifier } from './crow-webhook.js'
+import { webhookEmailSender } from './email-webhook.js'
 
 type AuthDatabase = Parameters<typeof createAuth>[0]['database']
 
@@ -60,6 +61,10 @@ export async function createServerContext(
   const services = createServices(db.repositories, {
     crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
   })
-  const auth = createAuth({ config, database: opts.authDatabase ?? authDatabaseFor(config) })
+  const auth = createAuth({
+    config,
+    database: opts.authDatabase ?? authDatabaseFor(config),
+    sendEmail: webhookEmailSender(config.notifications.emailWebhookUrl),
+  })
   return { config, db, services, auth }
 }

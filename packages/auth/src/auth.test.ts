@@ -2,7 +2,7 @@ import { loadConfig } from '@rooster/config'
 import { ForbiddenError } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createAuth } from './auth.js'
+import { createAuth, type EmailMessage } from './auth.js'
 import { decideEnrollment } from './enrollment.js'
 import { agentIdentityFromToken, humanIdentityFromEmail, resolveMcpIdentity } from './identity.js'
 import { memoryAdapter } from './index.js'
@@ -200,5 +200,50 @@ describe('MCP OAuth server', () => {
     expect([200, 201]).toContain(res.status)
     const client = (await res.json()) as Record<string, unknown>
     expect(client.client_id).toBeTruthy()
+  })
+})
+
+// --- transactional email seam (password reset) -----------------------------
+
+describe('email seam', () => {
+  it('routes password-reset mail through the supplied sender', async () => {
+    const sent: EmailMessage[] = []
+    const auth = createAuth({
+      config,
+      // The memory adapter needs its model tables pre-declared (it doesn't
+      // create them on read) for email/password sign-up to work.
+      database: memoryAdapter({
+        user: [],
+        session: [],
+        account: [],
+        verification: [],
+      }),
+      sendEmail: { send: async (m) => void sent.push(m) },
+    })
+    const base = `${config.baseUrl}/api/auth`
+    const json = { 'content-type': 'application/json' }
+
+    // Register an email/password account, then request a reset link.
+    await auth.handler(
+      new Request(`${base}/sign-up/email`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ name: 'Ada', email: 'ada@acme.test', password: 'supersecret' }),
+      }),
+    )
+    const res = await auth.handler(
+      new Request(`${base}/request-password-reset`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ email: 'ada@acme.test', redirectTo: `${config.baseUrl}/app/reset` }),
+      }),
+    )
+    expect(res.ok).toBe(true)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ to: 'ada@acme.test', kind: 'reset-password' })
+    // The link is better-auth's reset-password callback (token in the path),
+    // which redirects to our `/app/reset-password?token=…` page once visited.
+    expect(sent[0]?.url).toContain('/reset-password/')
+    expect(sent[0]?.url).toContain('callbackURL=')
   })
 })

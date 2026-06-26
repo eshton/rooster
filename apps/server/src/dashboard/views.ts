@@ -144,8 +144,73 @@ export function loginPage(opts: { providers: string[]; error?: string; next?: st
       <input name="password" type="password" placeholder="Password" required>
       <button class="btn" type="submit" style="width:100%">Sign in</button>
     </form>
-    <p class="muted" style="margin-top:1rem">No account? <a href="${signupHref}">Create one</a>.</p>
+    <p class="muted" style="margin-top:1rem">No account? <a href="${signupHref}">Create one</a> &middot; <a href="/app/forgot-password">Forgot password?</a></p>
     ${authScript(next)}`,
+  )
+}
+
+/** Step 1 of password reset: request a reset link by email. */
+export function forgotPasswordPage(opts: { sent?: boolean; error?: string } = {}): string {
+  const body = opts.sent
+    ? `<h1>Check your email</h1>
+    <p class="muted">If an account exists for that address, we've sent a link to reset your password. 🐔</p>
+    <p style="margin-top:1rem"><a class="btn" href="/app/login">Back to sign in</a></p>`
+    : `<h1>Reset your password</h1>
+    <p class="muted">Enter your email and we'll send you a reset link.</p>
+    <p id="auth-err" style="color:#b91c1c">${esc(opts.error ?? '')}</p>
+    <form id="forgot-form" class="auth" method="post" action="/api/auth/request-password-reset">
+      <input name="email" type="email" placeholder="you@example.com" required>
+      <button class="btn" type="submit" style="width:100%">Send reset link</button>
+    </form>
+    <p class="muted" style="margin-top:1rem">Remembered it? <a href="/app/login">Sign in</a>.</p>
+    <script>
+document.getElementById('forgot-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.currentTarget;
+  const body = Object.fromEntries(new FormData(f));
+  body.redirectTo = location.origin + '/app/reset-password';
+  const res = await fetch(f.action, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify(body) });
+  if (res.ok) { location.href = '/app/forgot-password?sent=1'; return; }
+  const data = await res.json().catch(() => ({}));
+  document.getElementById('auth-err').textContent = data.message || 'Could not send reset link';
+});
+</script>`
+  return chrome('Reset password', null, body)
+}
+
+/** Step 2 of password reset: set a new password using the emailed token. */
+export function resetPasswordPage(opts: { token?: string; error?: string } = {}): string {
+  if (!opts.token) {
+    return chrome(
+      'Reset password',
+      null,
+      `<h1>Invalid reset link</h1>
+      <p class="muted">This link is missing its token or has expired.</p>
+      <p style="margin-top:1rem"><a class="btn" href="/app/forgot-password">Request a new link</a></p>`,
+    )
+  }
+  return chrome(
+    'Reset password',
+    null,
+    `<h1>Choose a new password</h1>
+    <p id="auth-err" style="color:#b91c1c">${esc(opts.error ?? '')}</p>
+    <form id="reset-form" class="auth" method="post" action="/api/auth/reset-password">
+      <input type="hidden" name="token" value="${esc(opts.token)}">
+      <input name="newPassword" type="password" placeholder="New password (min 8 chars)" required minlength="8">
+      <button class="btn" type="submit" style="width:100%">Set new password</button>
+    </form>
+    <script>
+document.getElementById('reset-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.currentTarget;
+  const res = await fetch(f.action, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify(Object.fromEntries(new FormData(f))) });
+  if (res.ok) { location.href = '/app/login'; return; }
+  const data = await res.json().catch(() => ({}));
+  document.getElementById('auth-err').textContent = data.message || 'Could not reset password';
+});
+</script>`,
   )
 }
 

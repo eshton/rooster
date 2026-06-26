@@ -33,6 +33,12 @@ const envSchema = z.object({
 
   /** Optional outbound webhook for `crow` (assignee wake) notifications. */
   ROOSTER_CROW_WEBHOOK_URL: z.url().optional(),
+
+  /**
+   * Optional outbound webhook for transactional email (password reset). Unset =
+   * email is logged to stdout (fine for dev/self-host; not for production).
+   */
+  ROOSTER_EMAIL_WEBHOOK_URL: z.url().optional(),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -71,6 +77,8 @@ export interface RoosterConfig {
   /** Outbound notifications. `crowWebhookUrl` unset = crow is audit-only. */
   notifications: {
     crowWebhookUrl?: string
+    /** Webhook for transactional email; unset = email is logged to stdout. */
+    emailWebhookUrl?: string
   }
 }
 
@@ -122,6 +130,7 @@ export function loadConfig(
     },
     notifications: {
       crowWebhookUrl: env.ROOSTER_CROW_WEBHOOK_URL,
+      emailWebhookUrl: env.ROOSTER_EMAIL_WEBHOOK_URL,
     },
   }
 }

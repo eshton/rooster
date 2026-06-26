@@ -38,6 +38,27 @@ export interface RoosterAuth {
   [key: string]: unknown
 }
 
+/** A transactional email Rooster asks the host to deliver. */
+export interface EmailMessage {
+  to: string
+  subject: string
+  text: string
+  /** Categorizes the message so a webhook consumer can route it. */
+  kind: 'reset-password' | 'verify-email'
+  /** The action link (reset / verification URL) embedded in `text`. */
+  url: string
+}
+
+/**
+ * Pluggable transactional-email seam. Rooster never talks to an SMTP/ESP
+ * directly; the host supplies a sender (e.g. an outbound webhook). When none is
+ * supplied, {@link createAuth} falls back to a console logger so password reset
+ * still works in dev/self-host without any email provider configured.
+ */
+export interface EmailSender {
+  send(message: EmailMessage): Promise<void>
+}
+
 export interface CreateAuthOptions {
   config: RoosterConfig
   /**
@@ -48,6 +69,19 @@ export interface CreateAuthOptions {
   database: BetterAuthOptions['database']
   /** Override the human login page path (defaults to `/login`). */
   loginPage?: string
+  /**
+   * How to deliver transactional email (password reset). Defaults to a
+   * console logger that prints the link — fine for dev/self-host, but a real
+   * sender should be supplied in production so users can reset their password.
+   */
+  sendEmail?: EmailSender
+}
+
+/** Logs the email (link included) to stdout. The default when no sender is given. */
+const consoleEmailSender: EmailSender = {
+  async send({ to, subject, url }) {
+    console.info(`[rooster:email] to=${to} subject=${JSON.stringify(subject)} url=${url}`)
+  },
 }
 
 /**
@@ -60,6 +94,7 @@ export function createAuth({
   config,
   database,
   loginPage = '/login',
+  sendEmail = consoleEmailSender,
 }: CreateAuthOptions): RoosterAuth {
   const socialProviders: NonNullable<BetterAuthOptions['socialProviders']> = {}
   if (config.oauthProviders.github) {
@@ -81,7 +116,21 @@ export function createAuth({
     database,
     // Email/password lets the dashboard work without external OAuth providers
     // configured; GitHub/Google are added on top when credentials are present.
-    emailAndPassword: { enabled: true },
+    // `sendResetPassword` routes through the host's email seam (webhook in prod,
+    // console logger by default). Email verification is intentionally NOT
+    // required — turning it on without a configured sender would lock users out.
+    emailAndPassword: {
+      enabled: true,
+      sendResetPassword: async ({ user, url }) => {
+        await sendEmail.send({
+          to: user.email,
+          subject: 'Reset your Rooster password',
+          text: `Reset your Rooster password by opening this link:\n\n${url}\n\nIf you didn't request this, you can ignore this email.`,
+          kind: 'reset-password',
+          url,
+        })
+      },
+    },
     socialProviders,
     plugins: [
       mcp({

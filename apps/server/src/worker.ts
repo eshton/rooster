@@ -7,6 +7,7 @@ import { createApp } from './app.js'
 import * as authSchema from './auth-schema.js'
 import type { ServerContext } from './context.js'
 import { webhookCrowNotifier } from './crow-webhook.js'
+import { webhookEmailSender } from './email-webhook.js'
 
 /**
  * Cloudflare Workers entry. Backed by libSQL/Turso over HTTP — one drizzle
@@ -36,6 +37,7 @@ function buildApp(env: WorkerEnv): Hono {
   const auth = createAuth({
     config,
     database: drizzleAdapter(drizzleDb, { provider: 'sqlite', schema: authSchema }),
+    sendEmail: webhookEmailSender(config.notifications.emailWebhookUrl),
   })
 
   const ctx: ServerContext = {
