@@ -29,6 +29,24 @@ const envSchema = z.object({
   /** Gates agent-first tenant self-registration. Unset = open (self-host). */
   ROOSTER_SIGNUP_TOKEN: z.string().optional(),
 
+  /**
+   * Close public email/password sign-up (the dashboard form / `/api/auth/
+   * sign-up/email`). New members then join only by invite. For internal teams
+   * and single-user self-hosts. Accepts `true`/`1`.
+   */
+  ROOSTER_DISABLE_SIGNUP: z.string().optional(),
+
+  /**
+   * Optional first-run admin. When email + password are set and the email has
+   * no Rooster user yet, the server creates the account and a starter workspace
+   * on startup — a zero-friction "just me" / internal self-host: set these,
+   * start, log in. Works even with sign-up disabled. Password ≥ 8 chars.
+   */
+  ROOSTER_ADMIN_EMAIL: z.email().optional(),
+  ROOSTER_ADMIN_PASSWORD: z.string().min(8).optional(),
+  ROOSTER_ADMIN_WORKSPACE: z.string().optional(),
+  ROOSTER_ADMIN_PROJECT_KEY: z.string().optional(),
+
   ROOSTER_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 
   /** Optional outbound webhook for `crow` (assignee wake) notifications. */
@@ -79,6 +97,20 @@ export interface RoosterConfig {
   /** Tenant self-registration gate. `signupToken` unset = open registration. */
   onboarding: {
     signupToken?: string
+    /** When true, public email/password sign-up is closed (invite-only). */
+    disableSignup: boolean
+  }
+  /**
+   * Optional first-run admin bootstrap (self-host). Present only when both
+   * email and password are configured.
+   */
+  admin?: {
+    email: string
+    password: string
+    /** Starter workspace name (default `My Workspace`). */
+    workspace: string
+    /** Starter team/ticket key prefix (default `TASK`). */
+    projectKey: string
   }
   mcp: {
     rateLimitPerMinute: number
@@ -116,6 +148,23 @@ export function loadConfig(
   }
   const env = parsed.data
 
+  // Admin bootstrap is all-or-nothing: requiring both avoids a half-configured
+  // account that can't log in.
+  if (Boolean(env.ROOSTER_ADMIN_EMAIL) !== Boolean(env.ROOSTER_ADMIN_PASSWORD)) {
+    throw new Error(
+      'Invalid Rooster environment configuration:\n  - ROOSTER_ADMIN_EMAIL and ROOSTER_ADMIN_PASSWORD must be set together',
+    )
+  }
+  const admin =
+    env.ROOSTER_ADMIN_EMAIL && env.ROOSTER_ADMIN_PASSWORD
+      ? {
+          email: env.ROOSTER_ADMIN_EMAIL,
+          password: env.ROOSTER_ADMIN_PASSWORD,
+          workspace: env.ROOSTER_ADMIN_WORKSPACE ?? 'My Workspace',
+          projectKey: env.ROOSTER_ADMIN_PROJECT_KEY ?? 'TASK',
+        }
+      : undefined
+
   return {
     nodeEnv: env.NODE_ENV,
     baseUrl: env.ROOSTER_BASE_URL.replace(/\/+$/, ''),
@@ -137,7 +186,9 @@ export function loadConfig(
     },
     onboarding: {
       signupToken: env.ROOSTER_SIGNUP_TOKEN,
+      disableSignup: env.ROOSTER_DISABLE_SIGNUP === 'true' || env.ROOSTER_DISABLE_SIGNUP === '1',
     },
+    admin,
     mcp: {
       rateLimitPerMinute: env.ROOSTER_MCP_RATE_LIMIT_PER_MINUTE,
     },

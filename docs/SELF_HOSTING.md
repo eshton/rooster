@@ -153,7 +153,34 @@ config is in `apps/server/wrangler.toml` (note
 > Email verification is intentionally **not** required to sign in (enabling it
 > without a configured sender would lock users out).
 
-## 5. Onboard the first tenant (agent-first)
+## 5a. Self-host quickstart: first-run admin (the "just me" path)
+
+For a personal or internal instance you don't need the OAuth/MCP onboarding
+dance or any email setup. Set an admin and (optionally) close public sign-up:
+
+```bash
+ROOSTER_ADMIN_EMAIL=you@example.com
+ROOSTER_ADMIN_PASSWORD=at-least-8-chars
+ROOSTER_ADMIN_WORKSPACE="My Workspace"   # optional (default "My Workspace")
+ROOSTER_ADMIN_PROJECT_KEY=TASK           # optional (default "TASK")
+ROOSTER_DISABLE_SIGNUP=true              # optional: invite-only instance
+```
+
+On startup the Node entry (`pnpm --filter @rooster/server start`) creates the
+account + a starter workspace if that email has no Rooster user yet — idempotent,
+so it's a no-op on later boots. Then just open `/app/login` and sign in. No email
+delivery, no sign-up form, no MCP required.
+
+- `ROOSTER_DISABLE_SIGNUP=true` rejects public email/password sign-up
+  (`POST /api/auth/sign-up/email` → 403) and hides the dashboard's create-account
+  link; new members join only by **invite** (see the dashboard Members page).
+  Social login is governed separately by which OAuth providers you configure.
+- The admin bootstrap runs even when sign-up is disabled (it's a server-side
+  call, not the public HTTP route).
+- It runs on the **Node** entry. On serverless/edge, provision via `/onboard`
+  (below) or seed the DB instead.
+
+## 5b. Onboard the first tenant (agent-first)
 
 An agent (or you, on its behalf) can self-register a whole tenant in one call:
 

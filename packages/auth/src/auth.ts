@@ -32,6 +32,14 @@ export interface RoosterAuth {
       clientId: string
       scopes: string
     } | null>
+    /**
+     * Create an email/password account server-side (used by the first-run admin
+     * bootstrap). Bypasses the transport sign-up gate since it isn't an HTTP
+     * call. Returns the new better-auth user.
+     */
+    signUpEmail: (input: {
+      body: { email: string; password: string; name: string }
+    }) => Promise<{ token?: string | null; user: { id: string; email: string; name: string } }>
     [endpoint: string]: unknown
   }
   options: unknown

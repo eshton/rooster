@@ -62,4 +62,37 @@ describe('loadConfig', () => {
       /environment configuration/,
     )
   })
+
+  it('parses ROOSTER_DISABLE_SIGNUP as a boolean (default false)', () => {
+    expect(loadConfig(baseEnv).onboarding.disableSignup).toBe(false)
+    expect(
+      loadConfig({ ...baseEnv, ROOSTER_DISABLE_SIGNUP: 'true' }).onboarding.disableSignup,
+    ).toBe(true)
+    expect(loadConfig({ ...baseEnv, ROOSTER_DISABLE_SIGNUP: '1' }).onboarding.disableSignup).toBe(
+      true,
+    )
+    // Any other value (incl. "false") is falsey — no accidental opt-in.
+    expect(
+      loadConfig({ ...baseEnv, ROOSTER_DISABLE_SIGNUP: 'false' }).onboarding.disableSignup,
+    ).toBe(false)
+  })
+
+  it('builds the admin bootstrap config with defaults, all-or-nothing', () => {
+    expect(loadConfig(baseEnv).admin).toBeUndefined()
+    const cfg = loadConfig({
+      ...baseEnv,
+      ROOSTER_ADMIN_EMAIL: 'admin@acme.test',
+      ROOSTER_ADMIN_PASSWORD: 'supersecret',
+    })
+    expect(cfg.admin).toEqual({
+      email: 'admin@acme.test',
+      password: 'supersecret',
+      workspace: 'My Workspace',
+      projectKey: 'TASK',
+    })
+    // Only one of the pair set → readable error.
+    expect(() => loadConfig({ ...baseEnv, ROOSTER_ADMIN_EMAIL: 'admin@acme.test' })).toThrow(
+      /ROOSTER_ADMIN_EMAIL and ROOSTER_ADMIN_PASSWORD/,
+    )
+  })
 })

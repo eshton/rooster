@@ -123,10 +123,16 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {
 </script>`
 }
 
-export function loginPage(opts: { providers: string[]; error?: string; next?: string }): string {
+export function loginPage(opts: {
+  providers: string[]
+  error?: string
+  next?: string
+  allowSignup?: boolean
+}): string {
   const next = opts.next ?? '/app'
   const cb = encodeURIComponent(next)
   const resuming = next !== '/app'
+  const allowSignup = opts.allowSignup ?? true
   const oauth = opts.providers
     .map(
       (p) =>
@@ -137,6 +143,9 @@ export function loginPage(opts: { providers: string[]; error?: string; next?: st
   const blurb = resuming
     ? 'Sign in to connect your agent to Rooster.'
     : 'Access your Rooster dashboard.'
+  const footer = allowSignup
+    ? `<p class="muted" style="margin-top:1rem">No account? <a href="${signupHref}">Create one</a> &middot; <a href="/app/forgot-password">Forgot password?</a></p>`
+    : `<p class="muted" style="margin-top:1rem">Sign-up is invite-only here &middot; <a href="/app/forgot-password">Forgot password?</a></p>`
   return chrome(
     'Sign in',
     null,
@@ -148,7 +157,7 @@ export function loginPage(opts: { providers: string[]; error?: string; next?: st
       <input name="password" type="password" placeholder="Password" required>
       <button class="btn" type="submit" style="width:100%">Sign in</button>
     </form>
-    <p class="muted" style="margin-top:1rem">No account? <a href="${signupHref}">Create one</a> &middot; <a href="/app/forgot-password">Forgot password?</a></p>
+    ${footer}
     ${authScript(next)}`,
   )
 }

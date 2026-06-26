@@ -50,8 +50,19 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
     ctx.config.oauthProviders.google ? 'google' : null,
   ].filter((p): p is string => p !== null)
 
-  app.get('/app/login', (c) => c.html(v.loginPage({ providers })))
-  app.get('/app/signup', (c) => c.html(v.signupPage()))
+  const allowSignup = !ctx.config.onboarding.disableSignup
+  const signupClosed = (c: Context) =>
+    c.html(
+      v.messagePage(
+        null,
+        'Sign-up is invite-only',
+        'This Rooster instance has public sign-up disabled. Ask an admin for an invite, then sign in.',
+      ),
+      403,
+    )
+
+  app.get('/app/login', (c) => c.html(v.loginPage({ providers, allowSignup })))
+  app.get('/app/signup', (c) => (allowSignup ? c.html(v.signupPage()) : signupClosed(c)))
 
   // Password reset (email/password accounts). The reset link emailed by
   // better-auth points back to `/app/reset-password?token=…`.
@@ -77,9 +88,10 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   app.get('/login', (c) => {
     const search = new URL(c.req.raw.url).search
     const next = search ? `/api/auth/mcp/authorize${search}` : '/app'
-    return c.html(v.loginPage({ providers, next }))
+    return c.html(v.loginPage({ providers, next, allowSignup }))
   })
   app.get('/signup', (c) => {
+    if (!allowSignup) return signupClosed(c)
     const next = c.req.query('next') || '/app'
     return c.html(v.signupPage({ next }))
   })

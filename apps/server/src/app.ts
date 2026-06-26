@@ -108,6 +108,21 @@ export function createApp(ctx: ServerContext): Hono {
     }
   })
 
+  // Closed-signup mode (internal teams / single-user self-host): reject public
+  // email/password registration before it reaches better-auth. New members then
+  // join only by invite. Gated in the transport (like the onboarding token),
+  // not in better-auth, so the first-run admin bootstrap's server-side
+  // `signUpEmail` still works. Social/OAuth sign-up is governed by which
+  // providers you configure.
+  if (ctx.config.onboarding.disableSignup) {
+    app.post('/api/auth/sign-up/email', (c) =>
+      c.json(
+        { error: 'signup_disabled', message: 'Public sign-up is disabled on this instance.' },
+        403,
+      ),
+    )
+  }
+
   // All better-auth routes (OAuth metadata, DCR, token, social login, sessions).
   app.all('/api/auth/*', (c) => ctx.auth.handler(c.req.raw))
 
