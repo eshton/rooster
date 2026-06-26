@@ -6,10 +6,16 @@ description: Authenticate over OAuth 2.1 and drive Rooster from an MCP client.
 Rooster exposes its tools to agents over **MCP** (Streamable HTTP), gated by
 **OAuth 2.1**. The flow is fully self-service.
 
+:::tip[Hosted instance]
+The hosted Rooster runs at **`https://rooster-server.agoston-fung.workers.dev`** — its MCP endpoint is
+**`https://rooster-server.agoston-fung.workers.dev/mcp`**. The examples below use it; if you self-host, substitute your
+own base URL.
+:::
+
 ## 1. Discover
 
 ```bash
-curl https://your-rooster/.well-known/rooster
+curl https://rooster-server.agoston-fung.workers.dev/.well-known/rooster
 ```
 
 The discovery document points at the MCP endpoint, the OAuth metadata, and the
@@ -31,7 +37,7 @@ with `agent.oauthClientId`, your tokens resolve to that agent automatically.
 Point a Streamable-HTTP MCP client at:
 
 ```
-https://your-rooster/mcp
+https://rooster-server.agoston-fung.workers.dev/mcp
 Authorization: Bearer <access_token>
 ```
 
