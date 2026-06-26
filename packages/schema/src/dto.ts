@@ -49,6 +49,8 @@ export const createTicketInput = z.object({
   parentId: idSchema.optional(),
   /** Optional ISO-8601 due date (e.g. "2026-07-01" or a full datetime). */
   dueDate: z.string().max(40).nullable().optional(),
+  /** Optional effort estimate / story points (non-negative). */
+  estimate: z.number().min(0).max(100_000).nullable().optional(),
 })
 export type CreateTicketInput = z.infer<typeof createTicketInput>
 
@@ -61,6 +63,7 @@ export const updateTicketInput = z
     assigneeId: idSchema.nullable(),
     parentId: idSchema.nullable(),
     dueDate: z.string().max(40).nullable(),
+    estimate: z.number().min(0).max(100_000).nullable(),
   })
   .partial()
 export type UpdateTicketInput = z.infer<typeof updateTicketInput>

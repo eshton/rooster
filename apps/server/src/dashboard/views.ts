@@ -544,6 +544,11 @@ function dueChip(dueDate: string | null): string {
   return `<span class="due${over ? ' over' : ''}">due ${esc(dueDate.slice(0, 10))}</span>`
 }
 
+function estimateChip(estimate: number | null): string {
+  if (estimate == null) return ''
+  return `<span class="due" title="estimate">${esc(String(estimate))} pts</span>`
+}
+
 function priorityOptions(selected: string): string {
   return TICKET_PRIORITIES.map(
     (p) => `<option value="${p}"${p === selected ? ' selected' : ''}>${p}</option>`,
@@ -564,6 +569,7 @@ export function projectBoard(data: {
         <input name="labels" placeholder="tags, comma-separated">
         <select name="priority" title="priority">${priorityOptions('none')}</select>
         <input name="dueDate" type="date" title="due date">
+        <input name="estimate" type="number" min="0" step="0.5" placeholder="pts" title="estimate (story points)" style="width:5rem">
         <button class="btn" type="submit">Create ticket</button>
       </form>`
     : ''
@@ -573,8 +579,8 @@ export function projectBoard(data: {
       ? `<span title="${esc(data.names[t.assigneeId] ?? t.assigneeId)}">${avatar(data.names[t.assigneeId] ?? '?')}</span>`
       : ''
     const meta =
-      t.dueDate || t.assigneeId
-        ? `<div class="row" style="margin-top:.35rem;align-items:center">${dueChip(t.dueDate)}<span>${assignee}</span></div>`
+      t.dueDate || t.estimate != null || t.assigneeId
+        ? `<div class="row" style="margin-top:.35rem;align-items:center">${dueChip(t.dueDate)}${estimateChip(t.estimate)}<span>${assignee}</span></div>`
         : ''
     return `<div class="tk"><div class="row"><span class="key">${esc(t.key)}</span>${t.priority !== 'none' ? `<span class="prio ${esc(t.priority)}" title="${esc(t.priority)}"></span>` : ''}</div>
       <a href="/app/tickets/${esc(t.key)}">${esc(t.title)}</a>
@@ -656,6 +662,7 @@ export function ticketDetail(data: {
           <div class="actions" style="margin:0">
             <select name="priority" title="priority">${priorityOptions(t.priority)}</select>
             <input name="dueDate" type="date" value="${esc(t.dueDate?.slice(0, 10) ?? '')}" title="due date">
+            <input name="estimate" type="number" min="0" step="0.5" value="${t.estimate ?? ''}" placeholder="pts" title="estimate (story points)" style="width:5rem">
             <input name="labels" value="${esc(t.labels.join(', '))}" placeholder="tags, comma-separated">
           </div>
           <button class="btn sm" type="submit">Save changes</button>
@@ -680,6 +687,7 @@ export function ticketDetail(data: {
     <div style="margin:.25rem 0 1rem"><span class="badge amber">${esc(STATUS_LABEL[t.status])}</span>
       <span class="badge"><span class="prio ${esc(t.priority)}"></span>${esc(t.priority)}</span>
       ${t.dueDate ? dueChip(t.dueDate) : ''}
+      ${estimateChip(t.estimate)}
       ${t.assigneeId ? `<span class="badge">${avatar(nameOf(t.assigneeId))} ${esc(nameOf(t.assigneeId))}</span>` : '<span class="badge">unassigned</span>'}</div>
     ${t.description ? `<div class="card md-body">${renderMarkdown(t.description)}</div>` : ''}
     ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}

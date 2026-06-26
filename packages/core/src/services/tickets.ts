@@ -126,6 +126,7 @@ export function createTicketService(
         assigneeId: input.assigneeId ?? null,
         parentId: input.parentId ?? null,
         dueDate: input.dueDate ?? null,
+        estimate: input.estimate ?? null,
       })
 
       await recordAudit(repos, actor, {

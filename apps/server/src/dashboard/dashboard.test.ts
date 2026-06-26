@@ -259,7 +259,7 @@ describe('dashboard (authenticated)', () => {
     expect(res.headers.get('location')).toContain('/app/members?code=')
   })
 
-  it('edits a ticket (priority + due date), then finds it via search and my tickets', async () => {
+  it('edits a ticket (priority + due date + estimate), then finds it via search and my tickets', async () => {
     const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
     const projectId = overview.match(/\/app\/projects\/([0-9a-f-]{36})/)?.[1]
     await app.request(`${base}/app/projects/${projectId}/tickets`, {
@@ -277,6 +277,7 @@ describe('dashboard (authenticated)', () => {
         priority: 'high',
         labels: 'urgent',
         dueDate: '2026-09-01',
+        estimate: '2.5',
       }),
     })
     expect(edited.status).toBe(302)
@@ -286,6 +287,7 @@ describe('dashboard (authenticated)', () => {
     ).text()
     expect(detail).toContain('high')
     expect(detail).toContain('2026-09-01')
+    expect(detail).toContain('2.5 pts')
 
     const search = await (
       await app.request(`${base}/app/search?q=Editable`, { headers: { cookie } })

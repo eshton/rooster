@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { boolean, integer, pgTable, real, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
 /**
  * PostgreSQL dialect schema. Kept structurally identical to the SQLite schema
@@ -114,6 +114,7 @@ export const tickets = pgTable(
     assigneeId: text('assignee_id'),
     parentId: text('parent_id'),
     dueDate: text('due_date'),
+    estimate: real('estimate'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

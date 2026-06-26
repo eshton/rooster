@@ -127,6 +127,8 @@ export const ticketSchema = z.object({
   parentId: idSchema.nullable(),
   /** Optional ISO-8601 due date/deadline (date or datetime); null = none. */
   dueDate: z.string().max(40).nullable(),
+  /** Optional effort estimate / story points (non-negative); null = unsized. */
+  estimate: z.number().min(0).max(100_000).nullable(),
 })
 export type Ticket = z.infer<typeof ticketSchema>
 

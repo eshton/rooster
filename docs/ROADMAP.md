@@ -16,7 +16,7 @@ field", "Add an MCP tool").
 
 | # | Feature | Theme | Effort | Status |
 |---|---------|-------|:------:|--------|
-| 1 | Estimates / story points | fields | S | backlog |
+| 1 | Estimates / story points | fields | S | ✅ done |
 | 2 | Start date | fields | S | backlog |
 | 3 | Milestones / cycles (sprints) | planning | M | backlog |
 | 4 | Multiple assignees | collaboration | M | backlog |
@@ -30,12 +30,16 @@ field", "Add an MCP tool").
 
 ---
 
-## 1. Estimates / story points — `fields` · S
+## 1. Estimates / story points — `fields` · S · ✅ done
 **Why:** size work for planning and velocity.
-**Scope:** add nullable numeric `estimate` to `ticketSchema` (entities), both
-dialect schemas + migrations, `create/updateTicketInput` DTOs, thread through
-`tickets.create/update`. Surface in `create_ticket`/`update_ticket`.
-**Suggested:** label `roadmap,fields`, priority `low`.
+**Shipped:** nullable `estimate` (a non-negative `real`, so fractional points
+work) added to `ticketSchema` + both dialect schemas + migrations 0006, the
+`create/updateTicketInput` DTOs, and threaded through `tickets.create` (update
+flows through the generic patch path). Surfaced over MCP automatically via the
+DTO `.shape` on `create_ticket`/`update_ticket`, and in the SSR dashboard
+(create form, edit form, board cards, ticket detail "N pts" chip). Covered by
+`mcp.test.ts` (create + re-size + clear) and `dashboard.test.ts` (form
+round-trip).
 
 ## 2. Start date — `fields` · S
 **Why:** model work that has a planned start, not just a deadline; enables

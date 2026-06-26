@@ -203,6 +203,15 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       ? ctx.services.tickets.get(actor, ref)
       : ctx.services.tickets.getByKey(actor, ref.toUpperCase())
 
+  // Parse a story-point estimate from a form field: blank → null (unsized),
+  // otherwise a non-negative finite number (invalid input falls back to null).
+  const estimateOf = (raw: unknown): number | null => {
+    const s = String(raw ?? '').trim()
+    if (s === '') return null
+    const n = Number(s)
+    return Number.isFinite(n) && n >= 0 ? n : null
+  }
+
   app.get('/app/projects/:id', (c) =>
     page(c, async (actor) => {
       const id = c.req.param('id')
@@ -320,6 +329,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
         labels,
         dueDate: body.dueDate ? String(body.dueDate) : null,
+        estimate: estimateOf(body.estimate),
       })
       return `/app/projects/${id}`
     }),
@@ -339,6 +349,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
         labels,
         dueDate: body.dueDate ? String(body.dueDate) : null,
+        estimate: estimateOf(body.estimate),
       })
       return `/app/tickets/${ticket.key}`
     }),

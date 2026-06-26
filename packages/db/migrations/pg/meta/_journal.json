@@ -43,6 +43,13 @@
       "when": 1782469562517,
       "tag": "0005_majestic_zeigeist",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782506162318,
+      "tag": "0006_romantic_abomination",
+      "breakpoints": true
     }
   ]
 }

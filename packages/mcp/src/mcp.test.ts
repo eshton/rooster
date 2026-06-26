@@ -120,16 +120,28 @@ describe('MCP server end-to-end', () => {
     const team = await services.teams.create(owner, { key: 'DUE', name: 'Due' })
     const project = await services.projects.create(owner, { teamId: team.id, name: 'P' })
 
-    // dueDate + assignee to the owner principal.
+    // dueDate + estimate + assignee to the owner principal.
     const created = payload(
       (await call('create_ticket', {
         projectId: project.id,
         title: 'With a deadline',
         dueDate: '2026-07-01',
+        estimate: 3,
         assigneeId: owner.principalId,
       })) as never,
     )
     expect(created.dueDate).toBe('2026-07-01')
+    expect(created.estimate).toBe(3)
+
+    // update_ticket can re-size (fractional points) and clear the estimate.
+    const resized = payload(
+      (await call('update_ticket', { id: created.id, estimate: 0.5 })) as never,
+    )
+    expect(resized.estimate).toBe(0.5)
+    const cleared = payload(
+      (await call('update_ticket', { id: created.id, estimate: null })) as never,
+    )
+    expect(cleared.estimate).toBe(null)
 
     // Status filter: the new ticket is in the initial status, none are 'done'.
     const open = payload(

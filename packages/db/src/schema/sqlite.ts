@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 /**
  * SQLite / libSQL dialect schema.
@@ -118,6 +118,7 @@ export const tickets = sqliteTable(
     assigneeId: text('assignee_id'),
     parentId: text('parent_id'),
     dueDate: text('due_date'),
+    estimate: real('estimate'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
