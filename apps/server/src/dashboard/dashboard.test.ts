@@ -253,6 +253,25 @@ describe('dashboard (authenticated)', () => {
     expect(await mine.text()).toContain('My tickets')
   })
 
+  it('creates a team and a project from the overview', async () => {
+    const teamRes = await app.request(`${base}/app/teams`, {
+      ...form({ key: 'OPS', name: 'Operations' }),
+    })
+    expect(teamRes.status).toBe(302)
+
+    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
+    expect(overview).toContain('Operations')
+    const teamId = overview.match(/<option value="([0-9a-f-]{36})">Operations<\/option>/)?.[1]
+    expect(teamId).toBeTruthy()
+
+    const projRes = await app.request(`${base}/app/projects`, {
+      ...form({ teamId: teamId as string, name: 'Runbooks' }),
+    })
+    expect(projRes.status).toBe(302)
+    const after = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
+    expect(after).toContain('Runbooks')
+  })
+
   it('redirects anonymous write attempts to login', async () => {
     const res = await app.request(`${base}/app/tickets/whatever/comments`, {
       method: 'POST',

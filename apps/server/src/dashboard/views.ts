@@ -189,6 +189,8 @@ export function orgOverview(data: {
   stats: { tickets: number; open: number; people: number; agents: number }
   recent: Ticket[]
   projectNames: Record<string, string>
+  canCreateTeam: boolean
+  canCreateProject: boolean
 }): string {
   const teams = data.teams.length
     ? data.teams
@@ -231,13 +233,35 @@ export function orgOverview(data: {
         .join('')}</div>`
     : '<div class="empty">🪹 No tickets yet — open one from a project board.</div>'
 
+  const createTeam = data.canCreateTeam
+    ? `<fieldset><legend>New team</legend>
+        <form method="post" action="/app/teams" class="actions">
+          <input name="key" placeholder="KEY (e.g. OPS)" required style="max-width:8rem;text-transform:uppercase">
+          <input name="name" placeholder="Team name" required>
+          <button class="btn sm" type="submit">Create team</button>
+        </form></fieldset>`
+    : ''
+  const createProject =
+    data.canCreateProject && data.teams.length
+      ? `<fieldset><legend>New project</legend>
+        <form method="post" action="/app/projects" class="actions">
+          <select name="teamId">${data.teams.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select>
+          <input name="name" placeholder="Project name" required>
+          <button class="btn sm" type="submit">Create project</button>
+        </form></fieldset>`
+      : ''
+  const createBlock =
+    createTeam || createProject
+      ? `<div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">${createProject}${createTeam}</div>`
+      : ''
+
   return chrome(
     data.org.name,
     data.actor,
     `<h1>${esc(data.org.name)}</h1><p class="muted">${esc(data.org.slug)}</p>
     ${stats}
     <h2>Recent tickets</h2>${recent}
-    <h2>Teams &amp; projects</h2>${teams}`,
+    <h2>Teams &amp; projects</h2>${createBlock}${teams}`,
   )
 }
 

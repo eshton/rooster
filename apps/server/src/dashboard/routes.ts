@@ -106,6 +106,8 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         },
         recent,
         projectNames,
+        canCreateTeam: can(actor, 'team:write'),
+        canCreateProject: can(actor, 'project:write'),
       })
     }),
   )
@@ -302,6 +304,29 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       const body = await c.req.parseBody()
       await ctx.services.agents.bindOAuthClient(actor, id, String(body.clientId ?? ''))
       return '/app/agents'
+    }),
+  )
+
+  app.post('/app/teams', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      await ctx.services.teams.create(actor, {
+        key: String(body.key ?? '').toUpperCase(),
+        name: String(body.name ?? ''),
+      })
+      return '/app'
+    }),
+  )
+
+  app.post('/app/projects', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      await ctx.services.projects.create(actor, {
+        teamId: String(body.teamId ?? ''),
+        name: String(body.name ?? ''),
+        description: body.description ? String(body.description) : undefined,
+      })
+      return '/app'
     }),
   )
 
