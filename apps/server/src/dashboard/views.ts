@@ -246,6 +246,7 @@ function chrome(title: string, actor: Actor | null, body: string): string {
     : ''
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>${esc(title)} · Rooster</title><style>${STYLES}</style></head>
 <body><header class="top"><a class="brand" href="${actor ? '/app' : '/'}">🐓 Rooster</a>${nav}</header>
 <div class="wrap">${body}</div>

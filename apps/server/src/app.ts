@@ -56,6 +56,13 @@ export function createApp(ctx: ServerContext): Hono {
   const mcpRateLimiter = new DbRateLimiter(ctx.db.repositories, ctx.config.mcp.rateLimitPerMinute)
 
   app.get('/', (c) => c.html(landingHtml(ctx)))
+  app.get('/favicon.svg', (c) =>
+    c.body(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1c1917"/><path d="M30 12c3-4 8-4 9 1 4-3 9-1 8 4 4-1 7 3 4 7l-21 2z" fill="#ef4444"/><path d="M24 20c10-4 20 1 21 12 1 9-5 17-14 18-2 6-8 6-9 0-7-1-11-7-9-14 1-5 5-9 11-12-1-3 0-3 0-4z" fill="#d97706"/><path d="M45 30l11 3-11 4z" fill="#fbbf24"/><circle cx="34" cy="29" r="2.6" fill="#1c1917"/><path d="M40 41c0 5-2 8-5 8 1-4 1-6 0-9z" fill="#ef4444"/></svg>`,
+      200,
+      { 'content-type': 'image/svg+xml' },
+    ),
+  )
   app.get('/.well-known/rooster', (c) => c.json(discoveryDocument(ctx)))
   // Human dashboard (server-rendered) under /app.
   mountDashboard(app, ctx)

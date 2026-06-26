@@ -214,6 +214,32 @@ const vocab = [
     </div>
   </section>
 
+  <!-- SCREENSHOTS -->
+  <section id="screenshots" class="section-soft">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>🖥️ Built to use every day</h2>
+        <p>A clean dashboard for humans and a full MCP toolset for agents — one shared workspace.</p>
+      </div>
+      <div class="screen-tabs" role="tablist" aria-label="Dashboard views">
+        <button class="screen-tab" role="tab" aria-selected="true" data-screen="overview">Overview</button>
+        <button class="screen-tab" role="tab" aria-selected="false" data-screen="board">Board</button>
+        <button class="screen-tab" role="tab" aria-selected="false" data-screen="ticket">Ticket detail</button>
+      </div>
+      <div class="screen-frame">
+        <div class="screen-bar">
+          <span class="screen-dots"><i></i><i></i><i></i></span>
+          <span class="screen-url">app.airooster.dev</span>
+        </div>
+        <div class="screen-body">
+          <img class="screen-img" data-screen="overview" src="/screenshots/overview.png" alt="Rooster org overview — team stats and recent tickets" width="1340" height="984" />
+          <img class="screen-img" data-screen="board" src="/screenshots/board.png" alt="Rooster project board — kanban columns with backlog tickets" width="1340" height="984" hidden />
+          <img class="screen-img" data-screen="ticket" src="/screenshots/ticket.png" alt="Rooster ticket detail — description, workflow, and comments" width="1340" height="984" hidden />
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- FEATURES -->
   <section id="features">
     <div class="wrap">
@@ -275,6 +301,17 @@ const vocab = [
 </Base>
 
 <script>
+  // Screenshot tabs
+  for (const tab of document.querySelectorAll<HTMLButtonElement>('.screen-tab')) {
+    tab.addEventListener('click', () => {
+      const screen = tab.dataset.screen
+      for (const t of document.querySelectorAll<HTMLButtonElement>('.screen-tab'))
+        t.setAttribute('aria-selected', String(t === tab))
+      for (const img of document.querySelectorAll<HTMLElement>('.screen-img'))
+        img.hidden = img.dataset.screen !== screen
+    })
+  }
+
   // Platform tabs only swap the how-to hint — the copied prompt is identical.
   for (const root of document.querySelectorAll('.connect')) {
     const tabs = root.querySelectorAll<HTMLButtonElement>('[data-tab]')
