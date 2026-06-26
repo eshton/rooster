@@ -81,6 +81,8 @@ export interface PrincipalRepository {
    * tenant scoping on tenant data.
    */
   findById(id: Id): Promise<Principal | null>
+  /** All principals in an org (used to resolve names + list members). */
+  listByOrg(orgId: Id, opts?: ListOptions): Promise<Principal[]>
 }
 
 /**
@@ -111,6 +113,8 @@ export interface AgentRepository {
 
 export interface MembershipRepository {
   list(orgId: Id, principalId: Id): Promise<Membership[]>
+  /** Every membership in an org (used to compute each member's role). */
+  listByOrg(orgId: Id): Promise<Membership[]>
   upsert(orgId: Id, input: Omit<Membership, keyof TimestampedId | 'orgId'>): Promise<Membership>
 }
 

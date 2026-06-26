@@ -198,6 +198,61 @@ describe('dashboard (authenticated)', () => {
     expect(page).toContain('cf-client-123')
   })
 
+  it('shows the members page and invites a teammate by email', async () => {
+    const page = await (await app.request(`${base}/app/members`, { headers: { cookie } })).text()
+    expect(page).toContain('Members')
+    const invited = await app.request(`${base}/app/members/invite`, {
+      ...form({ email: 'newbie@acme.test', role: 'member' }),
+    })
+    expect(invited.status).toBe(302)
+    const after = await (await app.request(`${base}/app/members`, { headers: { cookie } })).text()
+    expect(after).toContain('newbie@acme.test')
+  })
+
+  it('generates a shareable join code', async () => {
+    const res = await app.request(`${base}/app/members/code`, { ...form({ role: 'member' }) })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toContain('/app/members?code=')
+  })
+
+  it('edits a ticket (priority + due date), then finds it via search and my tickets', async () => {
+    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
+    const projectId = overview.match(/\/app\/projects\/([0-9a-f-]{36})/)?.[1]
+    await app.request(`${base}/app/projects/${projectId}/tickets`, {
+      ...form({ title: 'Editable ticket' }),
+    })
+    const board = await (
+      await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
+    ).text()
+    const ticketId = board.match(/\/app\/tickets\/([0-9a-f-]{36})/)?.[1]
+
+    const edited = await app.request(`${base}/app/tickets/${ticketId}/update`, {
+      ...form({
+        title: 'Editable ticket',
+        description: 'now with detail',
+        priority: 'high',
+        labels: 'urgent',
+        dueDate: '2026-09-01',
+      }),
+    })
+    expect(edited.status).toBe(302)
+
+    const detail = await (
+      await app.request(`${base}/app/tickets/${ticketId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain('high')
+    expect(detail).toContain('2026-09-01')
+
+    const search = await (
+      await app.request(`${base}/app/search?q=Editable`, { headers: { cookie } })
+    ).text()
+    expect(search).toContain('Editable ticket')
+
+    const mine = await app.request(`${base}/app/mine`, { headers: { cookie } })
+    expect(mine.status).toBe(200)
+    expect(await mine.text()).toContain('My tickets')
+  })
+
   it('redirects anonymous write attempts to login', async () => {
     const res = await app.request(`${base}/app/tickets/whatever/comments`, {
       method: 'POST',

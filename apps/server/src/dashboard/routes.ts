@@ -1,6 +1,6 @@
 import { humanIdentityFromSessionEmail } from '@rooster/auth'
 import { type Actor, allowedTransitions, CoreError, can } from '@rooster/core'
-import type { AgentStatus, TicketStatus } from '@rooster/schema'
+import type { AgentStatus, Role, TicketPriority, TicketStatus } from '@rooster/schema'
 import type { Context, Hono } from 'hono'
 import type { ServerContext } from '../context.js'
 import * as v from './views.js'
@@ -86,28 +86,46 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
     }),
   )
 
+  // Build a principalId → display-name map for resolving assignees/authors.
+  const toNames = (members: { principalId: string; displayName: string }[]) =>
+    Object.fromEntries(members.map((m) => [m.principalId, m.displayName]))
+
   app.get('/app/projects/:id', (c) =>
     page(c, async (actor) => {
       const id = c.req.param('id')
-      const [project, tickets] = await Promise.all([
+      const status = c.req.query('status') as TicketStatus | undefined
+      const [project, tickets, members] = await Promise.all([
         ctx.services.projects.get(actor, id),
-        ctx.services.tickets.list(actor, id),
+        ctx.services.tickets.list(actor, id, status ? { status } : undefined),
+        ctx.services.members.listOrg(actor),
       ])
-      return v.projectBoard({ project, tickets, actor, canWrite: can(actor, 'ticket:write') })
+      return v.projectBoard({
+        project,
+        tickets,
+        actor,
+        canWrite: can(actor, 'ticket:write'),
+        names: toNames(members),
+        status: status ?? null,
+      })
     }),
   )
 
   app.get('/app/tickets/:id', (c) =>
     page(c, async (actor) => {
       const id = c.req.param('id')
-      const ticket = await ctx.services.tickets.get(actor, id)
-      const comments = await ctx.services.comments.list(actor, id)
+      const [ticket, comments, members] = await Promise.all([
+        ctx.services.tickets.get(actor, id),
+        ctx.services.comments.list(actor, id),
+        ctx.services.members.listOrg(actor),
+      ])
       return v.ticketDetail({
         ticket,
         comments,
         actor,
         canWrite: can(actor, 'ticket:write'),
         allowedStatuses: allowedTransitions(ticket.status),
+        members,
+        names: toNames(members),
       })
     }),
   )
@@ -124,6 +142,35 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
 
   app.get('/app/audit', (c) =>
     page(c, async (actor) => v.auditList({ entries: await ctx.services.audit.list(actor), actor })),
+  )
+
+  app.get('/app/mine', (c) =>
+    page(c, async (actor) =>
+      v.ticketListPage({
+        title: 'My tickets',
+        tickets: await ctx.services.tickets.myTickets(actor),
+        actor,
+      }),
+    ),
+  )
+
+  app.get('/app/search', (c) =>
+    page(c, async (actor) => {
+      const q = c.req.query('q') ?? ''
+      const tickets = q ? await ctx.services.tickets.search(actor, q) : []
+      return v.ticketListPage({ title: 'Search', tickets, actor, query: q, search: true })
+    }),
+  )
+
+  app.get('/app/members', (c) =>
+    page(c, async (actor) =>
+      v.membersPage({
+        members: await ctx.services.members.listOrg(actor),
+        actor,
+        canManage: can(actor, 'team:write'),
+        inviteCode: c.req.query('code') ?? null,
+      }),
+    ),
   )
 
   // --- write actions (POST) -------------------------------------------------
@@ -158,10 +205,30 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       await ctx.services.tickets.create(actor, {
         projectId: id,
         title: String(body.title ?? ''),
-        priority: 'none',
+        priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
         labels,
+        dueDate: body.dueDate ? String(body.dueDate) : null,
       })
       return `/app/projects/${id}`
+    }),
+  )
+
+  app.post('/app/tickets/:id/update', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      const labels = String(body.labels ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      await ctx.services.tickets.update(actor, id, {
+        title: String(body.title ?? ''),
+        description: body.description ? String(body.description) : null,
+        priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
+        labels,
+        dueDate: body.dueDate ? String(body.dueDate) : null,
+      })
+      return `/app/tickets/${id}`
     }),
   )
 
@@ -211,6 +278,40 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       const body = await c.req.parseBody()
       await ctx.services.agents.bindOAuthClient(actor, id, String(body.clientId ?? ''))
       return '/app/agents'
+    }),
+  )
+
+  app.post('/app/members/invite', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      await ctx.services.members.invite(actor, {
+        email: String(body.email ?? ''),
+        role: String(body.role ?? 'member') as 'viewer' | 'member' | 'admin',
+      })
+      return '/app/members'
+    }),
+  )
+
+  app.post('/app/members/role', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      await ctx.services.members.upsert(actor, {
+        principalId: String(body.principalId ?? ''),
+        teamId: null,
+        role: String(body.role ?? 'member') as Role,
+      })
+      return '/app/members'
+    }),
+  )
+
+  app.post('/app/members/code', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      const invite = await ctx.services.invites.create(actor, {
+        role: String(body.role ?? 'member') as 'viewer' | 'member' | 'admin',
+        maxUses: 1,
+      })
+      return `/app/members?code=${encodeURIComponent(invite.code)}`
     }),
   )
 }

@@ -5,7 +5,7 @@ export * from './notify.js'
 export * from './onboarding.js'
 export * from './permissions.js'
 export * from './services/index.js'
-export type { UpsertMemberInput } from './services/members.js'
+export type { InviteResult, OrgMember, UpsertMemberInput } from './services/members.js'
 export type {
   BootstrapOrgInput,
   BootstrapResult,

@@ -1,4 +1,4 @@
-import type { Actor } from '@rooster/core'
+import type { Actor, OrgMember } from '@rooster/core'
 import type {
   Agent,
   AuditLog,
@@ -7,9 +7,10 @@ import type {
   Project,
   Team,
   Ticket,
+  TicketPriority,
   TicketStatus,
 } from '@rooster/schema'
-import { TICKET_STATUSES } from '@rooster/schema'
+import { TICKET_PRIORITIES, TICKET_STATUSES } from '@rooster/schema'
 
 /** Escape untrusted text for safe HTML interpolation. */
 export function esc(value: unknown): string {
@@ -58,12 +59,23 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{text-align:left;
 .btn.ghost:hover{border-color:var(--amber);color:var(--amber-dark);background:transparent}
 fieldset{border:1px solid var(--line);border-radius:12px;padding:.75rem 1rem;margin:.75rem 0}
 fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:0 .35rem}
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:50%;background:#fde68a;color:#92400e;font-size:.68rem;font-weight:700;vertical-align:middle;margin-right:.2rem}
+.codebox{display:inline-block;font-family:ui-monospace,monospace;background:#1c1917;color:#fcd34d;padding:.35rem .65rem;border-radius:8px;margin-top:.3rem;user-select:all}
+.prio{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;vertical-align:middle;margin-right:.35rem;background:#d4d4d8}
+.prio.low{background:#93c5fd}.prio.medium{background:#fcd34d}.prio.high{background:#fb923c}.prio.urgent{background:#ef4444}
+.due{font-size:.7rem;color:#92400e;background:#fef3c7;border-radius:999px;padding:.05rem .45rem}
+.due.over{color:#991b1b;background:#fee2e2}
+.filters{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 1rem}
+@media (max-width:640px){.grid-2{grid-template-columns:1fr !important}header.top nav{gap:.7rem;flex-wrap:wrap}table{display:block;overflow-x:auto}}
 `
 
 function chrome(title: string, actor: Actor | null, body: string): string {
   const nav = actor
     ? `<nav>
         <a href="/app">Overview</a>
+        <a href="/app/mine">My tickets</a>
+        <a href="/app/search">Search</a>
+        <a href="/app/members">Members</a>
         <a href="/app/agents">Agents</a>
         <a href="/app/audit">Audit</a>
         <span class="muted">${esc(actor.role)}</span>
@@ -73,8 +85,10 @@ function chrome(title: string, actor: Actor | null, body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} · Rooster</title><style>${STYLES}</style></head>
-<body><header class="top"><a class="brand" href="/app">🐓 Rooster</a>${nav}</header>
-<div class="wrap">${body}</div></body></html>`
+<body><header class="top"><a class="brand" href="${actor ? '/app' : '/'}">🐓 Rooster</a>${nav}</header>
+<div class="wrap">${body}</div>
+<script>for(const el of document.querySelectorAll('.ts')){const d=new Date((el.textContent||'').trim());if(!Number.isNaN(d.getTime()))el.textContent=d.toLocaleString();}</script>
+</body></html>`
 }
 
 // better-auth's email endpoints take JSON, so submit the form via fetch and
@@ -193,39 +207,77 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   canceled: 'Canceled',
 }
 
+/** Today's date (YYYY-MM-DD) for overdue comparison. */
+function today(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function dueChip(dueDate: string | null): string {
+  if (!dueDate) return ''
+  const over = dueDate.slice(0, 10) < today()
+  return `<span class="due${over ? ' over' : ''}">due ${esc(dueDate.slice(0, 10))}</span>`
+}
+
+function priorityOptions(selected: string): string {
+  return TICKET_PRIORITIES.map(
+    (p) => `<option value="${p}"${p === selected ? ' selected' : ''}>${p}</option>`,
+  ).join('')
+}
+
 export function projectBoard(data: {
   project: Project
   tickets: Ticket[]
   actor: Actor
   canWrite: boolean
+  names: Record<string, string>
+  status?: TicketStatus | null
 }): string {
   const createForm = data.canWrite
     ? `<form method="post" action="/app/projects/${esc(data.project.id)}/tickets" class="actions">
         <input name="title" placeholder="New ticket title" required maxlength="300">
         <input name="labels" placeholder="tags, comma-separated">
+        <select name="priority" title="priority">${priorityOptions('none')}</select>
+        <input name="dueDate" type="date" title="due date">
         <button class="btn" type="submit">Create ticket</button>
       </form>`
     : ''
-  const cols = TICKET_STATUSES.map((status) => {
-    const inCol = data.tickets.filter((t) => t.status === status)
-    const cards = inCol.length
-      ? inCol
-          .map(
-            (t) =>
-              `<div class="tk"><div><span class="key">${esc(t.key)}</span></div>
-              <a href="/app/tickets/${esc(t.id)}">${esc(t.title)}</a>
-              ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}</div>`,
-          )
-          .join('')
-      : '<div class="empty" style="font-size:.8rem">—</div>'
-    return `<div class="col"><h3>${esc(STATUS_LABEL[status])} · ${inCol.length}</h3>${cards}</div>`
-  }).join('')
+
+  const card = (t: Ticket) => {
+    const assignee = t.assigneeId
+      ? `<span title="${esc(data.names[t.assigneeId] ?? t.assigneeId)}">${avatar(data.names[t.assigneeId] ?? '?')}</span>`
+      : ''
+    const meta =
+      t.dueDate || t.assigneeId
+        ? `<div class="row" style="margin-top:.35rem;align-items:center">${dueChip(t.dueDate)}<span>${assignee}</span></div>`
+        : ''
+    return `<div class="tk"><div class="row"><span class="key">${esc(t.key)}</span>${t.priority !== 'none' ? `<span class="prio ${esc(t.priority)}" title="${esc(t.priority)}"></span>` : ''}</div>
+      <a href="/app/tickets/${esc(t.id)}">${esc(t.title)}</a>
+      ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}
+      ${meta}</div>`
+  }
+
+  const statuses = data.status ? [data.status] : TICKET_STATUSES
+  const cols = statuses
+    .map((status) => {
+      const inCol = data.tickets.filter((t) => t.status === status)
+      const cards = inCol.length
+        ? inCol.map(card).join('')
+        : '<div class="empty" style="font-size:.8rem">—</div>'
+      return `<div class="col"><h3>${esc(STATUS_LABEL[status])} · ${inCol.length}</h3>${cards}</div>`
+    })
+    .join('')
+
+  const filter = `<div class="filters"><span class="muted">Filter:</span>
+    <a class="btn sm ghost" href="/app/projects/${esc(data.project.id)}">All</a>
+    ${TICKET_STATUSES.map((s) => `<a class="btn sm ghost" href="/app/projects/${esc(data.project.id)}?status=${s}">${esc(STATUS_LABEL[s])}</a>`).join('')}</div>`
+
   return chrome(
     data.project.name,
     data.actor,
     `<p class="muted"><a href="/app">← Overview</a></p><h1>${esc(data.project.name)}</h1>
     ${data.project.description ? `<p class="muted">${esc(data.project.description)}</p>` : ''}
     ${createForm}
+    ${filter}
     <div class="board">${cols}</div>`,
   )
 }
@@ -236,13 +288,16 @@ export function ticketDetail(data: {
   actor: Actor
   canWrite: boolean
   allowedStatuses: readonly TicketStatus[]
+  members: OrgMember[]
+  names: Record<string, string>
 }): string {
   const t = data.ticket
+  const nameOf = (id: string) => data.names[id] ?? id
   const comments = data.comments.length
     ? data.comments
         .map(
           (c) =>
-            `<div class="card"><div class="muted" style="font-size:.8rem">${esc(c.authorId)} · ${esc(c.createdAt)}</div><div>${esc(c.body)}</div></div>`,
+            `<div class="card"><div class="muted" style="font-size:.8rem">${avatar(nameOf(c.authorId))} ${esc(nameOf(c.authorId))} · <span class="ts">${esc(c.createdAt)}</span></div><div>${esc(c.body)}</div></div>`,
         )
         .join('')
     : '<div class="empty">No comments.</div>'
@@ -254,11 +309,32 @@ export function ticketDetail(data: {
           <button class="btn sm" type="submit">Move</button>
         </form>`
       : ''
+  const assigneeOptions = [
+    `<option value=""${t.assigneeId ? '' : ' selected'}>— unassigned —</option>`,
+    ...data.members.map(
+      (m) =>
+        `<option value="${esc(m.principalId)}"${m.principalId === t.assigneeId ? ' selected' : ''}>${esc(m.displayName)}</option>`,
+    ),
+  ].join('')
   const assignForm = data.canWrite
     ? `<form method="post" action="/app/tickets/${esc(t.id)}/assign" class="actions">
-        <input name="assigneeId" placeholder="principal id (blank = unassign)" value="${esc(t.assigneeId ?? '')}">
+        <select name="assigneeId">${assigneeOptions}</select>
         <button class="btn sm ghost" type="submit">Assign</button>
       </form>`
+    : ''
+  const editForm = data.canWrite
+    ? `<fieldset><legend>Edit</legend>
+        <form method="post" action="/app/tickets/${esc(t.id)}/update" class="actions" style="flex-direction:column;align-items:stretch">
+          <input name="title" value="${esc(t.title)}" required maxlength="300">
+          <textarea name="description" placeholder="Description">${esc(t.description ?? '')}</textarea>
+          <div class="actions" style="margin:0">
+            <select name="priority" title="priority">${priorityOptions(t.priority)}</select>
+            <input name="dueDate" type="date" value="${esc(t.dueDate?.slice(0, 10) ?? '')}" title="due date">
+            <input name="labels" value="${esc(t.labels.join(', '))}" placeholder="tags, comma-separated">
+          </div>
+          <button class="btn sm" type="submit">Save changes</button>
+        </form>
+      </fieldset>`
     : ''
   const commentForm = data.canWrite
     ? `<form method="post" action="/app/tickets/${esc(t.id)}/comments" class="actions">
@@ -267,7 +343,7 @@ export function ticketDetail(data: {
       </form>`
     : ''
   const controls = data.canWrite
-    ? `<fieldset><legend>Actions</legend>${statusForm}${assignForm}</fieldset>`
+    ? `<fieldset><legend>Workflow</legend>${statusForm}${assignForm}</fieldset>${editForm}`
     : ''
 
   return chrome(
@@ -276,13 +352,43 @@ export function ticketDetail(data: {
     `<p class="muted"><a href="/app/projects/${esc(t.projectId)}">← Board</a></p>
     <div class="row"><h1><span class="key">${esc(t.key)}</span> ${esc(t.title)}</h1></div>
     <div style="margin:.25rem 0 1rem"><span class="badge amber">${esc(STATUS_LABEL[t.status])}</span>
-      <span class="badge">priority: ${esc(t.priority)}</span>
-      ${t.assigneeId ? `<span class="badge">assignee: ${esc(t.assigneeId)}</span>` : '<span class="badge">unassigned</span>'}</div>
+      <span class="badge"><span class="prio ${esc(t.priority)}"></span>${esc(t.priority)}</span>
+      ${t.dueDate ? dueChip(t.dueDate) : ''}
+      ${t.assigneeId ? `<span class="badge">${avatar(nameOf(t.assigneeId))} ${esc(nameOf(t.assigneeId))}</span>` : '<span class="badge">unassigned</span>'}</div>
     ${t.description ? `<div class="card">${esc(t.description)}</div>` : ''}
     ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}
     ${controls}
     <h2>Comments</h2>${comments}${commentForm}`,
   )
+}
+
+/** A flat ticket list (used by Search + My tickets), optionally with a search box. */
+export function ticketListPage(data: {
+  title: string
+  tickets: Ticket[]
+  actor: Actor
+  query?: string
+  search?: boolean
+}): string {
+  const searchBar = data.search
+    ? `<form method="get" action="/app/search" class="actions">
+        <input name="q" value="${esc(data.query ?? '')}" placeholder="Search titles + descriptions…" autofocus>
+        <button class="btn sm" type="submit">Search</button>
+      </form>`
+    : ''
+  const rows = data.tickets.length
+    ? data.tickets
+        .map(
+          (t) =>
+            `<div class="card"><div class="row">
+              <div><span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.id)}">${esc(t.title)}</a></div>
+              <div>${t.priority !== 'none' ? `<span class="prio ${esc(t.priority)}"></span>` : ''}<span class="badge${t.status === 'done' ? '' : ' amber'}">${esc(STATUS_LABEL[t.status])}</span></div>
+            </div>
+            ${t.dueDate || t.labels.length ? `<div class="row" style="margin-top:.3rem;align-items:center">${dueChip(t.dueDate)}${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}</div>` : ''}</div>`,
+        )
+        .join('')
+    : `<div class="empty">${data.query !== undefined && data.query !== '' ? 'No matches.' : 'Nothing here yet.'}</div>`
+  return chrome(data.title, data.actor, `<h1>${esc(data.title)}</h1>${searchBar}${rows}`)
 }
 
 const AGENT_STATUS_OPTIONS = ['active', 'suspended', 'revoked'] as const
@@ -322,7 +428,7 @@ export function auditList(data: { entries: AuditLog[]; actor: Actor }): string {
     ? data.entries
         .map(
           (e) =>
-            `<tr><td class="muted">${esc(e.createdAt)}</td><td><span class="key">${esc(e.action)}</span></td>
+            `<tr><td class="muted ts">${esc(e.createdAt)}</td><td><span class="key">${esc(e.action)}</span></td>
             <td>${esc(e.targetType)}</td><td class="muted">${esc(e.principalId)}</td>
             <td class="muted">${e.clientInfo ? esc(`${e.clientInfo.name} ${e.clientInfo.version}`) : '—'}</td></tr>`,
         )
@@ -333,6 +439,84 @@ export function auditList(data: { entries: AuditLog[]; actor: Actor }): string {
     data.actor,
     `<h1>Audit log</h1><p class="muted">Append-only; attributed to the trusted principal.</p>
     <table><thead><tr><th>When</th><th>Action</th><th>Target</th><th>Principal</th><th>Client (reported)</th></tr></thead><tbody>${rows}</tbody></table>`,
+  )
+}
+
+const MEMBER_ROLES = ['viewer', 'member', 'admin', 'owner'] as const
+const INVITE_ROLES = ['viewer', 'member', 'admin'] as const
+
+/** A small inline avatar (initials) for a display name. */
+function avatar(name: string): string {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
+  return `<span class="avatar">${esc(initials || '?')}</span>`
+}
+
+export function membersPage(data: {
+  members: OrgMember[]
+  actor: Actor
+  canManage: boolean
+  inviteCode?: string | null
+}): string {
+  const roleOpts = (selected: string, roles: readonly string[]) =>
+    roles
+      .map((r) => `<option value="${r}"${r === selected ? ' selected' : ''}>${r}</option>`)
+      .join('')
+
+  const rows = data.members
+    .map((m) => {
+      const isSelf = m.principalId === data.actor.principalId
+      const roleCell =
+        data.canManage && m.type === 'user' && !isSelf
+          ? `<form method="post" action="/app/members/role" class="actions" style="margin:0">
+              <input type="hidden" name="principalId" value="${esc(m.principalId)}">
+              <select name="role">${roleOpts(m.role, MEMBER_ROLES)}</select>
+              <button class="btn sm ghost" type="submit">Set</button>
+            </form>`
+          : `<span class="badge${m.role === 'owner' ? ' amber' : ''}">${esc(m.role)}</span>`
+      return `<tr>
+        <td>${avatar(m.displayName)} <strong>${esc(m.displayName)}</strong>${isSelf ? ' <span class="muted">(you)</span>' : ''}</td>
+        <td class="muted">${esc(m.email ?? '—')}</td>
+        <td><span class="badge">${esc(m.type)}</span></td>
+        <td>${roleCell}</td>
+      </tr>`
+    })
+    .join('')
+
+  const manage = data.canManage
+    ? `<div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0">
+        <fieldset><legend>Invite by email</legend>
+          <form method="post" action="/app/members/invite" class="actions">
+            <input name="email" type="email" placeholder="teammate@example.com" required>
+            <select name="role">${roleOpts('member', INVITE_ROLES)}</select>
+            <button class="btn sm" type="submit">Invite</button>
+          </form>
+          <p class="muted" style="font-size:.85rem;margin:.5rem 0 0">They join on first login (their account links automatically).</p>
+        </fieldset>
+        <fieldset><legend>Shareable join code</legend>
+          <form method="post" action="/app/members/code" class="actions">
+            <select name="role">${roleOpts('member', INVITE_ROLES)}</select>
+            <button class="btn sm ghost" type="submit">Generate code</button>
+          </form>
+          ${
+            data.inviteCode
+              ? `<p style="margin:.5rem 0 0">Share this code — they redeem it with <span class="key">join_tenant</span>:<br><code class="codebox">${esc(data.inviteCode)}</code></p>`
+              : '<p class="muted" style="font-size:.85rem;margin:.5rem 0 0">A one-time code an agent redeems to join.</p>'
+          }
+        </fieldset>
+      </div>`
+    : ''
+
+  return chrome(
+    'Members',
+    data.actor,
+    `<h1>Members</h1><p class="muted">People and agents with access to this workspace.</p>
+    ${manage}
+    <table><thead><tr><th>Name</th><th>Email</th><th>Type</th><th>Role</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="empty">No members yet.</td></tr>'}</tbody></table>`,
   )
 }
 

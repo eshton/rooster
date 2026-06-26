@@ -341,6 +341,16 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           ),
         )
       },
+      async listByOrg(orgId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.principals)
+            .where(eq(s.principals.orgId, orgId))
+            .orderBy(desc(s.principals.createdAt))
+            .limit(limitOf(opts))
+        ).map(toPrincipal)
+      },
     },
 
     users: {
@@ -460,6 +470,11 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .from(s.memberships)
             .where(and(eq(s.memberships.orgId, orgId), eq(s.memberships.principalId, principalId)))
         ).map(toMembership)
+      },
+      async listByOrg(orgId) {
+        return (await db.select().from(s.memberships).where(eq(s.memberships.orgId, orgId))).map(
+          toMembership,
+        )
       },
       async upsert(orgId, input) {
         const teamPred =

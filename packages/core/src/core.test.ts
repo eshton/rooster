@@ -359,6 +359,20 @@ describe('audit logging', () => {
   })
 })
 
+// --- member listing ---------------------------------------------------------
+
+describe('member listing', () => {
+  it('lists org members with their effective role (owner first)', async () => {
+    const { org, owner } = await bootstrap()
+    await makeUser(org.id, owner, 'member')
+    const members = await services.members.listOrg(owner)
+    expect(members).toHaveLength(2)
+    expect(members[0]?.role).toBe('owner')
+    expect(members.some((m) => m.role === 'member')).toBe(true)
+    expect(members.every((m) => typeof m.displayName === 'string')).toBe(true)
+  })
+})
+
 // --- crow notifications -----------------------------------------------------
 
 describe('crow notifier', () => {
