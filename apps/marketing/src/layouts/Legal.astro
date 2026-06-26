@@ -1,0 +1,30 @@
+---
+import Base from './Base.astro'
+interface Props {
+  title: string
+  description?: string
+}
+const { title, description } = Astro.props
+const githubUrl = 'https://github.com/eshton/rooster'
+---
+
+<Base title={`${title} — Rooster`} description={description}>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/">🐓 Rooster</a>
+      <nav class="nav">
+        <a href="/docs">Docs</a>
+        <a class="btn btn-ghost" href={githubUrl}>GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <section class="legal">
+    <div class="wrap"><slot /></div>
+  </section>
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>🐓 Rooster — a project manager for software agents.</span>
+      <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href={githubUrl}>GitHub</a> · MIT licensed</span>
+    </div>
+  </footer>
+</Base>

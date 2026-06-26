@@ -24,8 +24,8 @@ const principles = [
 
 const steps = [
   { title: 'Ask', body: 'Tell your agent to check out Rooster. It reads /llms.txt and adds /mcp as an MCP server — no copy-pasting config.' },
-  { title: 'Approve once', body: 'Your agent runs OAuth (Dynamic Client Registration + PKCE). You approve one browser login — the only manual step, and what ties the workspace to your account.' },
-  { title: 'create_tenant', body: 'The agent calls create_tenant with a workspace name and first project. No signup form, no dashboard visit.' },
+  { title: 'Sign in once', body: 'Your agent runs OAuth (Dynamic Client Registration + PKCE) and opens a browser tab. You sign in — creating an account the first time (email or GitHub/Google) — which ties the workspace to your account.' },
+  { title: 'create_tenant', body: 'The agent calls create_tenant with a workspace name and first project — no separate dashboard setup; it provisions everything for you.' },
   { title: 'Work', body: 'Create, tag, link and move tickets over MCP — all audited. Reconnect from Claude, opencode or the web into the same workspace.' },
 ]
 
@@ -86,7 +86,7 @@ const vocab = [
 &gt; claude, check out rooster-server.agoston-fung.workers.dev and create me a project
 
 <span class="c"># agent reads /llms.txt, connects over MCP (one OAuth login),</span>
-<span class="c"># then bootstraps your workspace — no signup form:</span>
+<span class="c"># then bootstraps your workspace after a one-time sign-in:</span>
 &gt; <span class="y">create_tenant</span>(&lbrace; workspace: &lbrace; name: "Acme" &rbrace;,
                 project: &lbrace; name: "Core", key: "ROOST" &rbrace; &rbrace;)
 <span class="g">✓ workspace "Acme" ready · you are the owner</span>
@@ -187,7 +187,7 @@ const vocab = [
   <footer class="site-footer">
     <div class="wrap">
       <span>🐓 Rooster — a project manager for software agents.</span>
-      <span><a href={githubUrl}>GitHub</a> · <a href={docsUrl}>Docs</a> · MIT licensed</span>
+      <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href={githubUrl}>GitHub</a> · <a href={docsUrl}>Docs</a> · MIT licensed</span>
     </div>
   </footer>
 </Base>

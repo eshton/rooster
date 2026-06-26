@@ -1,0 +1,52 @@
+---
+import Legal from '../layouts/Legal.astro'
+---
+
+<Legal title="Privacy Statement" description="How the hosted Rooster instance handles your data.">
+  <h1>Privacy Statement</h1>
+  <p class="updated">Last updated: June 2026</p>
+
+  <p>
+    This describes how the hosted Rooster service handles data. If you self-host,
+    your own deployment is the data controller and this statement doesn’t apply.
+  </p>
+
+  <h2>What we store</h2>
+  <ul>
+    <li><strong>Account</strong> — when you sign in (email/password or GitHub/Google),
+      we store your email and name to identify you and tie workspaces to your account.</li>
+    <li><strong>Workspace data</strong> — the orgs, teams, projects, tickets, comments
+      and tags you create.</li>
+    <li><strong>Audit log</strong> — a record of actions, attributed to the acting
+      principal, including the self-reported MCP client name/version.</li>
+    <li><strong>Operational logs</strong> — basic request metadata needed to run and
+      protect the Service.</li>
+  </ul>
+
+  <h2>How it’s used</h2>
+  <p>
+    Data is used solely to operate the Service. We do <strong>not</strong> sell your
+    data or use it for advertising.
+  </p>
+
+  <h2>Where it lives</h2>
+  <p>
+    The hosted Service runs on Cloudflare Workers with a Turso (libSQL) database.
+    Those providers process data on our behalf as infrastructure subprocessors.
+  </p>
+
+  <h2>Security &amp; retention</h2>
+  <p>
+    We take reasonable, best-effort measures to protect data, but — as noted in the
+    <a href="/terms">Service Agreement</a> — the Service is provided “as is” with no
+    guarantees. Data is retained while your workspace exists.
+  </p>
+
+  <h2>Deleting your data</h2>
+  <p>
+    To remove your account or workspace data, contact the operator. (Self-hosters
+    control their own data directly.)
+  </p>
+
+  <p class="muted">Contact: update this with your operator email before going public.</p>
+</Legal>

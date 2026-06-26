@@ -192,6 +192,15 @@ section { padding: 5rem 0; }
 .cta-band p { color: #d6d3d1; font-size: 1.15rem; margin: 1rem auto 2rem; max-width: 36rem; }
 .cta-band .hero-cta { justify-content: center; }
 
+/* legal pages */
+.legal { padding: 3.5rem 0; }
+.legal h1 { font-size: clamp(1.8rem, 4vw, 2.4rem); font-weight: 800; }
+.legal h2 { font-size: 1.2rem; font-weight: 700; margin: 2rem 0 0.5rem; }
+.legal p, .legal li { color: var(--ink-2); max-width: 46rem; }
+.legal ul { padding-left: 1.2rem; }
+.legal li { margin: 0.35rem 0; }
+.legal .updated { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; }
+
 /* footer */
 .site-footer { border-top: 1px solid var(--line); padding: 2.5rem 0; color: var(--muted); font-size: 0.92rem; }
 .site-footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }

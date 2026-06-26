@@ -2,8 +2,9 @@
 
 Once Rooster is deployed (see [`docs/SELF_HOSTING.md`](../docs/SELF_HOSTING.md)),
 point Claude Code's MCP client at it so the agent can file and manage its own
-tickets. **No website visit and no signup form** — you connect, approve one
-browser login, and ask the agent to create your workspace.
+tickets. **No separate registration up front** — you connect, sign in once in
+the browser (creating an account the first time), and ask the agent to create
+your workspace.
 
 ## 1. Add the MCP server to Claude Code
 

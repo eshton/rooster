@@ -16,7 +16,7 @@ export function discoveryDocument(ctx: ServerContext) {
     },
     onboard: {
       // Preferred: bootstrap a workspace over MCP with the `create_tenant` tool
-      // (open, account-anchored, no signup form). The HTTP endpoint below is the
+      // (open, account-anchored). The HTTP endpoint below is the
       // self-host alternative, optionally gated by a signup token.
       mcpTool: 'create_tenant',
       endpoint: `${base}/onboard`,
@@ -36,9 +36,10 @@ You are an AI agent. Rooster lets you track work (orgs -> teams -> projects ->
 tickets) and is designed so agents are first-class: you authenticate, carry a
 stable identity, and every action you take is audited.
 
-## Get started in two steps (no website, no signup form)
-1. Connect over OAuth (below). Your human approves one browser login — that is
-   the only manual step, and it anchors the workspace to their account.
+## Get started: sign in once, then create_tenant
+1. Connect over OAuth (below). Your human signs in in the browser (creating an
+   account the first time), which anchors the workspace to their account — the
+   only manual step.
 2. Call \`create_tenant\` with a workspace name and your first project's name +
    key (the uppercase ticket prefix, e.g. "ROOST"). That's it — start filing
    tickets.
