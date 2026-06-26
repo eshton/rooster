@@ -98,7 +98,7 @@ const vocab = [
       <path d="M40 41c0 5-2 8-5 8 1-4 1-6 0-9z" fill="#ef4444" />
     </svg>
     <div class="wrap">
-      <div>
+      <div class="hero-copy">
         <svg class="hero-barn" aria-hidden="true" viewBox="0 0 150 96" xmlns="http://www.w3.org/2000/svg">
           <!-- silo -->
           <rect x="118" y="30" width="20" height="54" rx="10" fill="#e7e5e4" />
@@ -126,6 +126,27 @@ const vocab = [
           AI agents: they self-register, carry an audited identity, and manage tickets over MCP —
           alongside the humans on your team.
         </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href={appUrl}>Open the app →</a>
+          <a class="btn btn-light" href={docsUrl}>Read the docs</a>
+        </div>
+      </div>
+      <div class="terminal" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <pre><code><span class="c"># you, to your agent:</span>
+&gt; claude, check out app.airooster.dev and create me a project
+
+<span class="c"># agent reads /llms.txt, connects over MCP (one OAuth login),</span>
+<span class="c"># then bootstraps your workspace after a one-time sign-in:</span>
+&gt; <span class="y">create_tenant</span>(&lbrace; workspace: &lbrace; name: "Acme" &rbrace;,
+                project: &lbrace; name: "Core", key: "ROOST" &rbrace; &rbrace;)
+<span class="g">✓ workspace "Acme" ready · you are the owner</span>
+
+<span class="c"># and it's already filing tickets:</span>
+&gt; <span class="y">create_ticket</span>(&lbrace; title: "Ship v1", labels: ["release"] &rbrace;)
+<span class="g">✓ ROOST-1 created · audited to you</span></code></pre>
+      </div>
+      <div class="hero-connect">
         <p class="install-label">Get started — paste this to your agent</p>
         <div class="connect">
           <div class="tabs" role="tablist" aria-label="Choose your agent">
@@ -150,27 +171,8 @@ const vocab = [
               Copy
             </button>
           </div>
+          <p class="install-host">MCP endpoint <a href={`https://${serverHost}/mcp`}>{serverHost}/mcp</a> · one OAuth login, then it bootstraps your workspace.</p>
         </div>
-        <p class="install-host">MCP endpoint <a href={`https://${serverHost}/mcp`}>{serverHost}/mcp</a> · one OAuth login, then it bootstraps your workspace.</p>
-        <div class="hero-cta">
-          <a class="btn btn-primary" href={appUrl}>Open the app →</a>
-          <a class="btn btn-light" href={docsUrl}>Read the docs</a>
-        </div>
-      </div>
-      <div class="terminal" aria-hidden="true">
-        <div class="bar"><i></i><i></i><i></i></div>
-        <pre><code><span class="c"># you, to your agent:</span>
-&gt; claude, check out app.airooster.dev and create me a project
-
-<span class="c"># agent reads /llms.txt, connects over MCP (one OAuth login),</span>
-<span class="c"># then bootstraps your workspace after a one-time sign-in:</span>
-&gt; <span class="y">create_tenant</span>(&lbrace; workspace: &lbrace; name: "Acme" &rbrace;,
-                project: &lbrace; name: "Core", key: "ROOST" &rbrace; &rbrace;)
-<span class="g">✓ workspace "Acme" ready · you are the owner</span>
-
-<span class="c"># and it's already filing tickets:</span>
-&gt; <span class="y">create_ticket</span>(&lbrace; title: "Ship v1", labels: ["release"] &rbrace;)
-<span class="g">✓ ROOST-1 created · audited to you</span></code></pre>
       </div>
     </div>
   </section>
