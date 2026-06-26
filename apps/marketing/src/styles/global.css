@@ -83,11 +83,25 @@ h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0; }
 
 /* --- hero --- */
 .hero {
+  position: relative;
+  overflow: hidden;
   background: radial-gradient(900px 400px at 80% -10%, rgba(217,119,6,0.18), transparent),
     var(--bg-night);
   color: #fafaf9;
   padding: 5.5rem 0 5rem;
 }
+.hero .wrap { position: relative; z-index: 1; }
+.hero-rooster {
+  position: absolute;
+  right: -1.5rem;
+  bottom: -2.5rem;
+  width: min(38vw, 340px);
+  height: auto;
+  opacity: 0.13;
+  z-index: 0;
+  pointer-events: none;
+}
+@media (max-width: 880px) { .hero-rooster { width: 52vw; opacity: 0.09; } }
 .hero .wrap { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 3rem; align-items: center; }
 /* Let grid cells shrink below their content so inner overflow-x scrolls
    (instead of forcing the whole page wider than the viewport). */
@@ -222,3 +236,7 @@ section { padding: 5rem 0; }
   .hero .install code { white-space: normal; word-break: break-word; }
   .hero .terminal pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 }
+
+/* faint wheat texture on the section bands */
+.section-soft { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2748%27%20height%3D%2764%27%20viewBox%3D%270%200%2048%2064%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27rgba%28217%2C119%2C6%2C0.06%29%27%20stroke-width%3D%271.3%27%20stroke-linecap%3D%27round%27%3E%3Cpath%20d%3D%27M24%2060%20V20%27%2F%3E%3Cpath%20d%3D%27M24%2022%20q6%20-2%207%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2022%20q-6%20-2%20-7%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2030%20q6%20-2%207%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2030%20q-6%20-2%20-7%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2038%20q6%20-2%207%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2038%20q-6%20-2%20-7%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2018%20q3%20-4%203%20-10%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"); background-size: 48px 64px; }
+.cta-band { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2748%27%20height%3D%2764%27%20viewBox%3D%270%200%2048%2064%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27rgba%28251%2C191%2C36%2C0.05%29%27%20stroke-width%3D%271.3%27%20stroke-linecap%3D%27round%27%3E%3Cpath%20d%3D%27M24%2060%20V20%27%2F%3E%3Cpath%20d%3D%27M24%2022%20q6%20-2%207%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2022%20q-6%20-2%20-7%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2030%20q6%20-2%207%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2030%20q-6%20-2%20-7%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2038%20q6%20-2%207%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2038%20q-6%20-2%20-7%20-8%27%2F%3E%3Cpath%20d%3D%27M24%2018%20q3%20-4%203%20-10%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"); background-size: 48px 64px; }
