@@ -143,6 +143,12 @@ export const comments = sqliteTable('comments', {
   updatedAt: updatedAt(),
 })
 
+export const rateLimits = sqliteTable('rate_limits', {
+  key: text('key').primaryKey(),
+  windowStart: text('window_start').notNull(),
+  count: integer('count').notNull(),
+})
+
 export const auditLog = sqliteTable('audit_log', {
   id: id(),
   orgId: text('org_id').notNull(),
@@ -167,5 +173,6 @@ export const sqliteSchema = {
   invites,
   tickets,
   comments,
+  rateLimits,
   auditLog,
 }

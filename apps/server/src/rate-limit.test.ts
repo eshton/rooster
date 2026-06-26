@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { RateLimiter } from './rate-limit.js'
+import { loadConfig } from '@rooster/config'
+import { createDatabase, type Database } from '@rooster/db'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DbRateLimiter, RateLimiter } from './rate-limit.js'
 
 describe('RateLimiter', () => {
   it('allows up to max within a window, then blocks', () => {
@@ -32,5 +34,40 @@ describe('RateLimiter', () => {
   it('disables limiting when max <= 0', () => {
     const rl = new RateLimiter(0)
     for (let i = 0; i < 1000; i++) expect(rl.check('a', 0).allowed).toBe(true)
+  })
+})
+
+describe('DbRateLimiter (shared store)', () => {
+  let db: Database
+  beforeEach(async () => {
+    db = await createDatabase(
+      loadConfig({
+        DATABASE_URL: 'file::memory:',
+        ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
+      }),
+      { migrate: true },
+    )
+  })
+  afterEach(async () => {
+    await db.close()
+  })
+
+  it('limits within a window and resets after it', async () => {
+    const rl = new DbRateLimiter(db.repositories, 2, 1000)
+    const t = 1_000_000
+    expect((await rl.check('k', t)).allowed).toBe(true) // 1st
+    expect((await rl.check('k', t)).allowed).toBe(true) // 2nd
+    const third = await rl.check('k', t)
+    expect(third.allowed).toBe(false) // 3rd > max 2
+    expect(third.retryAfterSeconds).toBeGreaterThan(0)
+    // once the window elapses, the counter resets
+    expect((await rl.check('k', t + 1001)).allowed).toBe(true)
+  })
+
+  it('keys are independent', async () => {
+    const rl = new DbRateLimiter(db.repositories, 1, 1000)
+    expect((await rl.check('a', 1)).allowed).toBe(true)
+    expect((await rl.check('b', 1)).allowed).toBe(true)
+    expect((await rl.check('a', 1)).allowed).toBe(false)
   })
 })

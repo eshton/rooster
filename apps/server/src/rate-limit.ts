@@ -1,10 +1,11 @@
+import type { RateLimitRepository } from '@rooster/db'
+
 /**
  * Fixed-window, in-memory rate limiter keyed by a string (e.g. a principal id).
  *
  * This is best-effort and per-process: it protects a long-running Node / Docker
  * deployment. On serverless (Vercel / Workers) each invocation has its own
- * memory, so a shared store (KV / Redis / Durable Object) would be needed for
- * cross-instance limits — wire one in here when that day comes.
+ * memory, so use {@link DbRateLimiter} for a store shared across instances.
  */
 export interface RateLimitResult {
   allowed: boolean
@@ -12,7 +13,41 @@ export interface RateLimitResult {
   retryAfterSeconds: number
 }
 
-export class RateLimiter {
+/** A fixed-window rate limiter; in-memory and DB-backed share this shape. */
+export interface RateLimitChecker {
+  check(key: string, now: number): RateLimitResult | Promise<RateLimitResult>
+}
+
+/**
+ * Fixed-window limiter backed by the `rate_limits` table — shared across all
+ * instances, so it actually limits on serverless/edge (each `check` is a single
+ * atomic upsert). Portable across Postgres and libSQL/Turso.
+ */
+export class DbRateLimiter implements RateLimitChecker {
+  constructor(
+    private readonly repos: { rateLimits: RateLimitRepository },
+    private readonly max: number,
+    private readonly windowMs = 60_000,
+  ) {}
+
+  async check(key: string, now: number): Promise<RateLimitResult> {
+    if (this.max <= 0) {
+      return { allowed: true, remaining: Number.POSITIVE_INFINITY, retryAfterSeconds: 0 }
+    }
+    const nowIso = new Date(now).toISOString()
+    const windowFloorIso = new Date(now - this.windowMs).toISOString()
+    const { count, windowStart } = await this.repos.rateLimits.hit(key, nowIso, windowFloorIso)
+    const allowed = count <= this.max
+    const resetAt = Date.parse(windowStart) + this.windowMs
+    return {
+      allowed,
+      remaining: Math.max(0, this.max - count),
+      retryAfterSeconds: allowed ? 0 : Math.max(1, Math.ceil((resetAt - now) / 1000)),
+    }
+  }
+}
+
+export class RateLimiter implements RateLimitChecker {
   private readonly hits = new Map<string, { count: number; resetAt: number }>()
 
   /**

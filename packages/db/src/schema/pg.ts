@@ -139,6 +139,12 @@ export const comments = pgTable('comments', {
   updatedAt: updatedAt(),
 })
 
+export const rateLimits = pgTable('rate_limits', {
+  key: text('key').primaryKey(),
+  windowStart: text('window_start').notNull(),
+  count: integer('count').notNull(),
+})
+
 export const auditLog = pgTable('audit_log', {
   id: id(),
   orgId: text('org_id').notNull(),
@@ -163,5 +169,6 @@ export const pgSchema = {
   invites,
   tickets,
   comments,
+  rateLimits,
   auditLog,
 }

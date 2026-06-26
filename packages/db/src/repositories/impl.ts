@@ -530,6 +530,26 @@ export function createRepositories(db: DB, s: Schema): Repositories {
       },
     },
 
+    rateLimits: {
+      async hit(key, nowIso, windowFloorIso) {
+        // Single atomic upsert: reset the window when the prior one elapsed,
+        // otherwise increment. No transaction (libSQL :memory: drops tables in
+        // a separate-connection transaction) — and shared across instances.
+        const [row] = await db
+          .insert(s.rateLimits)
+          .values({ key, windowStart: nowIso, count: 1 })
+          .onConflictDoUpdate({
+            target: s.rateLimits.key,
+            set: {
+              count: sql`CASE WHEN ${s.rateLimits.windowStart} <= ${windowFloorIso} THEN 1 ELSE ${s.rateLimits.count} + 1 END`,
+              windowStart: sql`CASE WHEN ${s.rateLimits.windowStart} <= ${windowFloorIso} THEN ${nowIso} ELSE ${s.rateLimits.windowStart} END`,
+            },
+          })
+          .returning()
+        return { count: row!.count, windowStart: row!.windowStart }
+      },
+    },
+
     audit: {
       async append(orgId, entry) {
         const [row] = await db

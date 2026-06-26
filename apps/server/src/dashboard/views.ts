@@ -7,7 +7,6 @@ import type {
   Project,
   Team,
   Ticket,
-  TicketPriority,
   TicketStatus,
 } from '@rooster/schema'
 import { TICKET_PRIORITIES, TICKET_STATUSES } from '@rooster/schema'
@@ -152,7 +151,6 @@ export function loginPage(opts: { providers: string[]; error?: string; next?: st
 
 export function signupPage(opts: { error?: string; next?: string } = {}): string {
   const next = opts.next ?? '/app'
-  const cb = encodeURIComponent(next)
   const loginHref = next !== '/app' ? `/login` : '/app/login'
   return chrome(
     'Create account',

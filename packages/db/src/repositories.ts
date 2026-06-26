@@ -111,6 +111,22 @@ export interface AgentRepository {
   update(orgId: Id, id: Id, patch: Partial<Agent>): Promise<Agent>
 }
 
+export interface RateLimitHit {
+  /** Request count within the current fixed window. */
+  count: number
+  /** ISO start of the current window. */
+  windowStart: string
+}
+
+export interface RateLimitRepository {
+  /**
+   * Atomically record a hit for `key` in a fixed window, resetting the window
+   * when the prior one has elapsed. A single upsert (no transaction), so it is
+   * correct and shared across instances (edge/serverless).
+   */
+  hit(key: Id, nowIso: string, windowFloorIso: string): Promise<RateLimitHit>
+}
+
 export interface MembershipRepository {
   list(orgId: Id, principalId: Id): Promise<Membership[]>
   /** Every membership in an org (used to compute each member's role). */
@@ -150,5 +166,6 @@ export interface Repositories {
   agents: AgentRepository
   memberships: MembershipRepository
   invites: InviteRepository
+  rateLimits: RateLimitRepository
   audit: AuditLogRepository
 }

@@ -7,7 +7,7 @@ import type { ServerContext } from './context.js'
 import { mountDashboard } from './dashboard/routes.js'
 import { discoveryDocument, landingHtml, llmsText } from './discovery.js'
 import { signupAllowed } from './gate.js'
-import { RateLimiter } from './rate-limit.js'
+import { DbRateLimiter } from './rate-limit.js'
 
 /**
  * Best-effort capture of the calling MCP client's identity for the audit log
@@ -53,7 +53,7 @@ function errorResponse(err: unknown): Response {
  */
 export function createApp(ctx: ServerContext): Hono {
   const app = new Hono()
-  const mcpRateLimiter = new RateLimiter(ctx.config.mcp.rateLimitPerMinute)
+  const mcpRateLimiter = new DbRateLimiter(ctx.db.repositories, ctx.config.mcp.rateLimitPerMinute)
 
   app.get('/', (c) => c.html(landingHtml(ctx)))
   app.get('/.well-known/rooster', (c) => c.json(discoveryDocument(ctx)))
@@ -136,7 +136,7 @@ export function createApp(ctx: ServerContext): Hono {
       // An authenticated-but-orgless caller gets the minimal bootstrap server
       // (whoami + create_tenant); rate-limit by the stable account id.
       if (isProvisional(identity)) {
-        const rl = mcpRateLimiter.check(identity.authUserId, Date.now())
+        const rl = await mcpRateLimiter.check(identity.authUserId, Date.now())
         if (!rl.allowed) {
           return new Response(JSON.stringify({ error: 'rate_limited' }), {
             status: 429,
@@ -151,7 +151,7 @@ export function createApp(ctx: ServerContext): Hono {
       }
 
       // Per-principal rate limiting (keyed by the trusted principal).
-      const rl = mcpRateLimiter.check(identity.principalId, Date.now())
+      const rl = await mcpRateLimiter.check(identity.principalId, Date.now())
       if (!rl.allowed) {
         return new Response(JSON.stringify({ error: 'rate_limited' }), {
           status: 429,
