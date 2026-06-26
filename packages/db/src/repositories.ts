@@ -73,7 +73,10 @@ export interface CommentRepository {
 }
 
 export interface PrincipalRepository {
-  create(orgId: Id, input: Omit<Principal, keyof TimestampedId | 'orgId'>): Promise<Principal>
+  create(
+    orgId: Id,
+    input: Omit<Principal, keyof TimestampedId | 'orgId' | 'userId'> & { userId?: Id | null },
+  ): Promise<Principal>
   getById(orgId: Id, id: Id): Promise<Principal | null>
   /**
    * Look up a principal by id WITHOUT an org filter. For resolving a caller's
@@ -83,6 +86,13 @@ export interface PrincipalRepository {
   findById(id: Id): Promise<Principal | null>
   /** All principals in an org (used to resolve names + list members). */
   listByOrg(orgId: Id, opts?: ListOptions): Promise<Principal[]>
+  /**
+   * Every principal belonging to a global user account, across all orgs. This
+   * is the cross-workspace lookup: one account → one principal per org joined.
+   */
+  listByUserId(userId: Id): Promise<Principal[]>
+  /** Back-link a user-type principal to its global account. */
+  linkUser(orgId: Id, id: Id, userId: Id): Promise<Principal>
 }
 
 /**

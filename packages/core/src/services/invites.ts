@@ -75,32 +75,46 @@ export function createInviteService(repos: Repositories): InviteService {
       const org = await repos.orgs.getById(invite.orgId)
       if (!org) throw new NotFoundError('Workspace no longer exists')
 
-      // Resolve (or provision) the joining principal in the invite's org.
+      // Resolve (or provision) the joining principal in the invite's org. One
+      // global account has one principal per org it belongs to, so an existing
+      // user joining a new workspace gets a fresh principal linked to the same
+      // account (cross-workspace membership).
       let principalId: string
       const existing = await repos.users.getByEmail(account.email)
       if (existing) {
-        const principal = await repos.principals.findById(existing.principalId)
-        if (!principal || principal.orgId !== invite.orgId) {
-          throw new ConflictError(
-            `'${account.email}' already belongs to another workspace; cross-workspace membership is not supported yet`,
-          )
-        }
-        principalId = principal.id
         if (existing.authUserId == null) {
           await repos.users.linkAuthUserId(existing.id, account.authUserId)
         }
+        // Lazily back-link the user's home principal (covers rows created before
+        // `principals.userId` existed) so the per-user lookup is complete.
+        const home = await repos.principals.findById(existing.principalId)
+        if (home && home.userId == null) {
+          await repos.principals.linkUser(home.orgId, home.id, existing.id)
+        }
+        const mine = await repos.principals.listByUserId(existing.id)
+        const inOrg = mine.find((p) => p.orgId === invite.orgId)
+        principalId =
+          inOrg?.id ??
+          (
+            await repos.principals.create(invite.orgId, {
+              type: 'user',
+              displayName: account.name || account.email,
+              userId: existing.id,
+            })
+          ).id
       } else {
         const principal = await repos.principals.create(invite.orgId, {
           type: 'user',
           displayName: account.name || account.email,
         })
-        await repos.users.create({
+        const user = await repos.users.create({
           principalId: principal.id,
           email: account.email,
           name: account.name || account.email,
           avatarUrl: null,
           authUserId: account.authUserId,
         })
+        await repos.principals.linkUser(invite.orgId, principal.id, user.id)
         principalId = principal.id
       }
 

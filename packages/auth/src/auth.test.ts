@@ -4,7 +4,13 @@ import { createDatabase, type Database } from '@rooster/db'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createAuth, type EmailMessage } from './auth.js'
 import { decideEnrollment } from './enrollment.js'
-import { agentIdentityFromToken, humanIdentityFromEmail, resolveMcpIdentity } from './identity.js'
+import {
+  agentIdentityFromToken,
+  humanIdentityFromEmail,
+  humanIdentityFromSessionEmail,
+  listUserOrgs,
+  resolveMcpIdentity,
+} from './identity.js'
 import { memoryAdapter } from './index.js'
 import { effectiveScopes, parseScopes } from './scopes.js'
 
@@ -165,6 +171,53 @@ describe('identity bridge', () => {
     await expect(
       humanIdentityFromEmail(db.repositories, 'other-org-id', 'ada@acme.test'),
     ).rejects.toBeInstanceOf(ForbiddenError)
+  })
+
+  it('resolves a multi-org account to the active workspace and lists all of them', async () => {
+    // One account (same email) with a principal in two orgs, linked via userId.
+    const orgA = await db.repositories.orgs.create({
+      slug: 'a',
+      name: 'A',
+      enrollmentPolicy: 'open',
+    })
+    const orgB = await db.repositories.orgs.create({
+      slug: 'b',
+      name: 'B',
+      enrollmentPolicy: 'open',
+    })
+    const pA = await db.repositories.principals.create(orgA.id, {
+      type: 'user',
+      displayName: 'Ada',
+    })
+    const user = await db.repositories.users.create({
+      principalId: pA.id,
+      email: 'ada@multi.test',
+      name: 'Ada',
+      avatarUrl: null,
+    })
+    await db.repositories.principals.linkUser(orgA.id, pA.id, user.id)
+    const pB = await db.repositories.principals.create(orgB.id, {
+      type: 'user',
+      displayName: 'Ada',
+      userId: user.id,
+    })
+
+    const orgs = await listUserOrgs(db.repositories, 'ada@multi.test')
+    expect(orgs.map((o) => o.orgId).sort()).toEqual([orgA.id, orgB.id].sort())
+
+    // Default (no active org) resolves to the home principal's org.
+    const home = await humanIdentityFromSessionEmail(db.repositories, 'ada@multi.test')
+    expect(home?.orgId).toBe(orgA.id)
+    expect(home?.principalId).toBe(pA.id)
+
+    // Pinning org B selects that principal.
+    const inB = await humanIdentityFromSessionEmail(db.repositories, 'ada@multi.test', orgB.id)
+    expect(inB?.orgId).toBe(orgB.id)
+    expect(inB?.principalId).toBe(pB.id)
+
+    // An org the user doesn't belong to falls back to home.
+    const fallback = await humanIdentityFromSessionEmail(db.repositories, 'ada@multi.test', 'nope')
+    expect(fallback?.orgId).toBe(orgA.id)
   })
 })
 

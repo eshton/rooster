@@ -319,7 +319,14 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         const ts = now()
         const [row] = await db
           .insert(s.principals)
-          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .values({
+            id: newId(),
+            orgId,
+            ...input,
+            userId: input.userId ?? null,
+            createdAt: ts,
+            updatedAt: ts,
+          })
           .returning()
         return toPrincipal(row!)
       },
@@ -350,6 +357,23 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .orderBy(desc(s.principals.createdAt))
             .limit(limitOf(opts))
         ).map(toPrincipal)
+      },
+      async listByUserId(userId) {
+        return (
+          await db
+            .select()
+            .from(s.principals)
+            .where(eq(s.principals.userId, userId))
+            .orderBy(desc(s.principals.createdAt))
+        ).map(toPrincipal)
+      },
+      async linkUser(orgId, id, userId) {
+        const [row] = await db
+          .update(s.principals)
+          .set({ userId, updatedAt: now() })
+          .where(and(eq(s.principals.orgId, orgId), eq(s.principals.id, id)))
+          .returning()
+        return toPrincipal(row!)
       },
     },
 

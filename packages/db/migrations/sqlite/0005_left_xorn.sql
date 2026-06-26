@@ -1,0 +1,1 @@
+ALTER TABLE `principals` ADD `user_id` text;

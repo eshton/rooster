@@ -61,6 +61,8 @@ export const principalSchema = z.object({
   orgId: idSchema,
   type: principalTypeSchema,
   displayName: z.string().min(1).max(120),
+  /** For user-type principals, the global account they belong to (null for agents). */
+  userId: idSchema.nullable().default(null),
 })
 export type Principal = z.infer<typeof principalSchema>
 

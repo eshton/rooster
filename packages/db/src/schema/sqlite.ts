@@ -53,6 +53,10 @@ export const principals = sqliteTable('principals', {
   orgId: text('org_id').notNull(),
   type: text('type').notNull(),
   displayName: text('display_name').notNull(),
+  // For `user`-type principals, the global account this principal belongs to.
+  // One user (account) has one principal per org they're a member of, so this
+  // is the link that makes cross-workspace membership possible. Null for agents.
+  userId: text('user_id'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

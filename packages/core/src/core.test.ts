@@ -373,6 +373,68 @@ describe('member listing', () => {
   })
 })
 
+// --- cross-workspace membership ---------------------------------------------
+
+describe('cross-workspace membership', () => {
+  it('lets one account join a second workspace by redeeming an invite', async () => {
+    // Two independent tenants with two different founders.
+    const { org: orgA, owner: ownerA } = await bootstrap()
+    const { org: orgB } = await services.orgs.bootstrap({
+      org: { slug: 'beta', name: 'Beta', enrollmentPolicy: 'open' },
+      founder: { displayName: 'Bo', email: 'bo@beta.test', name: 'Bo', avatarUrl: null },
+    })
+    const ownerB = await services.resolveActor({
+      orgId: orgB.id,
+      principalId: (await db.repositories.principals.listByOrg(orgB.id))[0]!.id,
+    })
+
+    // Bo (owner of B) mints a join code; Ada (founder of A) redeems it.
+    const invite = await services.invites.create(ownerB, { role: 'member' })
+    const result = await services.invites.redeem(
+      { authUserId: 'auth-ada', email: 'ada@acme.test', name: 'Ada' },
+      { code: invite.code },
+    )
+
+    expect(result.org.id).toBe(orgB.id)
+    expect(result.role).toBe('member')
+
+    // Ada's account now owns one principal per org: A (home) and B (joined).
+    const ada = await db.repositories.users.getByEmail('ada@acme.test')
+    const principals = await db.repositories.principals.listByUserId(ada!.id)
+    expect(principals.map((p) => p.orgId).sort()).toEqual([orgA.id, orgB.id].sort())
+
+    // She acts as owner in A and member in B with the same account.
+    const inA = await services.resolveActor({ orgId: orgA.id, principalId: ada!.principalId })
+    expect(inA.role).toBe('owner')
+    const inB = await services.resolveActor({ orgId: orgB.id, principalId: result.principalId })
+    expect(inB.role).toBe('member')
+    expect(ownerA.orgId).toBe(orgA.id)
+  })
+
+  it('is idempotent when the same account redeems a second code for the same org', async () => {
+    const { org: orgB } = await services.orgs.bootstrap({
+      org: { slug: 'beta', name: 'Beta', enrollmentPolicy: 'open' },
+      founder: { displayName: 'Bo', email: 'bo@beta.test', name: 'Bo', avatarUrl: null },
+    })
+    const ownerB = await services.resolveActor({
+      orgId: orgB.id,
+      principalId: (await db.repositories.principals.listByOrg(orgB.id))[0]!.id,
+    })
+    const acct = { authUserId: 'auth-cy', email: 'cy@x.test', name: 'Cy' }
+
+    const first = await services.invites.create(ownerB, { role: 'viewer' })
+    const r1 = await services.invites.redeem(acct, { code: first.code })
+    const second = await services.invites.create(ownerB, { role: 'member' })
+    const r2 = await services.invites.redeem(acct, { code: second.code })
+
+    // Same principal reused (no duplicate principal in the org).
+    expect(r2.principalId).toBe(r1.principalId)
+    const cy = await db.repositories.users.getByEmail('cy@x.test')
+    const principals = await db.repositories.principals.listByUserId(cy!.id)
+    expect(principals.filter((p) => p.orgId === orgB.id)).toHaveLength(1)
+  })
+})
+
 // --- crow notifications -----------------------------------------------------
 
 describe('crow notifier', () => {

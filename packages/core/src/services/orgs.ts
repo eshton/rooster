@@ -69,6 +69,9 @@ export function createOrgService(repos: Repositories): OrgService {
         avatarUrl: founder.avatarUrl,
         authUserId: founder.authUserId,
       })
+      // Back-link the principal to its global account so cross-workspace
+      // lookups (a user's other orgs) resolve through `principals.userId`.
+      await repos.principals.linkUser(created.id, principal.id, user.id)
       await repos.memberships.upsert(created.id, {
         principalId: principal.id,
         teamId: null,

@@ -70,6 +70,9 @@ fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;c
 .stat{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:.85rem .6rem;text-align:center}
 .stat .n{font-size:1.6rem;font-weight:800;color:var(--amber-dark);line-height:1.1}
 .stat .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.switch-list{list-style:none;padding:0;margin:1rem 0;display:flex;flex-direction:column;gap:.55rem}
+.switch-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:.7rem 1rem}
+.switch-row.current{border-color:var(--amber)}
 @media (max-width:640px){
   .grid-2{grid-template-columns:1fr !important}
   header.top{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.6rem 1rem}
@@ -87,6 +90,7 @@ function chrome(title: string, actor: Actor | null, body: string): string {
         <a href="/app/members">Members</a>
         <a href="/app/agents">Agents</a>
         <a href="/app/audit">Audit</a>
+        <a href="/app/switch">Switch ⇄</a>
         <span class="muted">${esc(actor.role)}</span>
         <button id="logout" class="btn" style="padding:.3rem .7rem">Sign out</button>
       </nav>`
@@ -241,6 +245,39 @@ export function noOrgPage(actor: Actor | null, email: string): string {
     <p class="muted">${esc(email)} isn't a member of any organization yet.</p>
     <p>Provision a tenant with <code>POST /onboard</code> (see <a href="/llms.txt">/llms.txt</a>),
     or ask an admin to add you.</p>`,
+  )
+}
+
+/** Workspace picker: every org the signed-in account belongs to. */
+export function switchWorkspacePage(
+  actor: Actor,
+  orgs: Array<{ id: string; name: string; slug: string }>,
+): string {
+  const rows = orgs
+    .map((o) => {
+      const current = o.id === actor.orgId
+      return `<li class="switch-row${current ? ' current' : ''}">
+        <span>🪺 <strong>${esc(o.name)}</strong> <span class="muted">/${esc(o.slug)}</span></span>
+        ${
+          current
+            ? '<span class="muted">current</span>'
+            : `<a class="btn" href="/app/switch?org=${esc(o.id)}">Switch</a>`
+        }
+      </li>`
+    })
+    .join('')
+  return chrome(
+    'Switch workspace',
+    actor,
+    `<h1>Your workspaces</h1>
+    <p class="muted">You belong to ${orgs.length} workspace${orgs.length === 1 ? '' : 's'}. Pick one to act in.</p>
+    <ul class="switch-list">${rows}</ul>
+    ${
+      orgs.length === 1
+        ? `<p class="muted" style="margin-top:1rem">Got an invite code to another workspace? Join it from
+           <a href="/app/members">Members</a> once you're added, or redeem a code over MCP.</p>`
+        : ''
+    }`,
   )
 }
 

@@ -1,9 +1,13 @@
-import { humanIdentityFromSessionEmail } from '@rooster/auth'
+import { humanIdentityFromSessionEmail, listUserOrgs } from '@rooster/auth'
 import { type Actor, allowedTransitions, CoreError, can } from '@rooster/core'
 import type { AgentStatus, Role, TicketPriority, TicketStatus } from '@rooster/schema'
 import type { Context, Hono } from 'hono'
+import { getCookie, setCookie } from 'hono/cookie'
 import type { ServerContext } from '../context.js'
 import * as v from './views.js'
+
+/** Cookie that pins which workspace a multi-org user is currently acting in. */
+const ACTIVE_ORG_COOKIE = 'rooster_org'
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -15,10 +19,15 @@ const STATUS_BY_CODE: Record<string, number> = {
 type Resolved = { actor: Actor } | { noOrg: string } | null
 
 /** Resolve the dashboard session to an actor (or a "signed in, no org" state). */
-async function resolveSession(ctx: ServerContext, headers: Headers): Promise<Resolved> {
-  const session = await ctx.auth.api.getSession({ headers })
+async function resolveSession(ctx: ServerContext, c: Context): Promise<Resolved> {
+  const session = await ctx.auth.api.getSession({ headers: c.req.raw.headers })
   if (!session) return null
-  const identity = await humanIdentityFromSessionEmail(ctx.db.repositories, session.user.email)
+  const activeOrgId = getCookie(c, ACTIVE_ORG_COOKIE) ?? null
+  const identity = await humanIdentityFromSessionEmail(
+    ctx.db.repositories,
+    session.user.email,
+    activeOrgId,
+  )
   if (!identity) return { noOrg: session.user.email }
   try {
     return { actor: await ctx.services.resolveActor(identity) }
@@ -75,7 +84,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   // Render a page for the authenticated actor, mapping domain errors to a
   // friendly message page with the right status.
   const page = async (c: Context, render: (actor: Actor) => string | Promise<string>) => {
-    const r = await resolveSession(ctx, c.req.raw.headers)
+    const r = await resolveSession(ctx, c)
     if (!r) return c.redirect('/app/login')
     if ('noOrg' in r) return c.html(v.noOrgPage(null, r.noOrg))
     try {
@@ -90,6 +99,46 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       throw err
     }
   }
+
+  // Cross-workspace switcher. `?org=<id>` pins the active workspace (if the
+  // user is a member) via a cookie and redirects to the overview; with no
+  // query it lists every workspace the account belongs to.
+  app.get('/app/switch', async (c) => {
+    const session = await ctx.auth.api.getSession({ headers: c.req.raw.headers })
+    if (!session) return c.redirect('/app/login')
+    const memberships = await listUserOrgs(ctx.db.repositories, session.user.email)
+    if (memberships.length === 0) return c.html(v.noOrgPage(null, session.user.email))
+
+    const target = c.req.query('org')
+    if (target) {
+      if (!memberships.some((m) => m.orgId === target)) {
+        return c.html(
+          v.messagePage(null, 'Not a member', 'You do not belong to that workspace.'),
+          403,
+        )
+      }
+      setCookie(c, ACTIVE_ORG_COOKIE, target, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'Lax',
+        maxAge: 60 * 60 * 24 * 365,
+      })
+      return c.redirect('/app')
+    }
+
+    return page(c, async (actor) => {
+      const orgs = await Promise.all(
+        memberships.map(async (m) => {
+          const org = await ctx.db.repositories.orgs.getById(m.orgId)
+          return org ? { id: org.id, name: org.name, slug: org.slug } : null
+        }),
+      )
+      return v.switchWorkspacePage(
+        actor,
+        orgs.filter((o): o is { id: string; name: string; slug: string } => o !== null),
+      )
+    })
+  })
 
   app.get('/app', (c) =>
     page(c, async (actor) => {
@@ -220,7 +269,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   // Run a mutation for the authenticated actor, then redirect. Domain errors
   // render the friendly message page with the right status.
   const action = async (c: Context, run: (actor: Actor) => Promise<string>) => {
-    const r = await resolveSession(ctx, c.req.raw.headers)
+    const r = await resolveSession(ctx, c)
     if (!r) return c.redirect('/app/login')
     if ('noOrg' in r) return c.html(v.noOrgPage(null, r.noOrg))
     try {

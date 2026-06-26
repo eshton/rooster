@@ -1,8 +1,39 @@
 import { type ActorIdentity, ForbiddenError, type ProvisionalIdentity } from '@rooster/core'
 import type { Repositories } from '@rooster/db'
-import type { ClientInfo } from '@rooster/schema'
+import type { ClientInfo, Principal, User } from '@rooster/schema'
 import type { RoosterAuth } from './auth.js'
 import { effectiveScopes, parseScopes } from './scopes.js'
+
+/**
+ * Every principal a global account owns, one per org it belongs to. Lazily
+ * back-links the user's home principal (covers rows created before
+ * `principals.userId` existed) so the per-user lookup is always complete.
+ */
+async function principalsForUser(repos: Repositories, user: User): Promise<Principal[]> {
+  const home = await repos.principals.findById(user.principalId)
+  if (home && home.userId == null) {
+    await repos.principals.linkUser(home.orgId, home.id, user.id)
+  }
+  const list = await repos.principals.listByUserId(user.id)
+  if (home && !list.some((p) => p.id === home.id)) list.push(home)
+  return list
+}
+
+/**
+ * The orgs a signed-in human belongs to (one principal each), for the dashboard
+ * org switcher. Empty when the email has no Rooster user yet.
+ */
+export async function listUserOrgs(
+  repos: Repositories,
+  email: string,
+): Promise<Array<{ orgId: string; principalId: string }>> {
+  const user = await repos.users.getByEmail(email)
+  if (!user) return []
+  return (await principalsForUser(repos, user)).map((p) => ({
+    orgId: p.orgId,
+    principalId: p.id,
+  }))
+}
 
 /** The token fields the identity bridge consumes (subset of OAuthAccessToken). */
 export interface AccessTokenClaims {
@@ -110,25 +141,33 @@ export async function humanIdentityFromEmail(
   const user = await repos.users.getByEmail(email)
   if (!user) throw new ForbiddenError(`No Rooster user for '${email}'`)
 
-  const principal = await repos.principals.getById(orgId, user.principalId)
+  const principal = (await principalsForUser(repos, user)).find((p) => p.orgId === orgId)
   if (!principal) throw new ForbiddenError('User is not a member of this org')
 
-  return { orgId, principalId: user.principalId }
+  return { orgId, principalId: principal.id }
 }
 
 /**
- * Resolve a logged-in human into their {@link ActorIdentity} by email alone,
- * discovering their org (each user maps to a single principal → one org).
- * Returns `null` when the email has no Rooster user/principal yet (signed in
- * but not onboarded into any org). Used by the dashboard session middleware.
+ * Resolve a logged-in human into their {@link ActorIdentity} by email,
+ * selecting which workspace to act in. A user may belong to several orgs (one
+ * principal each); `activeOrgId` (from the dashboard org switcher) chooses one,
+ * falling back to their home org when unset or not a member there. Returns
+ * `null` when the email has no Rooster user/principal yet (signed in but not
+ * onboarded into any org). Used by the dashboard session middleware.
  */
 export async function humanIdentityFromSessionEmail(
   repos: Repositories,
   email: string,
+  activeOrgId?: string | null,
 ): Promise<ActorIdentity | null> {
   const user = await repos.users.getByEmail(email)
   if (!user) return null
-  const principal = await repos.principals.findById(user.principalId)
-  if (!principal) return null
-  return { orgId: principal.orgId, principalId: user.principalId }
+  const principals = await principalsForUser(repos, user)
+  if (principals.length === 0) return null
+  const chosen =
+    (activeOrgId && principals.find((p) => p.orgId === activeOrgId)) ??
+    principals.find((p) => p.id === user.principalId) ??
+    principals[0]
+  if (!chosen) return null
+  return { orgId: chosen.orgId, principalId: chosen.id }
 }

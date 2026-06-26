@@ -25,7 +25,7 @@ field", "Add an MCP tool").
 | 7 | Watchers + notifications | collaboration | M | backlog |
 | 8 | Custom fields | extensibility | L | backlog |
 | 9 | Per-project configurable workflows | workflow | L | backlog |
-| 10 | Cross-workspace membership | identity | L | backlog |
+| 10 | Cross-workspace membership | identity | L | ✅ done |
 
 ---
 
@@ -103,14 +103,18 @@ columns/transitions. Flagged as a post-v1 item in the enum comments.
 keep the current list as the default. Touches status validation broadly.
 **Suggested:** label `roadmap,workflow`, priority `medium`.
 
-## 10. Cross-workspace membership — `identity` · L
-**Why:** current model is **one user → one principal → one org**, so a person who
-already owns a workspace cannot also join another (the limitation hit by
+## 10. Cross-workspace membership — `identity` · L · ✅ done
+**Why:** the original model was **one user → one principal → one org**, so a person
+who already owned a workspace could not also join another (the limitation hit by
 `invite_member` / `join_tenant`). Real teams need one account across multiple
 workspaces.
-**Scope:** decouple identity from a single principal — e.g. a principal *per
-(user, org)* or memberships keyed by account — and rework
-`resolveMcpIdentity` / the invite + join paths accordingly. Architectural;
-design before building.
-**Deps:** affects auth identity bridge and the membership model.
-**Suggested:** label `roadmap,identity`, priority `medium`.
+**Shipped:** identity is now a principal **per (user, org)**, linked back to the
+global account via `principals.userId` (migration 0005). A user joining a new
+workspace via an invite gets a fresh principal linked to the same account
+(`invites.redeem`); `humanIdentityFromSessionEmail` takes an active-org argument
+and the dashboard adds a workspace switcher (`/app/switch`, `rooster_org`
+cookie). Legacy rows are lazily back-linked on read. MCP stays anchored to the
+account's home org. Covered by `core.test.ts` (cross-workspace redeem,
+idempotent re-join) and `auth.test.ts` (multi-org resolution).
+**Not yet:** an MCP-side workspace selector (a token resolves to the home org
+only) and creating a *second* tenant from an already-onboarded account.
