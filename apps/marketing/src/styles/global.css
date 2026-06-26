@@ -107,6 +107,7 @@ h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0; }
    (instead of forcing the whole page wider than the viewport). */
 .hero .wrap > * { min-width: 0; }
 @media (max-width: 880px) { .hero .wrap { grid-template-columns: 1fr; gap: 2.5rem; } }
+.hero-barn { display: block; width: 150px; height: auto; margin-bottom: 1.25rem; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.35)); }
 .eyebrow {
   display: inline-block;
   font-size: 0.8rem;

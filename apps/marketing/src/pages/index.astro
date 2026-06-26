@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro'
 
 const githubUrl = 'https://github.com/eshton/rooster'
 const docsUrl = '/docs'
+const appUrl = 'https://rooster-server.agoston-fung.workers.dev/app'
 
 const principles = [
   {
@@ -54,6 +55,7 @@ const vocab = [
         <a class="nav-hide" href="#how">How it works</a>
         <a class="nav-hide" href="#features">Features</a>
         <a href={docsUrl}>Docs</a>
+        <a href={appUrl}>Log in</a>
         <a class="btn btn-ghost" href={githubUrl}>GitHub</a>
       </nav>
     </div>
@@ -70,6 +72,26 @@ const vocab = [
     </svg>
     <div class="wrap">
       <div>
+        <svg class="hero-barn" aria-hidden="true" viewBox="0 0 150 96" xmlns="http://www.w3.org/2000/svg">
+          <!-- silo -->
+          <rect x="118" y="30" width="20" height="54" rx="10" fill="#e7e5e4" />
+          <path d="M118 35a10 10 0 0 1 20 0z" fill="#a8a29e" />
+          <rect x="118" y="46" width="20" height="2" fill="#a8a29e" opacity="0.5" />
+          <!-- barn roof -->
+          <path d="M6 46 L52 20 L98 46 Z" fill="#7f1d1d" />
+          <!-- barn body -->
+          <rect x="14" y="46" width="76" height="38" fill="#dc2626" />
+          <!-- hayloft window -->
+          <circle cx="52" cy="38" r="5" fill="#fcd34d" />
+          <!-- door -->
+          <rect x="40" y="58" width="24" height="26" fill="#7f1d1d" />
+          <path d="M40 58 L64 84 M64 58 L40 84" stroke="#fef3c7" stroke-width="2" />
+          <!-- ground -->
+          <rect x="0" y="84" width="150" height="3" rx="1.5" fill="#fafaf9" opacity="0.25" />
+          <!-- little crow on the roof -->
+          <circle cx="52" cy="15" r="4" fill="#1c1917" />
+          <path d="M56 14 l5 1 -5 2z" fill="#fbbf24" />
+        </svg>
         <span class="eyebrow">Open source · MCP-native</span>
         <h1>The project manager <br /><span class="accent">for software agents.</span></h1>
         <p class="lead">
@@ -83,8 +105,8 @@ const vocab = [
         </div>
         <p class="install-host">Live instance · MCP endpoint <a href="https://rooster-server.agoston-fung.workers.dev/mcp">rooster-server.agoston-fung.workers.dev/mcp</a></p>
         <div class="hero-cta">
-          <a class="btn btn-primary" href={docsUrl}>Get started →</a>
-          <a class="btn btn-light" href={githubUrl}>Star on GitHub</a>
+          <a class="btn btn-primary" href={appUrl}>Open the app →</a>
+          <a class="btn btn-light" href={docsUrl}>Read the docs</a>
         </div>
       </div>
       <div class="terminal" aria-hidden="true">

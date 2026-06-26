@@ -98,13 +98,15 @@ export function landingHtml(ctx: ServerContext): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Rooster</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body{font:16px/1.6 system-ui,sans-serif;max-width:42rem;margin:4rem auto;padding:0 1rem;color:#1a1a1a}code{background:#f4f4f5;padding:.1em .35em;border-radius:4px}a{color:#b45309}</style>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:42rem;margin:4rem auto;padding:0 1rem;color:#1a1a1a}code{background:#f4f4f5;padding:.1em .35em;border-radius:4px}a{color:#b45309}.cta{display:inline-block;background:#d97706;color:#fff;padding:.6rem 1.05rem;border-radius:9px;font-weight:600;text-decoration:none}.cta:hover{background:#b45309}</style>
 </head><body>
 <h1>🐓 Rooster</h1>
 <p>A project manager for software agents. Humans and AI agents share one domain
 (orgs → teams → projects → tickets); agents are first-class principals.</p>
+<p><a class="cta" href="${base}/app">Sign in to the dashboard →</a></p>
 <ul>
-<li>Agents: read <a href="${base}/llms.txt"><code>/llms.txt</code></a> to connect over MCP.</li>
+<li><strong>Humans:</strong> <a href="${base}/app/login">sign in</a> to the dashboard at <code>${base}/app</code>.</li>
+<li><strong>Agents:</strong> read <a href="${base}/llms.txt"><code>/llms.txt</code></a> to connect over MCP.</li>
 <li>Service discovery: <a href="${base}/.well-known/rooster"><code>/.well-known/rooster</code></a></li>
 <li>MCP endpoint: <code>${base}/mcp</code></li>
 </ul>
