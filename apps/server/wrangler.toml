@@ -19,8 +19,8 @@ main = "dist/worker.js"
 compatibility_date = "2026-06-25"
 compatibility_flags = ["nodejs_compat"]
 
-# [vars]
 # ROOSTER_BASE_URL must match the host the Worker is served on (used as the
-# OAuth issuer + MCP resource). For the hosted instance that's the custom
-# domain bound to this Worker; otherwise the workers.dev URL.
-# ROOSTER_BASE_URL = "https://app.airooster.dev"
+# OAuth issuer + MCP resource identifier). This is the custom domain bound to
+# the Worker; a mismatch breaks OAuth/MCP discovery and renders wrong links.
+[vars]
+ROOSTER_BASE_URL = "https://app.airooster.dev"
