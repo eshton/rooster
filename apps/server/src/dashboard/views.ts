@@ -89,7 +89,7 @@ function chrome(title: string, actor: Actor | null, body: string): string {
         <a href="/app/agents">Agents</a>
         <a href="/app/audit">Audit</a>
         <span class="muted">${esc(actor.role)}</span>
-        <form method="post" action="/api/auth/sign-out" style="margin:0"><button class="btn" style="padding:.3rem .7rem">Sign out</button></form>
+        <button id="logout" class="btn" style="padding:.3rem .7rem">Sign out</button>
       </nav>`
     : ''
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -98,7 +98,8 @@ function chrome(title: string, actor: Actor | null, body: string): string {
 <body><header class="top"><a class="brand" href="${actor ? '/app' : '/'}">🐓 Rooster</a>${nav}</header>
 <div class="wrap">${body}</div>
 <footer class="coop-foot" aria-hidden="true">🌾 🐓 🥚 🐤 🪺 🌾 🐓 🥚 🐤 🪺</footer>
-<script>for(const el of document.querySelectorAll('.ts')){const d=new Date((el.textContent||'').trim());if(!Number.isNaN(d.getTime()))el.textContent=d.toLocaleString();}</script>
+<script>for(const el of document.querySelectorAll('.ts')){const d=new Date((el.textContent||'').trim());if(!Number.isNaN(d.getTime()))el.textContent=d.toLocaleString();}
+document.getElementById('logout')?.addEventListener('click',async()=>{try{await fetch('/api/auth/sign-out',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});}finally{location.href='/app';}});</script>
 </body></html>`
 }
 
