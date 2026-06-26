@@ -62,6 +62,21 @@ export function createApp(ctx: ServerContext): Hono {
   app.get('/llms.txt', (c) => c.text(llmsText(ctx)))
   app.get('/healthz', (c) => c.json({ ok: true }))
 
+  // OAuth discovery aliases. better-auth advertises the issuer as the host root
+  // but serves its metadata under /api/auth; MCP/OAuth clients (per RFC 8414)
+  // then fetch `<root>/.well-known/oauth-authorization-server` and 404. Mirror
+  // the root well-known paths to the better-auth handler so discovery resolves.
+  for (const wk of [
+    '/.well-known/oauth-authorization-server',
+    '/.well-known/oauth-protected-resource',
+  ]) {
+    app.get(wk, (c) => {
+      const target = new URL(c.req.raw.url)
+      target.pathname = `/api/auth${wk}`
+      return ctx.auth.handler(new Request(target, { method: 'GET', headers: c.req.raw.headers }))
+    })
+  }
+
   // Agent-first, gated tenant self-registration: provision org+team+project
   // (+ optional first owning agent) in one call. Gated by the signup token on
   // a hosted instance; open when no token is configured (self-host).

@@ -80,6 +80,19 @@ describe('mounted auth', () => {
     const meta = (await res.json()) as Record<string, unknown>
     expect(meta.registration_endpoint).toBeTruthy()
   })
+
+  it('mirrors the OAuth metadata at the host root (MCP discovery)', async () => {
+    // The issuer is the root, so clients fetch these at `/` — they must resolve
+    // to better-auth's /api/auth metadata, not 404.
+    for (const wk of [
+      '/.well-known/oauth-authorization-server',
+      '/.well-known/oauth-protected-resource',
+    ]) {
+      const res = await app.request(`${base}${wk}`)
+      expect(res.status, wk).toBe(200)
+      expect((await res.json()) as Record<string, unknown>).toBeTruthy()
+    }
+  })
 })
 
 describe('tenant onboarding', () => {
