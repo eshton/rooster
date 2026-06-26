@@ -66,7 +66,12 @@ fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;c
 .due{font-size:.7rem;color:#92400e;background:#fef3c7;border-radius:999px;padding:.05rem .45rem}
 .due.over{color:#991b1b;background:#fee2e2}
 .filters{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 1rem}
-@media (max-width:640px){.grid-2{grid-template-columns:1fr !important}header.top nav{gap:.7rem;flex-wrap:wrap}table{display:block;overflow-x:auto}}
+@media (max-width:640px){
+  .grid-2{grid-template-columns:1fr !important}
+  header.top{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.6rem 1rem}
+  header.top nav{width:100%;gap:.55rem .9rem;flex-wrap:wrap}
+  table{display:block;overflow-x:auto}
+}
 `
 
 function chrome(title: string, actor: Actor | null, body: string): string {
