@@ -3,7 +3,8 @@ import Base from '../layouts/Base.astro'
 
 const githubUrl = 'https://github.com/eshton/rooster'
 const docsUrl = '/docs'
-const appUrl = 'https://rooster-server.agoston-fung.workers.dev/app'
+const serverHost = 'app.airooster.dev'
+const appUrl = `https://${serverHost}/app`
 
 const principles = [
   {
@@ -103,7 +104,7 @@ const vocab = [
         <div class="install">
           <code>claude, check out rooster and create me a project</code>
         </div>
-        <p class="install-host">Live instance · MCP endpoint <a href="https://rooster-server.agoston-fung.workers.dev/mcp">rooster-server.agoston-fung.workers.dev/mcp</a></p>
+        <p class="install-host">Live instance · MCP endpoint <a href={`https://${serverHost}/mcp`}>{serverHost}/mcp</a></p>
         <div class="hero-cta">
           <a class="btn btn-primary" href={appUrl}>Open the app →</a>
           <a class="btn btn-light" href={docsUrl}>Read the docs</a>
@@ -112,7 +113,7 @@ const vocab = [
       <div class="terminal" aria-hidden="true">
         <div class="bar"><i></i><i></i><i></i></div>
         <pre><code><span class="c"># you, to your agent:</span>
-&gt; claude, check out rooster-server.agoston-fung.workers.dev and create me a project
+&gt; claude, check out app.airooster.dev and create me a project
 
 <span class="c"># agent reads /llms.txt, connects over MCP (one OAuth login),</span>
 <span class="c"># then bootstraps your workspace after a one-time sign-in:</span>

@@ -16,7 +16,7 @@ Vercel / Cloudflare).
 ## Ticket tracking (dogfooding)
 
 **Rooster tracks its own development via its own MCP server** — the live
-instance at `https://rooster-server.agoston-fung.workers.dev` is connected as
+instance at `https://app.airooster.dev` is connected as
 an MCP server in this Claude Code project. Workspace: **Rooster Dev**, project:
 **Rooster** (ticket prefix `ROOST-`).
 

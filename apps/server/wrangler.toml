@@ -20,4 +20,7 @@ compatibility_date = "2026-06-25"
 compatibility_flags = ["nodejs_compat"]
 
 # [vars]
-# ROOSTER_BASE_URL = "https://rooster-server.<account>.workers.dev"
+# ROOSTER_BASE_URL must match the host the Worker is served on (used as the
+# OAuth issuer + MCP resource). For the hosted instance that's the custom
+# domain bound to this Worker; otherwise the workers.dev URL.
+# ROOSTER_BASE_URL = "https://app.airooster.dev"
