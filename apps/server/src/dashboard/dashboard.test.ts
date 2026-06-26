@@ -85,6 +85,16 @@ describe('dashboard (authenticated)', () => {
     expect(await res.text()).toContain('Sign in')
   })
 
+  it('serves an OAuth-resume login at /login that returns to authorize', async () => {
+    const q = '?response_type=code&client_id=abc&redirect_uri=http://localhost:9/cb&state=xyz'
+    const res = await app.request(`${base}/login${q}`)
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    // After sign-in the page must navigate back to the MCP authorize endpoint.
+    expect(html).toContain('/api/auth/mcp/authorize')
+    expect(html).toContain('client_id=abc')
+  })
+
   it('renders the org overview for a signed-in member', async () => {
     expect(cookie).not.toBe('')
     const res = await app.request(`${base}/app`, { headers: { cookie } })

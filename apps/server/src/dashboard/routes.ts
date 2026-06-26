@@ -41,6 +41,21 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   app.get('/app/login', (c) => c.html(v.loginPage({ providers })))
   app.get('/app/signup', (c) => c.html(v.signupPage()))
 
+  // OAuth login resume: better-auth's MCP authorize endpoint redirects an
+  // unauthenticated user to `loginPage` (default `/login`) with the original
+  // authorize query. We sign them in, then send the browser back to
+  // `/api/auth/mcp/authorize?<same query>` so the code is issued and the MCP
+  // client's callback fires. (Consent is skipped — no consentPage configured.)
+  app.get('/login', (c) => {
+    const search = new URL(c.req.raw.url).search
+    const next = search ? `/api/auth/mcp/authorize${search}` : '/app'
+    return c.html(v.loginPage({ providers, next }))
+  })
+  app.get('/signup', (c) => {
+    const next = c.req.query('next') || '/app'
+    return c.html(v.signupPage({ next }))
+  })
+
   // Render a page for the authenticated actor, mapping domain errors to a
   // friendly message page with the right status.
   const page = async (c: Context, render: (actor: Actor) => string | Promise<string>) => {

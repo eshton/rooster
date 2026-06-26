@@ -78,30 +78,40 @@ function chrome(title: string, actor: Actor | null, body: string): string {
 }
 
 // better-auth's email endpoints take JSON, so submit the form via fetch and
-// redirect to the dashboard on success.
-const AUTH_SCRIPT = `<script>
+// redirect on success. `next` is where to go after auth — the dashboard by
+// default, or the OAuth authorize URL when resuming an MCP login.
+function authScript(next: string): string {
+  return `<script>
 document.getElementById('auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.currentTarget;
   const res = await fetch(f.action, { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify(Object.fromEntries(new FormData(f))) });
-  if (res.ok) { location.href = '/app'; return; }
+  if (res.ok) { location.href = ${JSON.stringify(next)}; return; }
   const data = await res.json().catch(() => ({}));
   document.getElementById('auth-err').textContent = data.message || 'Authentication failed';
 });
 </script>`
+}
 
-export function loginPage(opts: { providers: string[]; error?: string }): string {
+export function loginPage(opts: { providers: string[]; error?: string; next?: string }): string {
+  const next = opts.next ?? '/app'
+  const cb = encodeURIComponent(next)
+  const resuming = next !== '/app'
   const oauth = opts.providers
     .map(
       (p) =>
-        `<a class="btn" style="display:block;text-align:center;margin:.4rem 0" href="/api/auth/sign-in/social?provider=${esc(p)}">Continue with ${esc(p)}</a>`,
+        `<a class="btn" style="display:block;text-align:center;margin:.4rem 0" href="/api/auth/sign-in/social?provider=${esc(p)}&callbackURL=${cb}">Continue with ${esc(p)}</a>`,
     )
     .join('')
+  const signupHref = resuming ? `/signup?next=${cb}` : '/app/signup'
+  const blurb = resuming
+    ? 'Sign in to connect your agent to Rooster.'
+    : 'Access your Rooster dashboard.'
   return chrome(
     'Sign in',
     null,
-    `<h1>Sign in</h1><p class="muted">Access your Rooster dashboard.</p>
+    `<h1>Sign in</h1><p class="muted">${blurb}</p>
     <p id="auth-err" style="color:#b91c1c">${esc(opts.error ?? '')}</p>
     ${oauth}
     <form id="auth-form" class="auth" method="post" action="/api/auth/sign-in/email">
@@ -109,12 +119,15 @@ export function loginPage(opts: { providers: string[]; error?: string }): string
       <input name="password" type="password" placeholder="Password" required>
       <button class="btn" type="submit" style="width:100%">Sign in</button>
     </form>
-    <p class="muted" style="margin-top:1rem">No account? <a href="/app/signup">Create one</a>.</p>
-    ${AUTH_SCRIPT}`,
+    <p class="muted" style="margin-top:1rem">No account? <a href="${signupHref}">Create one</a>.</p>
+    ${authScript(next)}`,
   )
 }
 
-export function signupPage(opts: { error?: string } = {}): string {
+export function signupPage(opts: { error?: string; next?: string } = {}): string {
+  const next = opts.next ?? '/app'
+  const cb = encodeURIComponent(next)
+  const loginHref = next !== '/app' ? `/login` : '/app/login'
   return chrome(
     'Create account',
     null,
@@ -126,8 +139,8 @@ export function signupPage(opts: { error?: string } = {}): string {
       <input name="password" type="password" placeholder="Password (min 8 chars)" required minlength="8">
       <button class="btn" type="submit" style="width:100%">Create account</button>
     </form>
-    <p class="muted" style="margin-top:1rem">Already have one? <a href="/app/login">Sign in</a>.</p>
-    ${AUTH_SCRIPT}`,
+    <p class="muted" style="margin-top:1rem">Already have one? <a href="${loginHref}">Sign in</a>.</p>
+    ${authScript(next)}`,
   )
 }
 
