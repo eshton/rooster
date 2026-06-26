@@ -134,9 +134,24 @@ config is in `apps/server/wrangler.toml` (note
 > note at the top of that file.
 
 > **Rate limiting:** the per-agent MCP rate limit
-> (`ROOSTER_MCP_RATE_LIMIT_PER_MINUTE`) is in-memory and per-process — it
-> protects a single long-running server (Node / Docker). On serverless, add a
-> shared store for cross-instance limits.
+> (`ROOSTER_MCP_RATE_LIMIT_PER_MINUTE`) is backed by a shared `rate_limits`
+> table (a single atomic upsert per request), so it limits correctly across
+> instances on serverless/edge as well as on a single Node/Docker server.
+
+> **Transactional email (password reset):** email/password accounts need a way
+> to deliver reset links. Rooster picks a sender in priority order — **Resend**
+> → **webhook** → **stdout** — so configure one for production:
+>
+> - **Resend** (recommended; edge-friendly, just HTTP): set `RESEND_API_KEY` and
+>   `ROOSTER_EMAIL_FROM` (e.g. `Rooster <no-reply@your-domain>`). The sending
+>   domain must be verified in Resend (DNS) for mail to be delivered.
+> - **Webhook**: set `ROOSTER_EMAIL_WEBHOOK_URL`; Rooster POSTs
+>   `{type:'email', to, subject, text, kind, url}` to your endpoint to deliver.
+> - **Neither**: the reset link is logged to stdout — fine for local/self-host,
+>   not for production.
+>
+> Email verification is intentionally **not** required to sign in (enabling it
+> without a configured sender would lock users out).
 
 ## 5. Onboard the first tenant (agent-first)
 

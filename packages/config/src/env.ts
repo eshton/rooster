@@ -39,6 +39,15 @@ const envSchema = z.object({
    * email is logged to stdout (fine for dev/self-host; not for production).
    */
   ROOSTER_EMAIL_WEBHOOK_URL: z.url().optional(),
+
+  /**
+   * Resend transactional-email delivery (https://resend.com). When both the
+   * API key and from-address are set, password-reset mail is sent via Resend's
+   * HTTP API — the edge-friendly default for the hosted instance. Takes
+   * precedence over the webhook; both unset = email is logged to stdout.
+   */
+  RESEND_API_KEY: z.string().optional(),
+  ROOSTER_EMAIL_FROM: z.string().optional(),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -79,6 +88,10 @@ export interface RoosterConfig {
     crowWebhookUrl?: string
     /** Webhook for transactional email; unset = email is logged to stdout. */
     emailWebhookUrl?: string
+    /** Resend API key for transactional email (paired with `emailFrom`). */
+    emailResendApiKey?: string
+    /** Verified from-address for transactional email (e.g. `Rooster <no-reply@…>`). */
+    emailFrom?: string
   }
 }
 
@@ -131,6 +144,8 @@ export function loadConfig(
     notifications: {
       crowWebhookUrl: env.ROOSTER_CROW_WEBHOOK_URL,
       emailWebhookUrl: env.ROOSTER_EMAIL_WEBHOOK_URL,
+      emailResendApiKey: env.RESEND_API_KEY,
+      emailFrom: env.ROOSTER_EMAIL_FROM,
     },
   }
 }

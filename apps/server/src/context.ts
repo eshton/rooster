@@ -4,7 +4,7 @@ import { createServices, type Services } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
 import pg from 'pg'
 import { webhookCrowNotifier } from './crow-webhook.js'
-import { webhookEmailSender } from './email-webhook.js'
+import { emailSenderFor } from './email.js'
 
 type AuthDatabase = Parameters<typeof createAuth>[0]['database']
 
@@ -64,7 +64,7 @@ export async function createServerContext(
   const auth = createAuth({
     config,
     database: opts.authDatabase ?? authDatabaseFor(config),
-    sendEmail: webhookEmailSender(config.notifications.emailWebhookUrl),
+    sendEmail: emailSenderFor(config),
   })
   return { config, db, services, auth }
 }
