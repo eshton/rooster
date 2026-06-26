@@ -30,6 +30,46 @@ describe('dashboard views (pure)', () => {
   it('login page offers configured providers', () => {
     expect(v.loginPage({ providers: ['github'] })).toContain('Continue with github')
   })
+
+  describe('renderMarkdown', () => {
+    it('renders headings, bold, inline code and lists', () => {
+      const h = v.renderMarkdown('## Title\n\nSome **bold** and `code`.\n\n- one\n- two')
+      expect(h).toContain('<h2>Title</h2>')
+      expect(h).toContain('<strong>bold</strong>')
+      expect(h).toContain('<code>code</code>')
+      expect(h).toContain('<ul><li>one</li><li>two</li></ul>')
+    })
+
+    it('renders GFM tables', () => {
+      const h = v.renderMarkdown('| A | B |\n|---|---|\n| 1 | 2 |')
+      expect(h).toContain('<table>')
+      expect(h).toContain('<th>A</th>')
+      expect(h).toContain('<td>1</td>')
+    })
+
+    it('renders fenced code blocks without inline formatting inside', () => {
+      const h = v.renderMarkdown('```\nconst x = a * b * c\n```')
+      expect(h).toContain('<pre class="md-code"><code>')
+      expect(h).toContain('const x = a * b * c')
+      expect(h).not.toContain('<em>')
+    })
+
+    it('renders safe links but drops dangerous schemes', () => {
+      expect(v.renderMarkdown('[ok](https://x.test/p)')).toContain(
+        '<a href="https://x.test/p" rel="noopener noreferrer">ok</a>',
+      )
+      const danger = v.renderMarkdown('[click](javascript:alert(1))')
+      expect(danger).not.toContain('href')
+      expect(danger).toContain('click') // link text kept, href dropped
+    })
+
+    it('escapes HTML first — no XSS via markdown', () => {
+      const h = v.renderMarkdown('<script>alert(1)</script>\n\n**x**')
+      expect(h).not.toContain('<script>')
+      expect(h).toContain('&lt;script&gt;')
+      expect(h).toContain('<strong>x</strong>') // formatting still works
+    })
+  })
 })
 
 describe('dashboard (authenticated)', () => {

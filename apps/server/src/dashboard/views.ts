@@ -21,6 +21,140 @@ export function esc(value: unknown): string {
     .replaceAll("'", '&#39;')
 }
 
+/**
+ * Render a safe subset of Markdown to HTML (ticket descriptions, comments).
+ *
+ * Security model: the input is escaped FIRST, then block/inline transforms only
+ * *insert* tags around already-escaped text — user content is never
+ * reintroduced unescaped, so there is no XSS vector (and link hrefs are
+ * scheme-validated to block `javascript:`). Dependency-free and DOM-free, so it
+ * runs identically on Node and the Cloudflare Worker (where DOMPurify can't).
+ *
+ * Supports: headings, bold, italics, inline and fenced code, links
+ * (http/https/mailto/relative only), bullet and numbered lists, GFM tables,
+ * blockquotes, horizontal rules and paragraphs.
+ */
+export function renderMarkdown(md: string): string {
+  const lines = esc(md).replace(/\r\n?/g, '\n').split('\n')
+  const out: string[] = []
+  let i = 0
+  // Indexed access is `string | undefined` (noUncheckedIndexedAccess); the
+  // loop guards keep `i` in range, so default out-of-range reads to ''.
+  const at = (k: number): string => lines[k] ?? ''
+
+  const inline = (s: string): string => {
+    const spans: string[] = []
+    // Stash inline code so * _ ` inside it aren't treated as formatting.
+    let t = s.replace(/`([^`]+)`/g, (_m, c) => `\uE000${spans.push(c) - 1}\uE000`)
+    t = t
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text, url) => {
+        const u = String(url).trim()
+        if (!/^(https?:\/\/|mailto:|\/|#)/i.test(u)) return text // block javascript: etc.
+        return `<a href="${u}" rel="noopener noreferrer">${text}</a>`
+      })
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*(?!\s)([^*]+?)\*/g, '$1<em>$2</em>')
+    return t.replace(/\uE000(\d+)\uE000/g, (_m, n) => `<code>${spans[Number(n)]}</code>`)
+  }
+
+  const isBlockStart = (l: string) =>
+    /^\s*$/.test(l) ||
+    /^\s*(#{1,6}\s|```|>\s?|[-*+]\s|\d+\.\s)/.test(l) ||
+    /^\s*([-*_])(\s*\1){2,}\s*$/.test(l) ||
+    /^\s*\|.*\|\s*$/.test(l)
+
+  while (i < lines.length) {
+    const line = at(i)
+
+    if (/^\s*$/.test(line)) {
+      i++
+      continue
+    }
+    // fenced code
+    if (/^\s*```/.test(line)) {
+      const body: string[] = []
+      i++
+      while (i < lines.length && !/^\s*```/.test(at(i))) body.push(at(i++))
+      i++ // closing fence
+      out.push(`<pre class="md-code"><code>${body.join('\n')}</code></pre>`)
+      continue
+    }
+    // heading
+    const h = line.match(/^(#{1,6})\s+(.*)$/)
+    if (h) {
+      const n = (h[1] ?? '#').length
+      out.push(`<h${n}>${inline((h[2] ?? '').trim())}</h${n}>`)
+      i++
+      continue
+    }
+    // horizontal rule
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      out.push('<hr>')
+      i++
+      continue
+    }
+    // GFM table: a row of cells followed by a |---|---| separator
+    if (
+      /^\s*\|.*\|\s*$/.test(line) &&
+      i + 1 < lines.length &&
+      /^\s*\|?[\s:|-]+\|?\s*$/.test(at(i + 1)) &&
+      at(i + 1).includes('-')
+    ) {
+      const cells = (r: string) =>
+        r
+          .trim()
+          .replace(/^\||\|$/g, '')
+          .split('|')
+          .map((c) => c.trim())
+      const head = cells(line)
+      i += 2
+      const rows: string[][] = []
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(at(i))) rows.push(cells(at(i++)))
+      const thead = `<thead><tr>${head.map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead>`
+      const tbody = `<tbody>${rows
+        .map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`)
+        .join('')}</tbody>`
+      out.push(`<table>${thead}${tbody}</table>`)
+      continue
+    }
+    // blockquote
+    if (/^\s*>\s?/.test(line)) {
+      const body: string[] = []
+      while (i < lines.length && /^\s*>\s?/.test(at(i))) body.push(at(i++).replace(/^\s*>\s?/, ''))
+      out.push(`<blockquote>${inline(body.join(' '))}</blockquote>`)
+      continue
+    }
+    // unordered list
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^\s*[-*+]\s+/.test(at(i)))
+        items.push(at(i++).replace(/^\s*[-*+]\s+/, ''))
+      out.push(`<ul>${items.map((it) => `<li>${inline(it)}</li>`).join('')}</ul>`)
+      continue
+    }
+    // ordered list
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^\s*\d+\.\s+/.test(at(i)))
+        items.push(at(i++).replace(/^\s*\d+\.\s+/, ''))
+      out.push(`<ol>${items.map((it) => `<li>${inline(it)}</li>`).join('')}</ol>`)
+      continue
+    }
+    // paragraph: gather until a blank line or the next block
+    const para: string[] = []
+    let l: string | undefined = line
+    while (l !== undefined && !isBlockStart(l)) {
+      para.push(l)
+      i++
+      l = at(i)
+    }
+    out.push(`<p>${inline(para.join(' '))}</p>`)
+  }
+
+  return out.join('\n')
+}
+
 const STYLES = `
 :root{--amber:#d97706;--amber-dark:#b45309;--ink:#18181b;--muted:#71717a;--line:#e4e4e7;--bg:#fff;--soft:#fafaf9}
 *{box-sizing:border-box}
@@ -73,6 +207,21 @@ fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;c
 .switch-list{list-style:none;padding:0;margin:1rem 0;display:flex;flex-direction:column;gap:.55rem}
 .switch-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:.7rem 1rem}
 .switch-row.current{border-color:var(--amber)}
+.md-body{overflow-wrap:anywhere}
+.md-body>:first-child{margin-top:0}.md-body>:last-child{margin-bottom:0}
+.md-body h1,.md-body h2,.md-body h3,.md-body h4,.md-body h5,.md-body h6{margin:1.1rem 0 .5rem;line-height:1.3}
+.md-body h1{font-size:1.25rem}.md-body h2{font-size:1.1rem}.md-body h3{font-size:1rem}
+.md-body h4,.md-body h5,.md-body h6{font-size:.92rem}
+.md-body p{margin:.5rem 0}
+.md-body ul,.md-body ol{margin:.5rem 0;padding-left:1.4rem}.md-body li{margin:.15rem 0}
+.md-body a{color:var(--amber-dark);text-decoration:underline}
+.md-body code{font-family:ui-monospace,monospace;font-size:.88em;background:#f4f4f5;padding:.08em .35em;border-radius:4px}
+.md-body pre.md-code{background:#1c1917;color:#e7e5e4;padding:.8rem 1rem;border-radius:10px;overflow-x:auto;margin:.6rem 0}
+.md-body pre.md-code code{background:none;color:inherit;padding:0;font-size:.85rem;white-space:pre}
+.md-body blockquote{margin:.6rem 0;padding:.2rem 0 .2rem .9rem;border-left:3px solid var(--line);color:var(--muted)}
+.md-body hr{border:0;border-top:1px solid var(--line);margin:1rem 0}
+.md-body table{margin:.6rem 0;font-size:.88rem}
+.md-body th{font-weight:700;background:var(--soft)}
 @media (max-width:640px){
   .grid-2{grid-template-columns:1fr !important}
   header.top{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.6rem 1rem}
@@ -531,7 +680,7 @@ export function ticketDetail(data: {
       <span class="badge"><span class="prio ${esc(t.priority)}"></span>${esc(t.priority)}</span>
       ${t.dueDate ? dueChip(t.dueDate) : ''}
       ${t.assigneeId ? `<span class="badge">${avatar(nameOf(t.assigneeId))} ${esc(nameOf(t.assigneeId))}</span>` : '<span class="badge">unassigned</span>'}</div>
-    ${t.description ? `<div class="card">${esc(t.description)}</div>` : ''}
+    ${t.description ? `<div class="card md-body">${renderMarkdown(t.description)}</div>` : ''}
     ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}
     ${controls}
     <h2>Comments</h2>${comments}${commentForm}`,
