@@ -67,6 +67,10 @@ fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;c
 .due.over{color:#991b1b;background:#fee2e2}
 .filters{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 1rem}
 .coop-foot{text-align:center;letter-spacing:.45rem;opacity:.4;font-size:1.05rem;padding:2.5rem 0 1.4rem;user-select:none;white-space:nowrap;overflow:hidden}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(6.5rem,1fr));gap:.7rem;margin:1.1rem 0 .5rem}
+.stat{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:.85rem .6rem;text-align:center}
+.stat .n{font-size:1.6rem;font-weight:800;color:var(--amber-dark);line-height:1.1}
+.stat .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 @media (max-width:640px){
   .grid-2{grid-template-columns:1fr !important}
   header.top{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.6rem 1rem}
@@ -181,6 +185,9 @@ export function orgOverview(data: {
   teams: Team[]
   projects: Project[]
   actor: Actor
+  stats: { tickets: number; open: number; people: number; agents: number }
+  recent: Ticket[]
+  projectNames: Record<string, string>
 }): string {
   const teams = data.teams.length
     ? data.teams
@@ -198,10 +205,38 @@ export function orgOverview(data: {
         })
         .join('')
     : '<div class="empty">🪹 No teams yet.</div>'
+
+  const stat = (n: number, label: string) =>
+    `<div class="stat"><div class="n">${n}</div><div class="l">${label}</div></div>`
+  const stats = `<div class="stats">
+    ${stat(data.teams.length, 'Teams')}
+    ${stat(data.projects.length, 'Projects')}
+    ${stat(data.stats.open, 'Open tickets')}
+    ${stat(data.stats.tickets, 'Total tickets')}
+    ${stat(data.stats.people, 'People')}
+    ${stat(data.stats.agents, 'Agents')}
+  </div>`
+
+  const recent = data.recent.length
+    ? `<div class="card">${data.recent
+        .map(
+          (t) =>
+            `<div class="row" style="padding:.35rem 0">
+              <div><span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.id)}">${esc(t.title)}</a>
+                <span class="muted" style="font-size:.82rem">· ${esc(data.projectNames[t.projectId] ?? '')}</span></div>
+              <span class="badge${t.status === 'done' ? '' : ' amber'}">${esc(STATUS_LABEL[t.status])}</span>
+            </div>`,
+        )
+        .join('')}</div>`
+    : '<div class="empty">🪹 No tickets yet — open one from a project board.</div>'
+
   return chrome(
     data.org.name,
     data.actor,
-    `<h1>${esc(data.org.name)}</h1><p class="muted">${esc(data.org.slug)}</p><h2>Teams &amp; projects</h2>${teams}`,
+    `<h1>${esc(data.org.name)}</h1><p class="muted">${esc(data.org.slug)}</p>
+    ${stats}
+    <h2>Recent tickets</h2>${recent}
+    <h2>Teams &amp; projects</h2>${teams}`,
   )
 }
 
