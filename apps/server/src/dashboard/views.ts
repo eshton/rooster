@@ -325,7 +325,7 @@ export function orgOverview(data: {
         .map(
           (t) =>
             `<div class="row" style="padding:.35rem 0">
-              <div><span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.id)}">${esc(t.title)}</a>
+              <div><span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.key)}">${esc(t.title)}</a>
                 <span class="muted" style="font-size:.82rem">· ${esc(data.projectNames[t.projectId] ?? '')}</span></div>
               <span class="badge${t.status === 'done' ? '' : ' amber'}">${esc(STATUS_LABEL[t.status])}</span>
             </div>`,
@@ -418,7 +418,7 @@ export function projectBoard(data: {
         ? `<div class="row" style="margin-top:.35rem;align-items:center">${dueChip(t.dueDate)}<span>${assignee}</span></div>`
         : ''
     return `<div class="tk"><div class="row"><span class="key">${esc(t.key)}</span>${t.priority !== 'none' ? `<span class="prio ${esc(t.priority)}" title="${esc(t.priority)}"></span>` : ''}</div>
-      <a href="/app/tickets/${esc(t.id)}">${esc(t.title)}</a>
+      <a href="/app/tickets/${esc(t.key)}">${esc(t.title)}</a>
       ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}
       ${meta}</div>`
   }
@@ -471,7 +471,7 @@ export function ticketDetail(data: {
 
   const statusForm =
     data.canWrite && data.allowedStatuses.length
-      ? `<form method="post" action="/app/tickets/${esc(t.id)}/status" class="actions">
+      ? `<form method="post" action="/app/tickets/${esc(t.key)}/status" class="actions">
           <select name="status">${data.allowedStatuses.map((s) => `<option value="${esc(s)}">${esc(STATUS_LABEL[s])}</option>`).join('')}</select>
           <button class="btn sm" type="submit">Move</button>
         </form>`
@@ -484,14 +484,14 @@ export function ticketDetail(data: {
     ),
   ].join('')
   const assignForm = data.canWrite
-    ? `<form method="post" action="/app/tickets/${esc(t.id)}/assign" class="actions">
+    ? `<form method="post" action="/app/tickets/${esc(t.key)}/assign" class="actions">
         <select name="assigneeId">${assigneeOptions}</select>
         <button class="btn sm ghost" type="submit">Assign</button>
       </form>`
     : ''
   const editForm = data.canWrite
     ? `<fieldset><legend>Edit</legend>
-        <form method="post" action="/app/tickets/${esc(t.id)}/update" class="actions" style="flex-direction:column;align-items:stretch">
+        <form method="post" action="/app/tickets/${esc(t.key)}/update" class="actions" style="flex-direction:column;align-items:stretch">
           <input name="title" value="${esc(t.title)}" required maxlength="300">
           <textarea name="description" placeholder="Description">${esc(t.description ?? '')}</textarea>
           <div class="actions" style="margin:0">
@@ -504,7 +504,7 @@ export function ticketDetail(data: {
       </fieldset>`
     : ''
   const commentForm = data.canWrite
-    ? `<form method="post" action="/app/tickets/${esc(t.id)}/comments" class="actions">
+    ? `<form method="post" action="/app/tickets/${esc(t.key)}/comments" class="actions">
         <textarea name="body" placeholder="Add a comment" required maxlength="50000"></textarea>
         <button class="btn sm" type="submit">Comment</button>
       </form>`
@@ -548,7 +548,7 @@ export function ticketListPage(data: {
         .map(
           (t) =>
             `<div class="card"><div class="row">
-              <div><span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.id)}">${esc(t.title)}</a></div>
+              <div><span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.key)}">${esc(t.title)}</a></div>
               <div>${t.priority !== 'none' ? `<span class="prio ${esc(t.priority)}"></span>` : ''}<span class="badge${t.status === 'done' ? '' : ' amber'}">${esc(STATUS_LABEL[t.status])}</span></div>
             </div>
             ${t.dueDate || t.labels.length ? `<div class="row" style="margin-top:.3rem;align-items:center">${dueChip(t.dueDate)}${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}</div>` : ''}</div>`,

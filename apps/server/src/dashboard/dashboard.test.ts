@@ -135,21 +135,25 @@ describe('dashboard (authenticated)', () => {
       await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
     ).text()
     expect(board).toContain('Dashboard-made ticket')
-    const ticketId = board.match(/\/app\/tickets\/([0-9a-f-]{36})/)?.[1]
-    expect(ticketId).toBeTruthy()
+    // Ticket URLs use the human-readable key (e.g. ROOST-3), not the UUID.
+    const ticketKey = board.match(/\/app\/tickets\/([A-Z]+-\d+)/)?.[1]
+    expect(ticketKey).toBeTruthy()
 
-    const moved = await app.request(`${base}/app/tickets/${ticketId}/status`, {
+    const moved = await app.request(`${base}/app/tickets/${ticketKey}/status`, {
       ...form({ status: 'todo' }),
     })
     expect(moved.status).toBe(302)
+    // The redirect keeps the key form.
+    expect(moved.headers.get('location')).toBe(`/app/tickets/${ticketKey}`)
 
-    const commented = await app.request(`${base}/app/tickets/${ticketId}/comments`, {
+    const commented = await app.request(`${base}/app/tickets/${ticketKey}/comments`, {
       ...form({ body: 'looks good' }),
     })
     expect(commented.status).toBe(302)
 
+    // Lower-cased key resolves too (case-insensitive).
     const detail = await (
-      await app.request(`${base}/app/tickets/${ticketId}`, { headers: { cookie } })
+      await app.request(`${base}/app/tickets/${ticketKey!.toLowerCase()}`, { headers: { cookie } })
     ).text()
     expect(detail).toContain('To do') // status moved
     expect(detail).toContain('looks good') // comment shown
@@ -164,9 +168,9 @@ describe('dashboard (authenticated)', () => {
     const board = await (
       await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
     ).text()
-    // newest ticket is first in each column; grab any ticket id
-    const ticketId = board.match(/\/app\/tickets\/([0-9a-f-]{36})/)?.[1]
-    const res = await app.request(`${base}/app/tickets/${ticketId}/status`, {
+    // newest ticket is first in each column; grab any ticket key
+    const ticketKey = board.match(/\/app\/tickets\/([A-Z]+-\d+)/)?.[1]
+    const res = await app.request(`${base}/app/tickets/${ticketKey}/status`, {
       ...form({ status: 'done' }), // backlog -> done is illegal
     })
     expect(res.status).toBe(400)
@@ -224,9 +228,9 @@ describe('dashboard (authenticated)', () => {
     const board = await (
       await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
     ).text()
-    const ticketId = board.match(/\/app\/tickets\/([0-9a-f-]{36})/)?.[1]
+    const ticketKey = board.match(/\/app\/tickets\/([A-Z]+-\d+)/)?.[1]
 
-    const edited = await app.request(`${base}/app/tickets/${ticketId}/update`, {
+    const edited = await app.request(`${base}/app/tickets/${ticketKey}/update`, {
       ...form({
         title: 'Editable ticket',
         description: 'now with detail',
@@ -238,7 +242,7 @@ describe('dashboard (authenticated)', () => {
     expect(edited.status).toBe(302)
 
     const detail = await (
-      await app.request(`${base}/app/tickets/${ticketId}`, { headers: { cookie } })
+      await app.request(`${base}/app/tickets/${ticketKey}`, { headers: { cookie } })
     ).text()
     expect(detail).toContain('high')
     expect(detail).toContain('2026-09-01')

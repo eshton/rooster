@@ -9,6 +9,9 @@ import * as v from './views.js'
 /** Cookie that pins which workspace a multi-org user is currently acting in. */
 const ACTIVE_ORG_COOKIE = 'rooster_org'
 
+/** Distinguishes a raw ticket UUID from a human-readable key in URLs. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
   forbidden: 403,
@@ -181,6 +184,13 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   const toNames = (members: { principalId: string; displayName: string }[]) =>
     Object.fromEntries(members.map((m) => [m.principalId, m.displayName]))
 
+  // Ticket URLs use the human-readable key (e.g. /app/tickets/ROOST-1). Accept
+  // either a key (case-insensitive) or a raw UUID so old links keep working.
+  const resolveTicket = (actor: Actor, ref: string) =>
+    UUID_RE.test(ref)
+      ? ctx.services.tickets.get(actor, ref)
+      : ctx.services.tickets.getByKey(actor, ref.toUpperCase())
+
   app.get('/app/projects/:id', (c) =>
     page(c, async (actor) => {
       const id = c.req.param('id')
@@ -203,10 +213,9 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
 
   app.get('/app/tickets/:id', (c) =>
     page(c, async (actor) => {
-      const id = c.req.param('id')
-      const [ticket, comments, members] = await Promise.all([
-        ctx.services.tickets.get(actor, id),
-        ctx.services.comments.list(actor, id),
+      const ticket = await resolveTicket(actor, c.req.param('id'))
+      const [comments, members] = await Promise.all([
+        ctx.services.comments.list(actor, ticket.id),
         ctx.services.members.listOrg(actor),
       ])
       return v.ticketDetail({
@@ -306,51 +315,54 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
 
   app.post('/app/tickets/:id/update', (c) =>
     action(c, async (actor) => {
-      const id = c.req.param('id')
+      const ticket = await resolveTicket(actor, c.req.param('id'))
       const body = await c.req.parseBody()
       const labels = String(body.labels ?? '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
-      await ctx.services.tickets.update(actor, id, {
+      await ctx.services.tickets.update(actor, ticket.id, {
         title: String(body.title ?? ''),
         description: body.description ? String(body.description) : null,
         priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
         labels,
         dueDate: body.dueDate ? String(body.dueDate) : null,
       })
-      return `/app/tickets/${id}`
+      return `/app/tickets/${ticket.key}`
     }),
   )
 
   app.post('/app/tickets/:id/status', (c) =>
     action(c, async (actor) => {
-      const id = c.req.param('id')
+      const ticket = await resolveTicket(actor, c.req.param('id'))
       const body = await c.req.parseBody()
       await ctx.services.tickets.changeStatus(actor, {
-        ticketId: id,
+        ticketId: ticket.id,
         status: String(body.status) as TicketStatus,
       })
-      return `/app/tickets/${id}`
+      return `/app/tickets/${ticket.key}`
     }),
   )
 
   app.post('/app/tickets/:id/assign', (c) =>
     action(c, async (actor) => {
-      const id = c.req.param('id')
+      const ticket = await resolveTicket(actor, c.req.param('id'))
       const body = await c.req.parseBody()
       const assigneeId = body.assigneeId ? String(body.assigneeId) : null
-      await ctx.services.tickets.assign(actor, { ticketId: id, assigneeId })
-      return `/app/tickets/${id}`
+      await ctx.services.tickets.assign(actor, { ticketId: ticket.id, assigneeId })
+      return `/app/tickets/${ticket.key}`
     }),
   )
 
   app.post('/app/tickets/:id/comments', (c) =>
     action(c, async (actor) => {
-      const id = c.req.param('id')
+      const ticket = await resolveTicket(actor, c.req.param('id'))
       const body = await c.req.parseBody()
-      await ctx.services.comments.create(actor, { ticketId: id, body: String(body.body ?? '') })
-      return `/app/tickets/${id}`
+      await ctx.services.comments.create(actor, {
+        ticketId: ticket.id,
+        body: String(body.body ?? ''),
+      })
+      return `/app/tickets/${ticket.key}`
     }),
   )
 
