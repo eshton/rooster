@@ -13,6 +13,23 @@ login (dashboard pending). Design priorities, in order: **secure-first**,
 **agents-first**, **portable** (one codebase, Postgres _or_ SQLite, Node /
 Vercel / Cloudflare).
 
+## Ticket tracking (dogfooding)
+
+**Rooster tracks its own development via its own MCP server** — the live
+instance at `https://rooster-server.agoston-fung.workers.dev` is connected as
+an MCP server in this Claude Code project. Workspace: **Rooster Dev**, project:
+**Rooster** (ticket prefix `ROOST-`).
+
+When picking up new work, check the backlog first:
+
+```
+# Claude Code already has the rooster MCP server connected
+# Just ask: "list open ROOST tickets" or use the MCP tools directly
+```
+
+The backlog lives in `docs/ROADMAP.md` (original source) and is mirrored as
+live tickets in Rooster starting from `ROOST-2`.
+
 ## Status (what exists today)
 
 Working, tested, committed:
