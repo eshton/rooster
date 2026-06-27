@@ -9,12 +9,16 @@ import { parse } from '../validate.js'
 import {
   type AssigneeRefInput,
   type AssignTicketInput,
+  type Attachment,
   assigneeRefInput,
   assignTicketInput,
   type ChangeStatusInput,
+  type Comment,
   type CreateTicketInput,
+  type CreateTicketsInput,
   changeStatusInput,
   createTicketInput,
+  createTicketsInput,
   type Id,
   type LinkTicketsInput,
   linkTicketsInput,
@@ -43,6 +47,23 @@ export interface RelatedTicket {
   title: string
 }
 
+/**
+ * Everything an agent needs to understand a ticket, in one round-trip: the
+ * ticket itself plus its comments, attachments, subtasks, resolved links and
+ * full assignee set. Saves the ~5 separate tool calls this used to take.
+ */
+export interface TicketContext {
+  ticket: Ticket
+  /** Primary + co-assignees (deduped principal ids). */
+  assignees: Id[]
+  comments: Comment[]
+  attachments: Attachment[]
+  /** Direct children (subtasks). */
+  subtasks: Ticket[]
+  /** Links resolved from this ticket's perspective. */
+  links: RelatedTicket[]
+}
+
 /** Inverse relation labels for an incoming edge (relates is symmetric). */
 const INVERSE_RELATION: Record<TicketLinkType, RelatedRelation> = {
   blocks: 'blocked_by',
@@ -68,7 +89,11 @@ const MAX_PARENT_DEPTH = 100
 
 export interface TicketService {
   create(actor: Actor, input: CreateTicketInput): Promise<Ticket>
+  /** Open several tickets in one call; returns them in input order. */
+  createMany(actor: Actor, input: CreateTicketsInput): Promise<Ticket[]>
   get(actor: Actor, id: Id): Promise<Ticket>
+  /** A ticket plus its comments, attachments, subtasks, links and assignees. */
+  getContext(actor: Actor, id: Id): Promise<TicketContext>
   getByKey(actor: Actor, key: string): Promise<Ticket>
   list(actor: Actor, projectId: Id, opts?: ListOptions & TicketListFilter): Promise<Ticket[]>
   /** Tickets across the org assigned to the calling principal. */
@@ -177,53 +202,110 @@ export function createTicketService(
     }
   }
 
+  /**
+   * Create a single ticket from already-validated input. The caller is
+   * responsible for `authorize`; this is shared by `create` and `createMany`.
+   */
+  async function createOneTicket(actor: Actor, input: CreateTicketInput): Promise<Ticket> {
+    const project = await repos.projects.getById(actor.orgId, input.projectId)
+    if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
+    if (!project.key) throw new NotFoundError(`Project ${input.projectId} has no ticket key`)
+
+    await requireAssignee(actor, input.assigneeId ?? null)
+    await requireMilestone(actor, input.milestoneId ?? null)
+    if (input.parentId != null) {
+      const parent = await repos.tickets.getById(actor.orgId, input.parentId)
+      if (!parent) throw new NotFoundError(`Parent ticket ${input.parentId} not found`)
+    }
+
+    // Ticket numbering is per-project, so keys read "<project key>-<n>".
+    const number = await repos.tickets.nextNumber(actor.orgId, project.id)
+    const ticket = await repos.tickets.create(actor.orgId, {
+      projectId: input.projectId,
+      key: `${project.key}-${number}`,
+      number,
+      title: input.title,
+      description: input.description ?? null,
+      status: INITIAL_TICKET_STATUS,
+      priority: input.priority,
+      labels: input.labels,
+      assigneeId: input.assigneeId ?? null,
+      parentId: input.parentId ?? null,
+      milestoneId: input.milestoneId ?? null,
+      dueDate: input.dueDate ?? null,
+      startDate: input.startDate ?? null,
+      estimate: input.estimate ?? null,
+    })
+
+    await recordAudit(repos, actor, {
+      action: 'ticket.create',
+      targetType: 'ticket',
+      targetId: ticket.id,
+      after: ticket,
+    })
+    return ticket
+  }
+
   return {
     async create(actor, rawInput) {
       authorize(actor, 'ticket:write')
       const input = parse(createTicketInput, rawInput)
+      return createOneTicket(actor, input)
+    },
 
-      const project = await repos.projects.getById(actor.orgId, input.projectId)
-      if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
-      if (!project.key) throw new NotFoundError(`Project ${input.projectId} has no ticket key`)
-
-      await requireAssignee(actor, input.assigneeId ?? null)
-      await requireMilestone(actor, input.milestoneId ?? null)
-      if (input.parentId != null) {
-        const parent = await repos.tickets.getById(actor.orgId, input.parentId)
-        if (!parent) throw new NotFoundError(`Parent ticket ${input.parentId} not found`)
+    async createMany(actor, rawInput) {
+      authorize(actor, 'ticket:write')
+      // Validate the whole batch up front so a malformed entry rejects the call
+      // before any row is written. (No cross-row transaction — see CLAUDE.md's
+      // in-memory libSQL caveat — so a mid-batch DB error can leave earlier
+      // tickets persisted; validation failures cannot.)
+      const { tickets } = parse(createTicketsInput, rawInput)
+      const created: Ticket[] = []
+      for (const input of tickets) {
+        created.push(await createOneTicket(actor, input))
       }
-
-      // Ticket numbering is per-project, so keys read "<project key>-<n>".
-      const number = await repos.tickets.nextNumber(actor.orgId, project.id)
-      const ticket = await repos.tickets.create(actor.orgId, {
-        projectId: input.projectId,
-        key: `${project.key}-${number}`,
-        number,
-        title: input.title,
-        description: input.description ?? null,
-        status: INITIAL_TICKET_STATUS,
-        priority: input.priority,
-        labels: input.labels,
-        assigneeId: input.assigneeId ?? null,
-        parentId: input.parentId ?? null,
-        milestoneId: input.milestoneId ?? null,
-        dueDate: input.dueDate ?? null,
-        startDate: input.startDate ?? null,
-        estimate: input.estimate ?? null,
-      })
-
-      await recordAudit(repos, actor, {
-        action: 'ticket.create',
-        targetType: 'ticket',
-        targetId: ticket.id,
-        after: ticket,
-      })
-      return ticket
+      return created
     },
 
     async get(actor, id) {
       authorize(actor, 'ticket:read')
       return load(actor, id)
+    },
+
+    async getContext(actor, id) {
+      authorize(actor, 'ticket:read')
+      const ticket = await load(actor, id)
+      const [comments, attachments, subtasks, links, coAssignees] = await Promise.all([
+        repos.comments.listForTicket(actor.orgId, id),
+        repos.attachments.listForTicket(actor.orgId, id),
+        repos.tickets.listChildren(actor.orgId, id),
+        repos.ticketLinks.listForTicket(actor.orgId, id),
+        repos.assignees.listForTicket(actor.orgId, id),
+      ])
+
+      // Resolve links from this ticket's perspective (mirrors listLinks).
+      const resolvedLinks: RelatedTicket[] = []
+      for (const l of links) {
+        const outgoing = l.fromTicketId === id
+        const otherId = outgoing ? l.toTicketId : l.fromTicketId
+        const relation = outgoing ? l.type : INVERSE_RELATION[l.type]
+        const other = await repos.tickets.getById(actor.orgId, otherId)
+        if (!other) continue // tolerate a dangling endpoint
+        resolvedLinks.push({ relation, ticketId: other.id, key: other.key, title: other.title })
+      }
+
+      const assignees = new Set<Id>()
+      if (ticket.assigneeId) assignees.add(ticket.assigneeId)
+      for (const a of coAssignees) assignees.add(a.principalId)
+
+      return {
+        ticket,
+        assignees: [...assignees],
+        comments,
+        attachments,
+        subtasks,
+        links: resolvedLinks,
+      }
     },
 
     async getByKey(actor, key) {

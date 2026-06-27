@@ -18,6 +18,7 @@ import {
   createTeamInput,
   createTenantInput,
   createTicketInput,
+  createTicketsInput,
   inviteMemberInput,
   joinTenantInput,
   linkTicketsInput,
@@ -25,6 +26,7 @@ import {
   registerAgentInput,
   removeAttachmentInput,
   setProjectKeyInput,
+  type Ticket,
   ticketStatusSchema,
   unlinkTicketsInput,
   updateTicketInput,
@@ -32,6 +34,26 @@ import {
 } from '@rooster/schema'
 import { z } from 'zod'
 import { errorResult, jsonResult, runTool } from './result.js'
+
+/**
+ * The board-scan essentials of a ticket. `compact` list responses return these
+ * instead of the full row, so an agent triaging a board pays far fewer tokens.
+ */
+function toCompact(t: Ticket) {
+  return {
+    id: t.id,
+    key: t.key,
+    title: t.title,
+    status: t.status,
+    priority: t.priority,
+    assigneeId: t.assigneeId,
+  }
+}
+
+/** Apply the compact projection to a list of tickets when `compact` is set. */
+function maybeCompact(tickets: Ticket[], compact: boolean | undefined) {
+  return compact ? tickets.map(toCompact) : tickets
+}
 
 export interface ToolDeps {
   services: Services
@@ -253,26 +275,37 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     {
       title: 'List tickets',
       description:
-        'List tickets in a project, optionally filtered by status, assignee and/or milestone.',
+        'List tickets in a project, optionally filtered by status, assignee and/or milestone. ' +
+        'Set `compact: true` to get just {id, key, title, status, priority, assigneeId} per ' +
+        'ticket — far fewer tokens when scanning a board.',
       inputSchema: {
         projectId: z.uuid(),
         status: ticketStatusSchema.optional(),
         assigneeId: z.uuid().optional(),
         milestoneId: z.uuid().optional(),
+        compact: z.boolean().optional(),
       },
     },
-    async ({ projectId, status, assigneeId, milestoneId }) =>
-      runTool(() => services.tickets.list(actor, projectId, { status, assigneeId, milestoneId })),
+    async ({ projectId, status, assigneeId, milestoneId, compact }) =>
+      runTool(async () =>
+        maybeCompact(
+          await services.tickets.list(actor, projectId, { status, assigneeId, milestoneId }),
+          compact,
+        ),
+      ),
   )
 
   server.registerTool(
     'my_tickets',
     {
       title: 'My tickets',
-      description: 'List tickets across the org assigned to you (the calling principal).',
-      inputSchema: {},
+      description:
+        'List tickets across the org assigned to you (primary OR co-assignee). Set ' +
+        '`compact: true` for the trimmed board-scan shape.',
+      inputSchema: { compact: z.boolean().optional() },
     },
-    async () => runTool(() => services.tickets.myTickets(actor)),
+    async ({ compact }) =>
+      runTool(async () => maybeCompact(await services.tickets.myTickets(actor), compact)),
   )
 
   server.registerTool(
@@ -290,6 +323,25 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'get_ticket_context',
+    {
+      title: 'Get ticket context',
+      description:
+        'Fetch a ticket together with everything around it — comments, attachments, subtasks, ' +
+        'resolved links and the full assignee set — in ONE call (by id or key). Prefer this over ' +
+        'separate get_ticket + list_comments + list_links + list_subtasks + list_attachments calls.',
+      inputSchema: { id: z.uuid().optional(), key: z.string().optional() },
+    },
+    async ({ id, key }) => {
+      if (!id && !key) return errorResult('Provide either "id" or "key"', 'validation')
+      return runTool(async () => {
+        const ticketId = id ?? (await services.tickets.getByKey(actor, key as string)).id
+        return services.tickets.getContext(actor, ticketId)
+      })
+    },
+  )
+
+  server.registerTool(
     'create_ticket',
     {
       title: 'Create ticket',
@@ -298,6 +350,19 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: createTicketInput.shape,
     },
     async (args) => runTool(() => services.tickets.create(actor, args)),
+  )
+
+  server.registerTool(
+    'create_tickets',
+    {
+      title: 'Create tickets (batch)',
+      description:
+        'Open several tickets in ONE call — e.g. when bootstrapping a project. Pass `tickets` as ' +
+        'an array of the same shape create_ticket takes (1–100). Returns the created tickets in ' +
+        'input order. The batch is validated up front, so a malformed entry rejects the whole call.',
+      inputSchema: createTicketsInput.shape,
+    },
+    async (args) => runTool(() => services.tickets.createMany(actor, args)),
   )
 
   server.registerTool(
@@ -421,10 +486,13 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     'find_by_label',
     {
       title: 'Find by tag',
-      description: 'Find related tickets across the org that carry a given label/tag.',
-      inputSchema: { label: z.string().min(1).max(60) },
+      description:
+        'Find related tickets across the org that carry a given label/tag. Set `compact: true` ' +
+        'for the trimmed board-scan shape.',
+      inputSchema: { label: z.string().min(1).max(60), compact: z.boolean().optional() },
     },
-    async ({ label }) => runTool(() => services.tickets.findByLabel(actor, label)),
+    async ({ label, compact }) =>
+      runTool(async () => maybeCompact(await services.tickets.findByLabel(actor, label), compact)),
   )
 
   server.registerTool(
@@ -433,10 +501,12 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       title: 'Search tickets',
       description:
         'Relevance-ranked, multi-term search across ticket titles and descriptions in your org ' +
-        '(title matches and full-phrase matches rank highest).',
-      inputSchema: { query: z.string().min(1).max(200) },
+        '(title matches and full-phrase matches rank highest). Set `compact: true` for the ' +
+        'trimmed board-scan shape.',
+      inputSchema: { query: z.string().min(1).max(200), compact: z.boolean().optional() },
     },
-    async ({ query }) => runTool(() => services.tickets.search(actor, query)),
+    async ({ query, compact }) =>
+      runTool(async () => maybeCompact(await services.tickets.search(actor, query), compact)),
   )
 
   server.registerTool(

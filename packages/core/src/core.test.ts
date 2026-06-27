@@ -955,6 +955,85 @@ describe('multiple assignees', () => {
   })
 })
 
+// --- batch create + ticket context -----------------------------------------
+
+describe('createMany', () => {
+  it('opens several tickets in input order with sequential keys', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+
+    const created = await services.tickets.createMany(owner, {
+      tickets: [
+        { projectId: project.id, title: 'one', priority: 'none', labels: [] },
+        { projectId: project.id, title: 'two', priority: 'high', labels: ['infra'] },
+        { projectId: project.id, title: 'three', priority: 'none', labels: [] },
+      ],
+    })
+    expect(created.map((t) => t.title)).toEqual(['one', 'two', 'three'])
+    expect(created.map((t) => t.key)).toEqual(['ROOST-1', 'ROOST-2', 'ROOST-3'])
+  })
+
+  it('rejects the whole batch (no writes) when one entry is invalid', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+
+    await expect(
+      services.tickets.createMany(owner, {
+        tickets: [
+          { projectId: project.id, title: 'ok', priority: 'none', labels: [] },
+          // Off-scale estimate — the batch parse must fail before any insert.
+          { projectId: project.id, title: 'bad', priority: 'none', labels: [], estimate: 7 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError)
+
+    // Nothing was written.
+    expect(await services.tickets.list(owner, project.id)).toEqual([])
+  })
+})
+
+describe('getContext', () => {
+  it('bundles comments, attachments, subtasks, links and assignees in one call', async () => {
+    const { org, owner, founder } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const bob = await makeUser(org.id, owner, 'member')
+
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'hub' })
+    const child = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'sub',
+      parentId: t.id,
+    })
+    const blocked = await services.tickets.create(owner, { projectId: project.id, title: 'later' })
+
+    await services.tickets.assign(owner, { ticketId: t.id, assigneeId: founder.id })
+    await services.tickets.addAssignee(owner, { ticketId: t.id, principalId: bob.principalId })
+    await services.comments.create(owner, { ticketId: t.id, body: 'first' })
+    await services.attachments.add(owner, { ticketId: t.id, url: 'https://e.com/x', label: 'x' })
+    await services.tickets.link(owner, {
+      fromTicketId: t.id,
+      toTicketId: blocked.id,
+      type: 'blocks',
+    })
+
+    const ctx = await services.tickets.getContext(owner, t.id)
+    expect(ctx.ticket.id).toBe(t.id)
+    expect(ctx.assignees.sort()).toEqual([founder.id, bob.principalId].sort())
+    expect(ctx.comments.map((c) => c.body)).toEqual(['first'])
+    expect(ctx.attachments.map((a) => a.url)).toEqual(['https://e.com/x'])
+    expect(ctx.subtasks.map((s) => s.id)).toEqual([child.id])
+    expect(ctx.links).toEqual([
+      { relation: 'blocks', ticketId: blocked.id, key: blocked.key, title: 'later' },
+    ])
+  })
+
+  it('404s a ticket from another org', async () => {
+    const { owner } = await bootstrap()
+    const { ticketId } = await bootstrap2()
+    await expect(services.tickets.getContext(owner, ticketId)).rejects.toBeInstanceOf(NotFoundError)
+  })
+})
+
 // --- tenant isolation -------------------------------------------------------
 
 describe('tenant isolation at the service layer', () => {

@@ -75,6 +75,12 @@ export const createTicketInput = z.object({
 })
 export type CreateTicketInput = z.infer<typeof createTicketInput>
 
+/** Batch creation: open several tickets in one call (e.g. project bootstrap). */
+export const createTicketsInput = z.object({
+  tickets: z.array(createTicketInput).min(1).max(100),
+})
+export type CreateTicketsInput = z.infer<typeof createTicketsInput>
+
 export const updateTicketInput = z
   .object({
     title: z.string().min(1).max(300),

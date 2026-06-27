@@ -272,6 +272,55 @@ describe('MCP server end-to-end', () => {
     ])
   })
 
+  it('batch-creates tickets and reads one ticket context in a single call', async () => {
+    const team = await services.teams.create(owner, { key: 'BAT', name: 'Batch' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'BAT',
+      name: 'P',
+    })
+
+    // create_tickets: three at once, sequential keys, input order preserved.
+    const batch = payload(
+      (await call('create_tickets', {
+        tickets: [
+          { projectId: project.id, title: 'first' },
+          { projectId: project.id, title: 'second', labels: ['infra'] },
+          { projectId: project.id, title: 'third' },
+        ],
+      })) as never,
+    ) as Array<{ key: string; title: string; id: string }>
+    expect(batch.map((t) => t.key)).toEqual(['BAT-1', 'BAT-2', 'BAT-3'])
+
+    // compact list returns the trimmed shape only.
+    const compact = payload(
+      (await call('list_tickets', { projectId: project.id, compact: true })) as never,
+    ) as Array<Record<string, unknown>>
+    expect(Object.keys(compact[0] ?? {}).sort()).toEqual([
+      'assigneeId',
+      'id',
+      'key',
+      'priority',
+      'status',
+      'title',
+    ])
+
+    // get_ticket_context bundles related data. Add a comment + subtask first.
+    const hub = batch[0]
+    await call('comment', { ticketId: hub.id, body: 'hello' })
+    await call('create_ticket', { projectId: project.id, title: 'kid', parentId: hub.id })
+
+    const ctx = payload((await call('get_ticket_context', { key: 'BAT-1' })) as never) as {
+      ticket: { id: string }
+      comments: unknown[]
+      subtasks: unknown[]
+      assignees: string[]
+    }
+    expect(ctx.ticket.id).toBe(hub.id)
+    expect(ctx.comments).toHaveLength(1)
+    expect(ctx.subtasks).toHaveLength(1)
+  })
+
   it('creates teams + projects and invites a teammate by email', async () => {
     const team = payload((await call('create_team', { key: 'OPS', name: 'Ops' })) as never)
     expect(team.key).toBe('OPS')

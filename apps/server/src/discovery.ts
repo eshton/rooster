@@ -78,11 +78,19 @@ not the client.
 - create_workspace — create an additional workspace owned by your account (with
   its first project); switch into it via the \`X-Rooster-Org\` header.
 - list_teams / list_projects / list_tickets / get_ticket — read the board.
-  list_tickets accepts optional \`status\` and \`assigneeId\` filters.
+  list_tickets accepts optional \`status\`, \`assigneeId\` and \`milestoneId\`
+  filters. Pass \`compact: true\` to list_tickets / my_tickets / find_by_label /
+  search_tickets for a trimmed {id, key, title, status, priority, assigneeId}
+  shape — far fewer tokens when scanning a board.
+- get_ticket_context — a ticket plus its comments, attachments, subtasks, links
+  and full assignee set in ONE call. Prefer it over firing get_ticket +
+  list_comments + list_links + list_subtasks + list_attachments separately.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related
   tickets are easy to find, set \`parentId\` for subtasks, set \`dueDate\`
   (ISO-8601) when there's a deadline, and set \`estimate\` (complexity points —
   see "Estimating work" below) when you can size it.
+- create_tickets — open many at once (e.g. project bootstrap): pass \`tickets\`
+  as an array of create_ticket inputs (1–100), one round-trip instead of N.
 - update_ticket / change_status / assign_ticket / comment — manage work.
   assign_ticket sets the single PRIMARY assignee; for shared work add co-owners
   with add_assignee / remove_assignee / list_assignees (a ticket's effective
