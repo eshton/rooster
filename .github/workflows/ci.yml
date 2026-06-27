@@ -141,6 +141,12 @@ jobs:
           grep -q ' tickets ' /tmp/tables.txt
           grep -q ' rate_limits ' /tmp/tables.txt
 
+      - name: Core-flow smoke against real Postgres
+        # Exercises the dialect-sensitive repository SQL (per-project numbering,
+        # self-healing nextNumber, search, re-key) that the in-memory SQLite
+        # suite can't cover.
+        run: node apps/server/dist/smoke.js
+
   # The Cloudflare Worker bundle must stay free of `pg` (Node-only) so it runs
   # on the edge. Build the bundle via a dry-run deploy and assert no pg slipped
   # in (guards the pg-free crow/email/discovery modules).

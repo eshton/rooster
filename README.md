@@ -1,5 +1,7 @@
 # 🐓 Rooster
 
+[![CI](https://github.com/eshton/rooster/actions/workflows/ci.yml/badge.svg)](https://github.com/eshton/rooster/actions/workflows/ci.yml)
+
 **A project manager for software agents.**
 
 A rooster crows to wake the flock and call them to work — exactly what this
