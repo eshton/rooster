@@ -123,6 +123,7 @@ export const tickets = pgTable(
     labels: text('labels').notNull().default('[]'),
     assigneeId: text('assignee_id'),
     parentId: text('parent_id'),
+    milestoneId: text('milestone_id'),
     dueDate: text('due_date'),
     startDate: text('start_date'),
     estimate: real('estimate'),
@@ -155,6 +156,18 @@ export const invites = pgTable('invites', {
   maxUses: integer('max_uses').notNull().default(1),
   uses: integer('uses').notNull().default(0),
   expiresAt: text('expires_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
+export const milestones = pgTable('milestones', {
+  id: id(),
+  orgId: text('org_id').notNull(),
+  projectId: text('project_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  startDate: text('start_date'),
+  dueDate: text('due_date'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -224,6 +237,7 @@ export const pgSchema = {
   tickets,
   ticketLinks,
   ticketWatchers,
+  milestones,
   comments,
   attachments,
   rateLimits,

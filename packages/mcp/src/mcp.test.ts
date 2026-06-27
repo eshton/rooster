@@ -233,6 +233,23 @@ describe('MCP server end-to-end', () => {
     expect(project.name).toBe('Runbooks')
     expect(project.key).toBe('RUN')
 
+    // Milestone: create, then file a ticket into it and filter by it.
+    const milestone = payload(
+      (await call('create_milestone', { projectId: project.id, name: 'Sprint 1' })) as never,
+    )
+    expect(milestone.name).toBe('Sprint 1')
+    const inSprint = payload(
+      (await call('create_ticket', {
+        projectId: project.id,
+        title: 'scoped',
+        milestoneId: milestone.id,
+      })) as never,
+    )
+    const filtered = payload(
+      (await call('list_tickets', { projectId: project.id, milestoneId: milestone.id })) as never,
+    ) as Array<{ id: string }>
+    expect(filtered.map((t) => t.id)).toEqual([inSprint.id])
+
     const invite = payload(
       (await call('invite_member', { email: 'bob@acme.test', name: 'Bob' })) as never,
     )

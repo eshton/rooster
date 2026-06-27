@@ -127,6 +127,7 @@ export const tickets = sqliteTable(
     labels: text('labels').notNull().default('[]'),
     assigneeId: text('assignee_id'),
     parentId: text('parent_id'),
+    milestoneId: text('milestone_id'),
     dueDate: text('due_date'),
     startDate: text('start_date'),
     estimate: real('estimate'),
@@ -169,6 +170,18 @@ export const comments = sqliteTable('comments', {
   ticketId: text('ticket_id').notNull(),
   authorId: text('author_id').notNull(),
   body: text('body').notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
+export const milestones = sqliteTable('milestones', {
+  id: id(),
+  orgId: text('org_id').notNull(),
+  projectId: text('project_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  startDate: text('start_date'),
+  dueDate: text('due_date'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -228,6 +241,7 @@ export const sqliteSchema = {
   tickets,
   ticketLinks,
   ticketWatchers,
+  milestones,
   comments,
   attachments,
   rateLimits,

@@ -44,6 +44,16 @@ export const createProjectInput = z.object({
 })
 export type CreateProjectInput = z.infer<typeof createProjectInput>
 
+export const createMilestoneInput = z.object({
+  projectId: idSchema,
+  name: z.string().min(1).max(200),
+  description: z.string().max(4000).optional(),
+  /** Optional ISO-8601 start / due dates for the cycle. */
+  startDate: z.string().max(40).nullable().optional(),
+  dueDate: z.string().max(40).nullable().optional(),
+})
+export type CreateMilestoneInput = z.infer<typeof createMilestoneInput>
+
 // --- Tickets ----------------------------------------------------------------
 
 export const createTicketInput = z.object({
@@ -54,6 +64,8 @@ export const createTicketInput = z.object({
   labels: z.array(z.string().min(1).max(60)).default([]),
   assigneeId: idSchema.optional(),
   parentId: idSchema.optional(),
+  /** Optional milestone/cycle this ticket belongs to. */
+  milestoneId: idSchema.nullable().optional(),
   /** Optional ISO-8601 due date (e.g. "2026-07-01" or a full datetime). */
   dueDate: z.string().max(40).nullable().optional(),
   /** Optional ISO-8601 planned start date. */
@@ -71,6 +83,7 @@ export const updateTicketInput = z
     labels: z.array(z.string().min(1).max(60)),
     assigneeId: idSchema.nullable(),
     parentId: idSchema.nullable(),
+    milestoneId: idSchema.nullable(),
     dueDate: z.string().max(40).nullable(),
     startDate: z.string().max(40).nullable(),
     estimate: estimatePointsSchema.nullable(),

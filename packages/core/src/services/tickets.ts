@@ -55,6 +55,7 @@ const MAX_BLOCKS_DEPTH = 1000
 export interface TicketListFilter {
   status?: TicketStatus
   assigneeId?: Id
+  milestoneId?: Id
 }
 
 /** A ticket tag/label (same shape as a single entry of `ticket.labels`). */
@@ -100,6 +101,13 @@ export function createTicketService(
     if (assigneeId == null) return
     const principal = await repos.principals.getById(actor.orgId, assigneeId)
     if (!principal) throw new NotFoundError(`Assignee principal ${assigneeId} not found`)
+  }
+
+  /** Ensure a milestone exists in this org (or is being cleared). */
+  async function requireMilestone(actor: Actor, milestoneId: Id | null): Promise<void> {
+    if (milestoneId == null) return
+    const milestone = await repos.milestones.getById(actor.orgId, milestoneId)
+    if (!milestone) throw new NotFoundError(`Milestone ${milestoneId} not found`)
   }
 
   async function load(actor: Actor, id: Id): Promise<Ticket> {
@@ -171,6 +179,7 @@ export function createTicketService(
       if (!project.key) throw new NotFoundError(`Project ${input.projectId} has no ticket key`)
 
       await requireAssignee(actor, input.assigneeId ?? null)
+      await requireMilestone(actor, input.milestoneId ?? null)
       if (input.parentId != null) {
         const parent = await repos.tickets.getById(actor.orgId, input.parentId)
         if (!parent) throw new NotFoundError(`Parent ticket ${input.parentId} not found`)
@@ -189,6 +198,7 @@ export function createTicketService(
         labels: input.labels,
         assigneeId: input.assigneeId ?? null,
         parentId: input.parentId ?? null,
+        milestoneId: input.milestoneId ?? null,
         dueDate: input.dueDate ?? null,
         startDate: input.startDate ?? null,
         estimate: input.estimate ?? null,
@@ -362,6 +372,7 @@ export function createTicketService(
       const before = await load(actor, id)
 
       if ('assigneeId' in input) await requireAssignee(actor, input.assigneeId ?? null)
+      if ('milestoneId' in input) await requireMilestone(actor, input.milestoneId ?? null)
       if ('parentId' in input) await requireAcyclicParent(actor, id, input.parentId ?? null)
 
       const after = await repos.tickets.update(actor.orgId, id, input)

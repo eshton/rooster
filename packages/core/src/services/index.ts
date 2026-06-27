@@ -7,6 +7,7 @@ import { type AuditLogService, createAuditLogService } from './auditlog.js'
 import { type CommentService, createCommentService } from './comments.js'
 import { createInviteService, type InviteService } from './invites.js'
 import { createMemberService, type MemberService } from './members.js'
+import { createMilestoneService, type MilestoneService } from './milestones.js'
 import { createOrgService, type OrgService } from './orgs.js'
 import { createProjectService, type ProjectService } from './projects.js'
 import { createTeamService, type TeamService } from './teams.js'
@@ -21,6 +22,7 @@ export interface Services {
   comments: CommentService
   attachments: AttachmentService
   watchers: WatcherService
+  milestones: MilestoneService
   agents: AgentService
   members: MemberService
   invites: InviteService
@@ -43,6 +45,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     comments: createCommentService(repos, deps.crowNotifier),
     attachments: createAttachmentService(repos),
     watchers: createWatcherService(repos),
+    milestones: createMilestoneService(repos),
     agents: createAgentService(repos),
     members: createMemberService(repos),
     invites: createInviteService(repos),
@@ -58,6 +61,7 @@ export type {
   CommentService,
   InviteService,
   MemberService,
+  MilestoneService,
   OrgService,
   ProjectService,
   TeamService,

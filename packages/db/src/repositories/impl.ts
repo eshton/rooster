@@ -7,6 +7,7 @@ import type {
   Id,
   Invite,
   Membership,
+  Milestone,
   Org,
   Principal,
   Project,
@@ -74,6 +75,7 @@ const toTicket = (r: Rows['tickets']): Ticket =>
 const toComment = (r: Rows['comments']): Comment => r as Comment
 const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
 const toWatcher = (r: Rows['ticketWatchers']): Watcher => r as Watcher
+const toMilestone = (r: Rows['milestones']): Milestone => r as Milestone
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
 const toAudit = (r: Rows['auditLog']): AuditLog => ({
   ...r,
@@ -228,6 +230,7 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         const filters = [eq(s.tickets.orgId, orgId), eq(s.tickets.projectId, projectId)]
         if (opts?.status) filters.push(eq(s.tickets.status, opts.status))
         if (opts?.assigneeId) filters.push(eq(s.tickets.assigneeId, opts.assigneeId))
+        if (opts?.milestoneId) filters.push(eq(s.tickets.milestoneId, opts.milestoneId))
         return (
           await db
             .select()
@@ -534,6 +537,38 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .orderBy(desc(s.ticketWatchers.createdAt))
             .limit(limitOf(opts))
         ).map((r) => r.ticketId)
+      },
+    },
+
+    milestones: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.milestones)
+          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toMilestone(row!)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.milestones)
+              .where(and(eq(s.milestones.orgId, orgId), eq(s.milestones.id, id)))
+              .limit(1)
+          ).map(toMilestone),
+        )
+      },
+      async listForProject(orgId, projectId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.milestones)
+            .where(and(eq(s.milestones.orgId, orgId), eq(s.milestones.projectId, projectId)))
+            .orderBy(desc(s.milestones.createdAt))
+            .limit(limitOf(opts))
+        ).map(toMilestone)
       },
     },
 

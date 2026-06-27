@@ -12,6 +12,7 @@ import {
   changeStatusInput,
   commentInput,
   createInviteInput,
+  createMilestoneInput,
   createProjectInput,
   createTeamInput,
   createTenantInput,
@@ -211,6 +212,29 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'create_milestone',
+    {
+      title: 'Create milestone',
+      description:
+        'Create a milestone / cycle (sprint) in a project — a named, optionally time-boxed ' +
+        '(startDate/dueDate) grouping. Assign tickets to it via create_ticket/update_ticket ' +
+        '`milestoneId`, and filter the board with list_tickets `milestoneId`.',
+      inputSchema: createMilestoneInput.shape,
+    },
+    async (args) => runTool(() => services.milestones.create(actor, args)),
+  )
+
+  server.registerTool(
+    'list_milestones',
+    {
+      title: 'List milestones',
+      description: "List a project's milestones / cycles.",
+      inputSchema: { projectId: z.uuid() },
+    },
+    async ({ projectId }) => runTool(() => services.milestones.list(actor, projectId)),
+  )
+
+  server.registerTool(
     'set_project_key',
     {
       title: 'Set project key',
@@ -227,15 +251,17 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     'list_tickets',
     {
       title: 'List tickets',
-      description: 'List tickets in a project, optionally filtered by status and/or assignee.',
+      description:
+        'List tickets in a project, optionally filtered by status, assignee and/or milestone.',
       inputSchema: {
         projectId: z.uuid(),
         status: ticketStatusSchema.optional(),
         assigneeId: z.uuid().optional(),
+        milestoneId: z.uuid().optional(),
       },
     },
-    async ({ projectId, status, assigneeId }) =>
-      runTool(() => services.tickets.list(actor, projectId, { status, assigneeId })),
+    async ({ projectId, status, assigneeId, milestoneId }) =>
+      runTool(() => services.tickets.list(actor, projectId, { status, assigneeId, milestoneId })),
   )
 
   server.registerTool(

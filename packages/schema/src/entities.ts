@@ -135,6 +135,8 @@ export const ticketSchema = z.object({
   labels: z.array(z.string().min(1).max(60)),
   assigneeId: idSchema.nullable(),
   parentId: idSchema.nullable(),
+  /** Optional milestone/cycle this ticket belongs to; null = none. */
+  milestoneId: idSchema.nullable(),
   /** Optional ISO-8601 due date/deadline (date or datetime); null = none. */
   dueDate: z.string().max(40).nullable(),
   /** Optional ISO-8601 planned start date; null = none. */
@@ -183,6 +185,20 @@ export const commentSchema = z.object({
   body: z.string().min(1).max(50_000),
 })
 export type Comment = z.infer<typeof commentSchema>
+
+/** A milestone / cycle (sprint): a named, optionally time-boxed grouping of
+ * tickets within a project. */
+export const milestoneSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  projectId: idSchema,
+  name: z.string().min(1).max(200),
+  description: z.string().max(4000).nullable(),
+  /** Optional ISO-8601 start date / due date for the cycle. */
+  startDate: z.string().max(40).nullable(),
+  dueDate: z.string().max(40).nullable(),
+})
+export type Milestone = z.infer<typeof milestoneSchema>
 
 /** A principal following a ticket — notified on status/assignee/comment changes. */
 export const watcherSchema = z.object({

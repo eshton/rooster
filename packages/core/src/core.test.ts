@@ -785,6 +785,46 @@ describe('createWorkspace', () => {
   })
 })
 
+// --- milestones --------------------------------------------------------------
+
+describe('milestones', () => {
+  it('creates milestones, scopes tickets to them, and filters by milestone', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+
+    const m = await services.milestones.create(owner, {
+      projectId: project.id,
+      name: 'Sprint 1',
+      dueDate: '2026-08-01',
+    })
+    expect(m.name).toBe('Sprint 1')
+    expect((await services.milestones.list(owner, project.id)).map((x) => x.id)).toEqual([m.id])
+
+    const inSprint = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'a',
+      milestoneId: m.id,
+    })
+    await services.tickets.create(owner, { projectId: project.id, title: 'b' }) // no milestone
+    expect(inSprint.milestoneId).toBe(m.id)
+
+    const filtered = await services.tickets.list(owner, project.id, { milestoneId: m.id })
+    expect(filtered.map((t) => t.id)).toEqual([inSprint.id])
+  })
+
+  it('rejects a ticket pointed at a milestone that does not exist', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    await expect(
+      services.tickets.create(owner, {
+        projectId: project.id,
+        title: 'x',
+        milestoneId: '00000000-0000-4000-8000-000000000000',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+  })
+})
+
 // --- watchers + notifications -----------------------------------------------
 
 describe('watchers', () => {

@@ -87,6 +87,9 @@ not the client.
 - my_tickets — list tickets assigned to you. find_by_label — by tag.
   search_tickets — free-text search over titles + descriptions.
 - list_subtasks — list a ticket's children.
+- create_milestone / list_milestones — group tickets into a milestone / cycle
+  (sprint). Scope a ticket via create_ticket/update_ticket \`milestoneId\`, and
+  filter the board with list_tickets \`milestoneId\`.
 - add_attachment / list_attachments / remove_attachment — attach context to a
   ticket. Links only: Rooster does not host files, so pass a \`url\` to an
   externally hosted resource (log, design, doc) with an optional label.

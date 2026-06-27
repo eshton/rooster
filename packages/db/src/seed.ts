@@ -98,6 +98,7 @@ export async function seed(repos: Repositories): Promise<SeedResult> {
       labels: ['seed'],
       assigneeId: spec.assignee,
       parentId: null,
+      milestoneId: null,
       dueDate: null,
       startDate: null,
       estimate: null,

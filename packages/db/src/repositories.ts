@@ -6,6 +6,7 @@ import type {
   Id,
   Invite,
   Membership,
+  Milestone,
   Org,
   Principal,
   Project,
@@ -56,7 +57,7 @@ export interface TicketRepository {
   list(
     orgId: Id,
     projectId: Id,
-    opts?: ListOptions & { status?: string; assigneeId?: Id },
+    opts?: ListOptions & { status?: string; assigneeId?: Id; milestoneId?: Id },
   ): Promise<Ticket[]>
   /** Tickets across the org assigned to a given principal. */
   listAssigned(orgId: Id, assigneeId: Id, opts?: ListOptions): Promise<Ticket[]>
@@ -74,6 +75,12 @@ export interface TicketRepository {
   reKeyForProject(orgId: Id, projectId: Id, oldPrefix: string, newPrefix: string): Promise<number>
   /** Allocate the next sequential ticket number for a project. */
   nextNumber(orgId: Id, projectId: Id): Promise<number>
+}
+
+export interface MilestoneRepository {
+  create(orgId: Id, input: Omit<Milestone, keyof TimestampedId | 'orgId'>): Promise<Milestone>
+  getById(orgId: Id, id: Id): Promise<Milestone | null>
+  listForProject(orgId: Id, projectId: Id, opts?: ListOptions): Promise<Milestone[]>
 }
 
 export interface CommentRepository {
@@ -210,6 +217,7 @@ export interface Repositories {
   tickets: TicketRepository
   ticketLinks: TicketLinkRepository
   watchers: WatcherRepository
+  milestones: MilestoneRepository
   comments: CommentRepository
   attachments: AttachmentRepository
   principals: PrincipalRepository
