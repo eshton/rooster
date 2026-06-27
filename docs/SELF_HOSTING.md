@@ -46,16 +46,23 @@ Rooster uses **two** sets of tables in the same database:
    > prefix moved from teams to projects, and ticket numbering is now per
    > project. Migration 0007 adds `projects.key` (nullable) + `projects.ticket_seq`
    > but **cannot backfill them** — a fresh install is fine, but an existing
-   > database needs a one-time data fix: set each project's `key` to a unique
-   > 3–5 char prefix and set its `ticket_seq` to the highest existing ticket
-   > number in that project, e.g.
-   > ```sql
-   > UPDATE projects SET key = 'ROOST' WHERE id = '…';
-   > UPDATE projects SET ticket_seq =
-   >   (SELECT COALESCE(MAX(number), 0) FROM tickets WHERE tickets.project_id = projects.id)
-   >   WHERE key IS NOT NULL;
+   > database needs a one-time data fix (until a project has a non-null `key`,
+   > tickets can't be filed in it). Run the bundled backfill once, after
+   > `db:migrate`:
+   >
+   > ```bash
+   > # preview the plan first (writes nothing):
+   > DRY_RUN=1 DATABASE_URL=… pnpm --filter @rooster/db db:backfill-project-keys
+   >
+   > # pin keys per project (by name or id), or omit to auto-derive:
+   > ROOSTER_PROJECT_KEYS='{"Rooster":"ROOST","astonagent":"ASA"}' \
+   >   DATABASE_URL=… pnpm --filter @rooster/db db:backfill-project-keys
    > ```
-   > Until a project has a non-null `key`, new tickets can't be filed in it.
+   >
+   > It assigns each keyless project a unique 3–5 char key and advances its
+   > `ticket_seq` past any existing ticket that shares the new prefix, so reusing
+   > a project's old prefix continues its numbering while a fresh key starts at 1.
+   > Idempotent — already-keyed projects are skipped.
 
 2. **Auth tables** (user, session, account, oauth*, …) — owned and migrated by
    **better-auth itself**. On Postgres:
