@@ -219,6 +219,62 @@ describe('identity bridge', () => {
     const fallback = await humanIdentityFromSessionEmail(db.repositories, 'ada@multi.test', 'nope')
     expect(fallback?.orgId).toBe(orgA.id)
   })
+
+  it('resolveMcpIdentity selects the workspace from the desired org (X-Rooster-Org)', async () => {
+    const orgA = await db.repositories.orgs.create({
+      slug: 'ma',
+      name: 'MA',
+      enrollmentPolicy: 'open',
+    })
+    const orgB = await db.repositories.orgs.create({
+      slug: 'mb',
+      name: 'MB',
+      enrollmentPolicy: 'open',
+    })
+    const pA = await db.repositories.principals.create(orgA.id, {
+      type: 'user',
+      displayName: 'Ada',
+    })
+    const user = await db.repositories.users.create({
+      principalId: pA.id,
+      email: 'ada@mcp.test',
+      name: 'Ada',
+      avatarUrl: null,
+    })
+    await db.repositories.principals.linkUser(orgA.id, pA.id, user.id)
+    const pB = await db.repositories.principals.create(orgB.id, {
+      type: 'user',
+      displayName: 'Ada',
+      userId: user.id,
+    })
+    const fakeAuth = {
+      api: {
+        getMcpUser: async () => ({
+          id: 'acct-mcp',
+          email: 'ada@mcp.test',
+          name: 'Ada',
+          clientId: 'c',
+          scopes: '',
+        }),
+      },
+    } as never
+    const at = (v: unknown) => v as { orgId: string; principalId: string }
+
+    // Default → home org (A).
+    expect(at(await resolveMcpIdentity(fakeAuth, db.repositories, new Headers())).orgId).toBe(
+      orgA.id,
+    )
+    // Desired org B → that org's principal.
+    const inB = at(
+      await resolveMcpIdentity(fakeAuth, db.repositories, new Headers(), null, orgB.id),
+    )
+    expect(inB.orgId).toBe(orgB.id)
+    expect(inB.principalId).toBe(pB.id)
+    // Unknown org → falls back to home.
+    expect(
+      at(await resolveMcpIdentity(fakeAuth, db.repositories, new Headers(), null, 'nope')).orgId,
+    ).toBe(orgA.id)
+  })
 })
 
 // --- real OAuth 2.1 server (memory adapter) ---------------------------------

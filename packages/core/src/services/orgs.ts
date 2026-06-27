@@ -41,6 +41,20 @@ export interface OrgService {
    */
   bootstrap(input: BootstrapOrgInput): Promise<BootstrapResult>
   get(actor: Actor): Promise<Org>
+  /**
+   * The workspaces (orgs) the calling principal's account belongs to — for an
+   * agent acting on behalf of a multi-workspace human to discover and choose
+   * which to act in (paired with the `X-Rooster-Org` request header).
+   */
+  listWorkspaces(actor: Actor): Promise<Workspace[]>
+}
+
+export interface Workspace {
+  orgId: string
+  slug: string
+  name: string
+  /** True for the workspace the caller is currently acting in. */
+  current: boolean
 }
 
 export function createOrgService(repos: Repositories): OrgService {
@@ -98,6 +112,22 @@ export function createOrgService(repos: Repositories): OrgService {
       const org = await repos.orgs.getById(actor.orgId)
       if (!org) throw new ConflictError('Actor org no longer exists')
       return org
+    },
+
+    async listWorkspaces(actor) {
+      const principal = await repos.principals.findById(actor.principalId)
+      const userId = principal?.userId ?? null
+      // Agents are bound to one org; humans may have a principal per org.
+      const principals = userId
+        ? await repos.principals.listByUserId(userId)
+        : principal
+          ? [principal]
+          : []
+      const orgIds = [...new Set(principals.map((p) => p.orgId))]
+      const orgs = await Promise.all(orgIds.map((id) => repos.orgs.getById(id)))
+      return orgs
+        .filter((o): o is Org => o !== null)
+        .map((o) => ({ orgId: o.id, slug: o.slug, name: o.name, current: o.id === actor.orgId }))
     },
   }
 }

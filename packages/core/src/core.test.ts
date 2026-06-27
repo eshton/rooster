@@ -729,6 +729,16 @@ describe('crow notifier', () => {
   })
 })
 
+// --- workspaces -------------------------------------------------------------
+
+describe('listWorkspaces', () => {
+  it('lists the orgs the account belongs to, marking the current one', async () => {
+    const { org, owner } = await bootstrap()
+    const ws = await services.orgs.listWorkspaces(owner)
+    expect(ws).toEqual([{ orgId: org.id, slug: 'acme', name: 'Acme', current: true }])
+  })
+})
+
 // --- watchers + notifications -----------------------------------------------
 
 describe('watchers', () => {

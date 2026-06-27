@@ -139,11 +139,14 @@ export function createApp(ctx: ServerContext): Hono {
     const req = c.req.raw
     try {
       const clientInfo = await extractClientInfo(req)
+      // A multi-workspace human can select which org to act in per request.
+      const desiredOrgId = req.headers.get('x-rooster-org')
       const identity = await resolveMcpIdentity(
         ctx.auth,
         ctx.db.repositories,
         req.headers,
         clientInfo,
+        desiredOrgId,
       )
       if (!identity) {
         return new Response(JSON.stringify({ error: 'unauthorized' }), {

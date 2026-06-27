@@ -165,6 +165,18 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'list_workspaces',
+    {
+      title: 'List workspaces',
+      description:
+        'List the workspaces (orgs) your account belongs to, marking the current one. ' +
+        "To act in another, send its orgId in the 'X-Rooster-Org' request header.",
+      inputSchema: {},
+    },
+    async () => runTool(() => services.orgs.listWorkspaces(actor)),
+  )
+
+  server.registerTool(
     'create_team',
     {
       title: 'Create team',

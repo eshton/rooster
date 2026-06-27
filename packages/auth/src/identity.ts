@@ -87,6 +87,11 @@ export async function resolveMcpIdentity(
   repos: Repositories,
   headers: Headers,
   clientInfo?: ClientInfo | null,
+  /**
+   * Which workspace a multi-org human acts in (from the `X-Rooster-Org` header).
+   * Falls back to the account's home org when unset or not a member there.
+   */
+  desiredOrgId?: string | null,
 ): Promise<ActorIdentity | ProvisionalIdentity | null> {
   const account = await auth.api.getMcpUser({ headers })
   if (!account) return null
@@ -99,11 +104,17 @@ export async function resolveMcpIdentity(
     if (byEmail) user = await repos.users.linkAuthUserId(byEmail.id, account.id)
   }
   if (user) {
-    const principal = await repos.principals.findById(user.principalId)
-    if (principal) {
+    // A human's account may belong to several orgs (one principal each); pick
+    // the requested workspace, else the home principal, else the first.
+    const principals = await principalsForUser(repos, user)
+    const chosen =
+      (desiredOrgId && principals.find((p) => p.orgId === desiredOrgId)) ??
+      principals.find((p) => p.id === user.principalId) ??
+      principals[0]
+    if (chosen) {
       return {
-        orgId: principal.orgId,
-        principalId: user.principalId,
+        orgId: chosen.orgId,
+        principalId: chosen.id,
         clientInfo: clientInfo ?? null,
       }
     }
