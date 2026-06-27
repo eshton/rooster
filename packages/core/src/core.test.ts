@@ -4,7 +4,7 @@ import type { Role } from '@rooster/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Actor } from './actor.js'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from './errors.js'
-import type { CrowEvent } from './notify.js'
+import type { CrowEvent, NotificationEvent } from './notify.js'
 import { provisionTenant } from './onboarding.js'
 import { authorize, can } from './permissions.js'
 import { createServices, type Services } from './services/index.js'
@@ -726,6 +726,56 @@ describe('crow notifier', () => {
     const ticket = await boom.tickets.create(owner, { projectId: project.id, title: 'x' })
     const res = await boom.tickets.crow(owner, ticket.id)
     expect(res.ticket.id).toBe(ticket.id)
+  })
+})
+
+// --- watchers + notifications -----------------------------------------------
+
+describe('watchers', () => {
+  it('watch/unwatch is idempotent and powers listWatchers + myWatches', async () => {
+    const { org, owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'follow me' })
+    const bob = await makeUser(org.id, owner, 'member')
+
+    await services.watchers.watch(bob, { ticketId: t.id })
+    await services.watchers.watch(bob, { ticketId: t.id }) // idempotent
+    expect(await services.watchers.listWatchers(owner, t.id)).toHaveLength(1)
+    expect((await services.watchers.myWatches(bob)).map((x) => x.id)).toEqual([t.id])
+
+    expect(await services.watchers.unwatch(bob, { ticketId: t.id })).toEqual({ removed: true })
+    expect(await services.watchers.myWatches(bob)).toEqual([])
+  })
+
+  it('notifies watchers minus the actor on status, assignment and comment', async () => {
+    const { org, owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const events: NotificationEvent[] = []
+    const svc = createServices(db.repositories, {
+      crowNotifier: { notify: (e) => void events.push(e) },
+    })
+    const bob = await makeUser(org.id, owner, 'member')
+    const t = await svc.tickets.create(owner, { projectId: project.id, title: 'x' })
+    await svc.watchers.watch(owner, { ticketId: t.id })
+    await svc.watchers.watch(bob, { ticketId: t.id })
+
+    await svc.tickets.changeStatus(owner, { ticketId: t.id, status: 'in_progress' })
+    expect(events.find((e) => e.kind === 'status')?.recipientIds).toEqual([bob.principalId])
+
+    await svc.comments.create(bob, { ticketId: t.id, body: 'hi' })
+    expect(events.find((e) => e.kind === 'comment')?.recipientIds).toEqual([owner.principalId])
+  })
+
+  it('auto-follows the assignee on assignment', async () => {
+    const { org, owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'x' })
+    const bob = await makeUser(org.id, owner, 'member')
+
+    await services.tickets.assign(owner, { ticketId: t.id, assigneeId: bob.principalId })
+    expect((await services.watchers.listWatchers(owner, t.id)).map((w) => w.principalId)).toEqual([
+      bob.principalId,
+    ])
   })
 })
 

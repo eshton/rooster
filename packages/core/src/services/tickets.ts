@@ -27,6 +27,7 @@ import {
   updateTicketInput,
   z,
 } from './deps.js'
+import { emitToWatchers } from './watchers.js'
 
 /** A ticket link seen from one ticket's perspective (inverse types resolved). */
 export type RelatedRelation = 'blocks' | 'blocked_by' | 'relates' | 'duplicates' | 'duplicated_by'
@@ -396,6 +397,11 @@ export function createTicketService(
         before: { status: before.status },
         after: { status: after.status },
       })
+      await emitToWatchers(repos, crowNotifier, actor, after, {
+        kind: 'status',
+        from: before.status,
+        to: after.status,
+      })
       return after
     },
 
@@ -408,12 +414,20 @@ export function createTicketService(
       const after = await repos.tickets.update(actor.orgId, input.ticketId, {
         assigneeId: input.assigneeId,
       })
+      // The assignee follows their own work automatically.
+      if (input.assigneeId) {
+        await repos.watchers.add(actor.orgId, input.ticketId, input.assigneeId)
+      }
       await recordAudit(repos, actor, {
         action: 'ticket.assign',
         targetType: 'ticket',
         targetId: input.ticketId,
         before: { assigneeId: before.assigneeId },
         after: { assigneeId: after.assigneeId },
+      })
+      await emitToWatchers(repos, crowNotifier, actor, after, {
+        kind: 'assigned',
+        assigneeId: after.assigneeId,
       })
       return after
     },
@@ -433,12 +447,14 @@ export function createTicketService(
       if (crowNotifier) {
         try {
           await crowNotifier.notify({
+            kind: 'crow',
             orgId: actor.orgId,
             ticketId: ticket.id,
             ticketKey: ticket.key,
             title: ticket.title,
             assigneeId: ticket.assigneeId,
             byPrincipalId: actor.principalId,
+            recipientIds: ticket.assigneeId ? [ticket.assigneeId] : [],
           })
         } catch {
           // best-effort delivery; the audited crow already succeeded

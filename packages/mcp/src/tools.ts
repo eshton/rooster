@@ -26,6 +26,7 @@ import {
   ticketStatusSchema,
   unlinkTicketsInput,
   updateTicketInput,
+  watchTicketInput,
 } from '@rooster/schema'
 import { z } from 'zod'
 import { errorResult, jsonResult, runTool } from './result.js'
@@ -398,6 +399,48 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { ticketId: z.uuid() },
     },
     async ({ ticketId }) => runTool(() => services.tickets.listLinks(actor, ticketId)),
+  )
+
+  server.registerTool(
+    'watch_ticket',
+    {
+      title: 'Watch ticket',
+      description:
+        'Follow a ticket — you (or your agent) get notified on status, assignee, and comment ' +
+        'changes. Idempotent. Being assigned or commenting also auto-follows.',
+      inputSchema: watchTicketInput.shape,
+    },
+    async (args) => runTool(() => services.watchers.watch(actor, args)),
+  )
+
+  server.registerTool(
+    'unwatch_ticket',
+    {
+      title: 'Unwatch ticket',
+      description: 'Stop following a ticket.',
+      inputSchema: watchTicketInput.shape,
+    },
+    async (args) => runTool(() => services.watchers.unwatch(actor, args)),
+  )
+
+  server.registerTool(
+    'list_watchers',
+    {
+      title: 'List watchers',
+      description: 'List the principals following a ticket.',
+      inputSchema: { ticketId: z.uuid() },
+    },
+    async ({ ticketId }) => runTool(() => services.watchers.listWatchers(actor, ticketId)),
+  )
+
+  server.registerTool(
+    'my_watches',
+    {
+      title: 'My watched tickets',
+      description: 'List the tickets you (the calling principal) are following.',
+      inputSchema: {},
+    },
+    async () => runTool(() => services.watchers.myWatches(actor)),
   )
 
   server.registerTool(

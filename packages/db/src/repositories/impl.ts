@@ -14,6 +14,7 @@ import type {
   Ticket,
   TicketLink,
   User,
+  Watcher,
 } from '@rooster/schema'
 import { and, desc, eq, isNull, or, sql } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
@@ -72,6 +73,7 @@ const toTicket = (r: Rows['tickets']): Ticket =>
   }) as Ticket
 const toComment = (r: Rows['comments']): Comment => r as Comment
 const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
+const toWatcher = (r: Rows['ticketWatchers']): Watcher => r as Watcher
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
 const toAudit = (r: Rows['auditLog']): AuditLog => ({
   ...r,
@@ -471,6 +473,67 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           )
           .returning({ id: s.ticketLinks.id })
         return rows.length > 0
+      },
+    },
+
+    watchers: {
+      async add(orgId, ticketId, principalId) {
+        const existing = first(
+          (
+            await db
+              .select()
+              .from(s.ticketWatchers)
+              .where(
+                and(
+                  eq(s.ticketWatchers.orgId, orgId),
+                  eq(s.ticketWatchers.ticketId, ticketId),
+                  eq(s.ticketWatchers.principalId, principalId),
+                ),
+              )
+              .limit(1)
+          ).map(toWatcher),
+        )
+        if (existing) return existing
+        const ts = now()
+        const [row] = await db
+          .insert(s.ticketWatchers)
+          .values({ id: newId(), orgId, ticketId, principalId, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toWatcher(row!)
+      },
+      async remove(orgId, ticketId, principalId) {
+        const rows = await db
+          .delete(s.ticketWatchers)
+          .where(
+            and(
+              eq(s.ticketWatchers.orgId, orgId),
+              eq(s.ticketWatchers.ticketId, ticketId),
+              eq(s.ticketWatchers.principalId, principalId),
+            ),
+          )
+          .returning({ id: s.ticketWatchers.id })
+        return rows.length > 0
+      },
+      async listForTicket(orgId, ticketId) {
+        return (
+          await db
+            .select()
+            .from(s.ticketWatchers)
+            .where(and(eq(s.ticketWatchers.orgId, orgId), eq(s.ticketWatchers.ticketId, ticketId)))
+            .orderBy(s.ticketWatchers.createdAt)
+        ).map(toWatcher)
+      },
+      async listWatchedTicketIds(orgId, principalId, opts) {
+        return (
+          await db
+            .select({ ticketId: s.ticketWatchers.ticketId })
+            .from(s.ticketWatchers)
+            .where(
+              and(eq(s.ticketWatchers.orgId, orgId), eq(s.ticketWatchers.principalId, principalId)),
+            )
+            .orderBy(desc(s.ticketWatchers.createdAt))
+            .limit(limitOf(opts))
+        ).map((r) => r.ticketId)
       },
     },
 

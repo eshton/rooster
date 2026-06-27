@@ -90,6 +90,9 @@ not the client.
   "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't
   form a cycle. list_links reports a ticket's relations from its own viewpoint.
 - crow — wake/notify a ticket's assignee.
+- watch_ticket / unwatch_ticket / list_watchers / my_watches — follow a ticket to
+  be notified on its status/assignee/comment changes (delivered via the crow
+  webhook). Being assigned or commenting auto-follows.
 - invite_member — invite a human teammate by email (admin). create_invite —
   mint a shareable join code (admin). read_audit — read the audit log (admin).
 

@@ -184,6 +184,15 @@ export const commentSchema = z.object({
 })
 export type Comment = z.infer<typeof commentSchema>
 
+/** A principal following a ticket — notified on status/assignee/comment changes. */
+export const watcherSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  ticketId: idSchema,
+  principalId: idSchema,
+})
+export type Watcher = z.infer<typeof watcherSchema>
+
 /**
  * A shareable workspace join code. An orgless account redeems it to join the
  * org at `role`. Bounded by `maxUses` and an optional `expiresAt`.

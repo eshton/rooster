@@ -11,6 +11,7 @@ import { createOrgService, type OrgService } from './orgs.js'
 import { createProjectService, type ProjectService } from './projects.js'
 import { createTeamService, type TeamService } from './teams.js'
 import { createTicketService, type TicketService } from './tickets.js'
+import { createWatcherService, type WatcherService } from './watchers.js'
 
 export interface Services {
   orgs: OrgService
@@ -19,6 +20,7 @@ export interface Services {
   tickets: TicketService
   comments: CommentService
   attachments: AttachmentService
+  watchers: WatcherService
   agents: AgentService
   members: MemberService
   invites: InviteService
@@ -38,8 +40,9 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     teams: createTeamService(repos),
     projects: createProjectService(repos),
     tickets: createTicketService(repos, deps.crowNotifier),
-    comments: createCommentService(repos),
+    comments: createCommentService(repos, deps.crowNotifier),
     attachments: createAttachmentService(repos),
+    watchers: createWatcherService(repos),
     agents: createAgentService(repos),
     members: createMemberService(repos),
     invites: createInviteService(repos),
@@ -59,4 +62,5 @@ export type {
   ProjectService,
   TeamService,
   TicketService,
+  WatcherService,
 }

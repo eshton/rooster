@@ -96,6 +96,10 @@ export const commentInput = z.object({
 })
 export type CommentInput = z.infer<typeof commentInput>
 
+/** Follow / unfollow a ticket (subscribe to its activity notifications). */
+export const watchTicketInput = z.object({ ticketId: idSchema })
+export type WatchTicketInput = z.infer<typeof watchTicketInput>
+
 /** Attach a link to a ticket. Files aren't hosted by Rooster — pass a URL. */
 export const addAttachmentInput = z.object({
   ticketId: idSchema,

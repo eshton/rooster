@@ -13,6 +13,7 @@ import type {
   Ticket,
   TicketLink,
   User,
+  Watcher,
 } from '@rooster/schema'
 
 /**
@@ -86,6 +87,17 @@ export interface AttachmentRepository {
   getById(orgId: Id, id: Id): Promise<Attachment | null>
   /** Delete an attachment by id; true if a row was removed. */
   delete(orgId: Id, id: Id): Promise<boolean>
+}
+
+export interface WatcherRepository {
+  /** Idempotently add a watcher; returns the (existing or new) row. */
+  add(orgId: Id, ticketId: Id, principalId: Id): Promise<Watcher>
+  /** Remove a watcher; true if a row was removed. */
+  remove(orgId: Id, ticketId: Id, principalId: Id): Promise<boolean>
+  /** Watchers of a ticket. */
+  listForTicket(orgId: Id, ticketId: Id): Promise<Watcher[]>
+  /** Tickets a principal watches (most-recent first). */
+  listWatchedTicketIds(orgId: Id, principalId: Id, opts?: ListOptions): Promise<Id[]>
 }
 
 export interface TicketLinkRepository {
@@ -197,6 +209,7 @@ export interface Repositories {
   projects: ProjectRepository
   tickets: TicketRepository
   ticketLinks: TicketLinkRepository
+  watchers: WatcherRepository
   comments: CommentRepository
   attachments: AttachmentRepository
   principals: PrincipalRepository

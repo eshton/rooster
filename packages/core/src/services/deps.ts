@@ -37,6 +37,8 @@ export type {
   UnlinkTicketsInput,
   UpdateTicketInput,
   User,
+  Watcher,
+  WatchTicketInput,
 } from '@rooster/schema'
 export {
   addAttachmentInput,
@@ -57,5 +59,6 @@ export {
   setProjectKeyInput,
   unlinkTicketsInput,
   updateTicketInput,
+  watchTicketInput,
 } from '@rooster/schema'
 export { z } from 'zod'
