@@ -1,6 +1,7 @@
 import type { Actor, OrgMember } from '@rooster/core'
 import type {
   Agent,
+  Attachment,
   AuditLog,
   Comment,
   Org,
@@ -628,6 +629,7 @@ export function projectBoard(data: {
 export function ticketDetail(data: {
   ticket: Ticket
   comments: Comment[]
+  attachments: Attachment[]
   actor: Actor
   canWrite: boolean
   allowedStatuses: readonly TicketStatus[]
@@ -686,6 +688,28 @@ export function ticketDetail(data: {
         <button class="btn sm" type="submit">Comment</button>
       </form>`
     : ''
+  const attachments = data.attachments.length
+    ? data.attachments
+        .map(
+          (a) =>
+            `<div class="card"><div class="row" style="align-items:center">
+              <a href="${esc(a.url)}" rel="noopener noreferrer nofollow" target="_blank">🔗 ${esc(a.label ?? a.url)}</a>
+              ${
+                data.canWrite
+                  ? `<form method="post" action="/app/tickets/${esc(t.key)}/attachments/${esc(a.id)}/remove" style="margin:0"><button class="btn sm ghost" type="submit">Remove</button></form>`
+                  : ''
+              }
+            </div></div>`,
+        )
+        .join('')
+    : '<div class="empty">📎 No attachments.</div>'
+  const attachmentForm = data.canWrite
+    ? `<form method="post" action="/app/tickets/${esc(t.key)}/attachments" class="actions">
+        <input name="url" type="url" placeholder="https://… (link to a log, design, doc)" required maxlength="2000">
+        <input name="label" placeholder="Label (optional)" maxlength="200">
+        <button class="btn sm" type="submit">Attach link</button>
+      </form>`
+    : ''
   const controls = data.canWrite
     ? `<fieldset><legend>Workflow</legend>${statusForm}${assignForm}</fieldset>${editForm}`
     : ''
@@ -703,6 +727,7 @@ export function ticketDetail(data: {
     ${t.description ? `<div class="card md-body">${renderMarkdown(t.description)}</div>` : ''}
     ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}
     ${controls}
+    <h2>Attachments</h2>${attachments}${attachmentForm}
     <h2>Comments</h2>${comments}${commentForm}`,
   )
 }

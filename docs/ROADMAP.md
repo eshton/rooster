@@ -20,8 +20,8 @@ field", "Add an MCP tool").
 | 2 | Start date | fields | S | backlog |
 | 3 | Milestones / cycles (sprints) | planning | M | backlog |
 | 4 | Multiple assignees | collaboration | M | backlog |
-| 5 | Ticket relations (blocks / relates / duplicates) | linking | M | backlog |
-| 6 | Attachments (links, then files) | content | M | backlog |
+| 5 | Ticket relations (blocks / relates / duplicates) | linking | M | ✅ done |
+| 6 | Attachments (links, then files) | content | M | ✅ links done |
 | 7 | Watchers + notifications | collaboration | M | backlog |
 | 8 | Custom fields | extensibility | L | backlog |
 | 9 | Per-project configurable workflows | workflow | L | backlog |
@@ -70,21 +70,46 @@ tables + migration + repo + a `MilestoneService`; add nullable
 `assigneeId` as a derived "primary" for back-compat, or deprecate.
 **Suggested:** label `roadmap,collaboration`, priority `medium`.
 
-## 5. Ticket relations — `linking` · M
+## 5. Ticket relations — `linking` · M · ✅ done
 **Why:** express *blocks / blocked-by / relates-to / duplicates* beyond the
 existing parent/child hierarchy.
-**Scope:** new `ticket_links` table (fromTicketId, toTicketId, type) + repo +
-service with cycle/duplicate guards (reuse the acyclic logic in
-`tickets.ts`); MCP tools `link_tickets` / `list_links`.
-**Suggested:** label `roadmap,linking`, priority `medium`.
+**Shipped:** `ticket_links` table (org-scoped, unique on org+from+to+type) +
+repo + service folded into `tickets.ts`. A link is one directed edge; the
+inverse is derived on read (blocks⇄blocked_by, duplicates⇄duplicated_by, relates
+symmetric). Guards reject self-links, duplicates (incl. the relates mirror), and
+cycles in the blocks graph. MCP tools `link_tickets` / `unlink_tickets` /
+`list_links` (the last resolves relations from the queried ticket's viewpoint).
 
-## 6. Attachments — `content` · M
+## 6. Attachments — `content` · M · ✅ links done
 **Why:** attach context (logs, designs, links) to a ticket.
-**Scope:** start **links-only** — `attachments` table (ticketId, url, label) +
-repo + service + `add_attachment`/`list_attachments` tools. File upload (blob
-storage) is a later, platform-specific follow-up; note it explicitly so we don't
-imply uploads work.
-**Suggested:** label `roadmap,content`, priority `low`.
+**Shipped (links-only):** `attachments` table (ticketId, addedById, url, label) +
+repo + `AttachmentService` + `add_attachment` / `list_attachments` /
+`remove_attachment` tools, surfaced on the dashboard ticket detail. Rooster does
+not host files — an attachment always references a URL.
+
+### Direct file upload by agents — assessment (not built)
+**Can agents upload a file directly?** Not cleanly today, and deliberately so.
+- **Over MCP, tool args are JSON.** The only in-band way to ship bytes is
+  base64 in a tool argument. That bloats the request, fights MCP/proxy size
+  limits, and would land the blob in the portable DB (SQLite/Turso/PG) as
+  TEXT/BLOB — exactly the row-size and replication problems the JSON-as-TEXT
+  convention avoids. Viable only for tiny files; not recommended as the primary
+  path.
+- **The clean pattern is a two-step presigned upload.** A new tool
+  (`request_upload`) returns a short-lived presigned `PUT` URL from object
+  storage (S3 / Cloudflare R2 / Vercel Blob); the agent uploads bytes directly
+  to storage, then calls `add_attachment` with the resulting URL. The blob never
+  transits Rooster, and the existing links-only model already records the final
+  URL — **so no schema change is needed**, only storage config + the issuing
+  tool.
+- **But it's platform-specific** (each deploy target has a different blob store
+  + credentials), which is why it stays a follow-up: it breaks the "one codebase,
+  any platform" property unless gated behind a storage adapter interface
+  (`putObject`/`presign`) with a no-op default that keeps links-only working
+  everywhere.
+**Recommended follow-up:** define a `BlobStore` seam (like the `CrowNotifier`/
+`EmailSender` seams), implement R2 + S3 adapters, add `request_upload`, and keep
+`add_attachment(url)` as the registration step. Until then: links only.
 
 ## 7. Watchers + notifications — `collaboration` · M
 **Why:** let people/agents follow a ticket and be notified on changes — a

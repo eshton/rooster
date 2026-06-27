@@ -93,6 +93,18 @@ export const commentInput = z.object({
 })
 export type CommentInput = z.infer<typeof commentInput>
 
+/** Attach a link to a ticket. Files aren't hosted by Rooster — pass a URL. */
+export const addAttachmentInput = z.object({
+  ticketId: idSchema,
+  url: z.url().max(2000),
+  label: z.string().min(1).max(200).optional(),
+})
+export type AddAttachmentInput = z.infer<typeof addAttachmentInput>
+
+/** Remove an attachment by its id. */
+export const removeAttachmentInput = z.object({ attachmentId: idSchema })
+export type RemoveAttachmentInput = z.infer<typeof removeAttachmentInput>
+
 /** Create a directed relationship from one ticket to another. */
 export const linkTicketsInput = z.object({
   fromTicketId: idSchema,

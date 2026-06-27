@@ -1,5 +1,6 @@
 import type {
   Agent,
+  Attachment,
   AuditLog,
   Comment,
   Id,
@@ -71,6 +72,14 @@ export interface TicketRepository {
 export interface CommentRepository {
   create(orgId: Id, input: Omit<Comment, keyof TimestampedId | 'orgId'>): Promise<Comment>
   listForTicket(orgId: Id, ticketId: Id, opts?: ListOptions): Promise<Comment[]>
+}
+
+export interface AttachmentRepository {
+  create(orgId: Id, input: Omit<Attachment, keyof TimestampedId | 'orgId'>): Promise<Attachment>
+  listForTicket(orgId: Id, ticketId: Id, opts?: ListOptions): Promise<Attachment[]>
+  getById(orgId: Id, id: Id): Promise<Attachment | null>
+  /** Delete an attachment by id; true if a row was removed. */
+  delete(orgId: Id, id: Id): Promise<boolean>
 }
 
 export interface TicketLinkRepository {
@@ -183,6 +192,7 @@ export interface Repositories {
   tickets: TicketRepository
   ticketLinks: TicketLinkRepository
   comments: CommentRepository
+  attachments: AttachmentRepository
   principals: PrincipalRepository
   users: UserRepository
   agents: AgentRepository

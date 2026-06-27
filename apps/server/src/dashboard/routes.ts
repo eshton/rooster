@@ -243,13 +243,15 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   app.get('/app/tickets/:id', (c) =>
     page(c, async (actor) => {
       const ticket = await resolveTicket(actor, c.req.param('id'))
-      const [comments, members] = await Promise.all([
+      const [comments, attachments, members] = await Promise.all([
         ctx.services.comments.list(actor, ticket.id),
+        ctx.services.attachments.list(actor, ticket.id),
         ctx.services.members.listOrg(actor),
       ])
       return v.ticketDetail({
         ticket,
         comments,
+        attachments,
         actor,
         canWrite: can(actor, 'ticket:write'),
         allowedStatuses: allowedTransitions(ticket.status),
@@ -392,6 +394,30 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       await ctx.services.comments.create(actor, {
         ticketId: ticket.id,
         body: String(body.body ?? ''),
+      })
+      return `/app/tickets/${ticket.key}`
+    }),
+  )
+
+  app.post('/app/tickets/:id/attachments', (c) =>
+    action(c, async (actor) => {
+      const ticket = await resolveTicket(actor, c.req.param('id'))
+      const body = await c.req.parseBody()
+      const label = String(body.label ?? '').trim()
+      await ctx.services.attachments.add(actor, {
+        ticketId: ticket.id,
+        url: String(body.url ?? ''),
+        label: label === '' ? undefined : label,
+      })
+      return `/app/tickets/${ticket.key}`
+    }),
+  )
+
+  app.post('/app/tickets/:id/attachments/:attachmentId/remove', (c) =>
+    action(c, async (actor) => {
+      const ticket = await resolveTicket(actor, c.req.param('id'))
+      await ctx.services.attachments.remove(actor, {
+        attachmentId: c.req.param('attachmentId'),
       })
       return `/app/tickets/${ticket.key}`
     }),

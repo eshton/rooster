@@ -155,6 +155,24 @@ export const ticketLinkSchema = z.object({
 })
 export type TicketLink = z.infer<typeof ticketLinkSchema>
 
+/**
+ * A link attached to a ticket (logs, designs, docs). Stored as a URL + optional
+ * label — Rooster does not host files; an attachment always references a
+ * resource by URL. A future direct-upload path would store the blob in
+ * platform object storage and record the resulting URL here, so this shape is
+ * forward-compatible.
+ */
+export const attachmentSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  ticketId: idSchema,
+  /** Principal who attached it. */
+  addedById: idSchema,
+  url: z.url().max(2000),
+  label: z.string().max(200).nullable(),
+})
+export type Attachment = z.infer<typeof attachmentSchema>
+
 export const commentSchema = z.object({
   ...base,
   orgId: idSchema,

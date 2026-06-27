@@ -123,6 +123,20 @@ describe('MCP server end-to-end', () => {
 
     await call('unlink_tickets', { fromTicketId: created.id, toTicketId: other.id, type: 'blocks' })
     expect(payload((await call('list_links', { ticketId: other.id })) as never)).toEqual([])
+
+    // Attachments: add a link, list it, remove it.
+    const att = payload(
+      (await call('add_attachment', {
+        ticketId: created.id,
+        url: 'https://example.com/design.png',
+        label: 'Design',
+      })) as never,
+    )
+    expect(att.label).toBe('Design')
+    const atts = payload((await call('list_attachments', { ticketId: created.id })) as never)
+    expect(atts.map((a: { url: string }) => a.url)).toEqual(['https://example.com/design.png'])
+    await call('remove_attachment', { attachmentId: att.id })
+    expect(payload((await call('list_attachments', { ticketId: created.id })) as never)).toEqual([])
   })
 
   it('surfaces domain errors as isError results, not crashes', async () => {

@@ -414,6 +414,65 @@ describe('ticket links', () => {
   })
 })
 
+// --- attachments -------------------------------------------------------------
+
+describe('attachments', () => {
+  it('adds, lists and removes attachments on a ticket', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const ticket = await services.tickets.create(owner, { projectId: project.id, title: 'T' })
+
+    const added = await services.attachments.add(owner, {
+      ticketId: ticket.id,
+      url: 'https://example.com/build.log',
+      label: 'CI log',
+    })
+    expect(added.url).toBe('https://example.com/build.log')
+    expect(added.label).toBe('CI log')
+    expect(added.addedById).toBe(owner.principalId)
+
+    const list = await services.attachments.list(owner, ticket.id)
+    expect(list.map((a) => a.id)).toEqual([added.id])
+
+    expect(await services.attachments.remove(owner, { attachmentId: added.id })).toEqual({
+      removed: true,
+    })
+    expect(await services.attachments.list(owner, ticket.id)).toEqual([])
+  })
+
+  it('rejects a non-URL, a missing ticket, and removing a missing attachment', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const ticket = await services.tickets.create(owner, { projectId: project.id, title: 'T' })
+
+    await expect(
+      services.attachments.add(owner, { ticketId: ticket.id, url: 'not-a-url' }),
+    ).rejects.toBeInstanceOf(ValidationError)
+    await expect(
+      services.attachments.add(owner, {
+        ticketId: '00000000-0000-4000-8000-000000000000',
+        url: 'https://example.com',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+    await expect(
+      services.attachments.remove(owner, {
+        attachmentId: '00000000-0000-4000-8000-000000000000',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+  })
+
+  it('blocks a viewer from attaching (ticket:write required)', async () => {
+    const { org, owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const ticket = await services.tickets.create(owner, { projectId: project.id, title: 'T' })
+    const viewer = await makeUser(org.id, owner, 'viewer')
+
+    await expect(
+      services.attachments.add(viewer, { ticketId: ticket.id, url: 'https://example.com' }),
+    ).rejects.toBeInstanceOf(ForbiddenError)
+  })
+})
+
 // --- permission enforcement -------------------------------------------------
 
 describe('permission enforcement', () => {

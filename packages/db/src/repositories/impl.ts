@@ -1,5 +1,6 @@
 import type {
   Agent,
+  Attachment,
   AuditLog,
   ClientInfo,
   Comment,
@@ -68,6 +69,7 @@ const toTicket = (r: Rows['tickets']): Ticket =>
   }) as Ticket
 const toComment = (r: Rows['comments']): Comment => r as Comment
 const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
+const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
 const toAudit = (r: Rows['auditLog']): AuditLog => ({
   ...r,
   before: dec<unknown>(r.before, null),
@@ -313,6 +315,45 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .orderBy(s.comments.createdAt)
             .limit(limitOf(opts))
         ).map(toComment)
+      },
+    },
+
+    attachments: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.attachments)
+          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toAttachment(row!)
+      },
+      async listForTicket(orgId, ticketId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.attachments)
+            .where(and(eq(s.attachments.orgId, orgId), eq(s.attachments.ticketId, ticketId)))
+            .orderBy(s.attachments.createdAt)
+            .limit(limitOf(opts))
+        ).map(toAttachment)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.attachments)
+              .where(and(eq(s.attachments.orgId, orgId), eq(s.attachments.id, id)))
+              .limit(1)
+          ).map(toAttachment),
+        )
+      },
+      async delete(orgId, id) {
+        const rows = await db
+          .delete(s.attachments)
+          .where(and(eq(s.attachments.orgId, orgId), eq(s.attachments.id, id)))
+          .returning({ id: s.attachments.id })
+        return rows.length > 0
       },
     },
 

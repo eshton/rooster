@@ -6,6 +6,7 @@ import {
   type Services,
 } from '@rooster/core'
 import {
+  addAttachmentInput,
   agentStatusSchema,
   assignTicketInput,
   changeStatusInput,
@@ -19,6 +20,7 @@ import {
   joinTenantInput,
   linkTicketsInput,
   registerAgentInput,
+  removeAttachmentInput,
   ticketStatusSchema,
   unlinkTicketsInput,
   updateTicketInput,
@@ -269,6 +271,38 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: commentInput.shape,
     },
     async (args) => runTool(() => services.comments.create(actor, args)),
+  )
+
+  server.registerTool(
+    'add_attachment',
+    {
+      title: 'Add attachment',
+      description:
+        'Attach a link to a ticket (logs, designs, docs) by URL, with an optional label. ' +
+        'Rooster does not host files — pass a URL to an externally hosted resource.',
+      inputSchema: addAttachmentInput.shape,
+    },
+    async (args) => runTool(() => services.attachments.add(actor, args)),
+  )
+
+  server.registerTool(
+    'list_attachments',
+    {
+      title: 'List attachments',
+      description: "List a ticket's attachments (links).",
+      inputSchema: { ticketId: z.uuid() },
+    },
+    async ({ ticketId }) => runTool(() => services.attachments.list(actor, ticketId)),
+  )
+
+  server.registerTool(
+    'remove_attachment',
+    {
+      title: 'Remove attachment',
+      description: 'Remove an attachment from a ticket by its id.',
+      inputSchema: removeAttachmentInput.shape,
+    },
+    async (args) => runTool(() => services.attachments.remove(actor, args)),
   )
 
   server.registerTool(

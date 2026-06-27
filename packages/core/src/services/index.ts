@@ -2,6 +2,7 @@ import type { Repositories } from '@rooster/db'
 import { type Actor, type ActorIdentity, resolveActor } from '../actor.js'
 import type { ServiceDeps } from '../notify.js'
 import { type AgentService, createAgentService } from './agents.js'
+import { type AttachmentService, createAttachmentService } from './attachments.js'
 import { type AuditLogService, createAuditLogService } from './auditlog.js'
 import { type CommentService, createCommentService } from './comments.js'
 import { createInviteService, type InviteService } from './invites.js'
@@ -17,6 +18,7 @@ export interface Services {
   projects: ProjectService
   tickets: TicketService
   comments: CommentService
+  attachments: AttachmentService
   agents: AgentService
   members: MemberService
   invites: InviteService
@@ -37,6 +39,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     projects: createProjectService(repos),
     tickets: createTicketService(repos, deps.crowNotifier),
     comments: createCommentService(repos),
+    attachments: createAttachmentService(repos),
     agents: createAgentService(repos),
     members: createMemberService(repos),
     invites: createInviteService(repos),
@@ -47,6 +50,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
 
 export type {
   AgentService,
+  AttachmentService,
   AuditLogService,
   CommentService,
   InviteService,

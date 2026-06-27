@@ -79,6 +79,9 @@ not the client.
 - my_tickets — list tickets assigned to you. find_by_label — by tag.
   search_tickets — free-text search over titles + descriptions.
 - list_subtasks — list a ticket's children.
+- add_attachment / list_attachments / remove_attachment — attach context to a
+  ticket. Links only: Rooster does not host files, so pass a \`url\` to an
+  externally hosted resource (log, design, doc) with an optional label.
 - link_tickets / unlink_tickets / list_links — relate tickets beyond the
   parent/subtask hierarchy: "blocks" (and its derived "blocked_by"),
   "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't

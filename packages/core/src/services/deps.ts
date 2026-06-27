@@ -2,9 +2,11 @@
 // the services validate against, in one place to keep service imports compact.
 
 export type {
+  AddAttachmentInput,
   Agent,
   AgentStatus,
   AssignTicketInput,
+  Attachment,
   ChangeStatusInput,
   Comment,
   CommentInput,
@@ -23,6 +25,7 @@ export type {
   Principal,
   Project,
   RegisterAgentInput,
+  RemoveAttachmentInput,
   Role,
   Team,
   Ticket,
@@ -34,6 +37,7 @@ export type {
   User,
 } from '@rooster/schema'
 export {
+  addAttachmentInput,
   assignTicketInput,
   changeStatusInput,
   commentInput,
@@ -46,6 +50,7 @@ export {
   joinTenantInput,
   linkTicketsInput,
   registerAgentInput,
+  removeAttachmentInput,
   unlinkTicketsInput,
   updateTicketInput,
 } from '@rooster/schema'

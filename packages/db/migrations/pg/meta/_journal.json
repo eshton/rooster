@@ -64,6 +64,13 @@
       "when": 1782558928013,
       "tag": "0008_nebulous_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782561654172,
+      "tag": "0009_wet_stryfe",
+      "breakpoints": true
     }
   ]
 }

@@ -64,6 +64,13 @@
       "when": 1782558926453,
       "tag": "0008_tense_green_goblin",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1782561653101,
+      "tag": "0009_tan_chamber",
+      "breakpoints": true
     }
   ]
 }
