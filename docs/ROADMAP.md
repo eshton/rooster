@@ -32,14 +32,19 @@ field", "Add an MCP tool").
 
 ## 1. Estimates / story points — `fields` · S · ✅ done
 **Why:** size work for planning and velocity.
-**Shipped:** nullable `estimate` (a non-negative `real`, so fractional points
-work) added to `ticketSchema` + both dialect schemas + migrations 0006, the
-`create/updateTicketInput` DTOs, and threaded through `tickets.create` (update
-flows through the generic patch path). Surfaced over MCP automatically via the
-DTO `.shape` on `create_ticket`/`update_ticket`, and in the SSR dashboard
-(create form, edit form, board cards, ticket detail "N pts" chip). Covered by
-`mcp.test.ts` (create + re-size + clear) and `dashboard.test.ts` (form
-round-trip).
+**Shipped:** nullable `estimate` added to `ticketSchema` + both dialect schemas
++ migrations 0006, the `create/updateTicketInput` DTOs, and threaded through
+`tickets.create` (update flows through the generic patch path). Surfaced over
+MCP automatically via the DTO `.shape` on `create_ticket`/`update_ticket`, and
+in the SSR dashboard (create form, edit form, board cards, ticket detail "N pts"
+chip). Covered by `mcp.test.ts` (create + re-size + reject off-scale + clear)
+and `dashboard.test.ts` (form round-trip).
+**Estimation is agent-first:** rather than freeform story points (which diverge
+without a shared velocity baseline), `estimate` is an **enforced** Fibonacci
+*complexity-point* scale `{1,2,3,5,8,13}` anchored to objective signals so any
+agent sizes similar work the same way. Scale + rubric: `ESTIMATE_POINTS` /
+`estimatePointsSchema` (`packages/schema/src/enums.ts`), the `/llms.txt`
+"Estimating work" section, and [`docs/ESTIMATION.md`](ESTIMATION.md).
 
 ## 2. Start date — `fields` · S
 **Why:** model work that has a planned start, not just a deadline; enables

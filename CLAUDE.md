@@ -1,7 +1,9 @@
 # CLAUDE.md — working on Rooster
 
 Orientation for an AI agent (or human) picking up Rooster. Read this first, then
-`README.md` (overview) and `docs/SELF_HOSTING.md` (running it).
+`README.md` (overview) and `docs/SELF_HOSTING.md` (running it). When you file or
+size tickets, follow the estimation rubric in `docs/ESTIMATION.md` (the ticket
+`estimate` is an enforced Fibonacci *complexity-point* scale, not freeform).
 
 ## What Rooster is
 

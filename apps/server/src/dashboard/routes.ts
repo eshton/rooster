@@ -1,6 +1,12 @@
 import { humanIdentityFromSessionEmail, listUserOrgs } from '@rooster/auth'
 import { type Actor, allowedTransitions, CoreError, can } from '@rooster/core'
-import type { AgentStatus, Role, TicketPriority, TicketStatus } from '@rooster/schema'
+import type {
+  AgentStatus,
+  EstimatePoints,
+  Role,
+  TicketPriority,
+  TicketStatus,
+} from '@rooster/schema'
 import type { Context, Hono } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
 import type { ServerContext } from '../context.js'
@@ -203,13 +209,15 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       ? ctx.services.tickets.get(actor, ref)
       : ctx.services.tickets.getByKey(actor, ref.toUpperCase())
 
-  // Parse a story-point estimate from a form field: blank → null (unsized),
-  // otherwise a non-negative finite number (invalid input falls back to null).
-  const estimateOf = (raw: unknown): number | null => {
+  // Parse the estimate form field: blank → null (unsized), otherwise the number.
+  // The dashboard <select> only offers on-scale values; an off-scale value from a
+  // raw POST is left for the DTO/service to reject (the single enforcement point),
+  // so the cast here is safe — it isn't where the scale is validated.
+  const estimateOf = (raw: unknown): EstimatePoints | null => {
     const s = String(raw ?? '').trim()
     if (s === '') return null
     const n = Number(s)
-    return Number.isFinite(n) && n >= 0 ? n : null
+    return (Number.isFinite(n) ? n : null) as EstimatePoints | null
   }
 
   app.get('/app/projects/:id', (c) =>

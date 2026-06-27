@@ -133,15 +133,19 @@ describe('MCP server end-to-end', () => {
     expect(created.dueDate).toBe('2026-07-01')
     expect(created.estimate).toBe(3)
 
-    // update_ticket can re-size (fractional points) and clear the estimate.
-    const resized = payload(
-      (await call('update_ticket', { id: created.id, estimate: 0.5 })) as never,
-    )
-    expect(resized.estimate).toBe(0.5)
+    // update_ticket can re-size on the canonical scale and clear the estimate.
+    const resized = payload((await call('update_ticket', { id: created.id, estimate: 5 })) as never)
+    expect(resized.estimate).toBe(5)
     const cleared = payload(
       (await call('update_ticket', { id: created.id, estimate: null })) as never,
     )
     expect(cleared.estimate).toBe(null)
+
+    // Off-scale estimates are rejected — the scale is enforced, not advisory.
+    const offScale = (await call('update_ticket', { id: created.id, estimate: 7 })) as {
+      isError?: boolean
+    }
+    expect(offScale.isError).toBe(true)
 
     // Status filter: the new ticket is in the initial status, none are 'done'.
     const open = payload(

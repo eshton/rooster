@@ -277,7 +277,7 @@ describe('dashboard (authenticated)', () => {
         priority: 'high',
         labels: 'urgent',
         dueDate: '2026-09-01',
-        estimate: '2.5',
+        estimate: '5',
       }),
     })
     expect(edited.status).toBe(302)
@@ -287,7 +287,7 @@ describe('dashboard (authenticated)', () => {
     ).text()
     expect(detail).toContain('high')
     expect(detail).toContain('2026-09-01')
-    expect(detail).toContain('2.5 pts')
+    expect(detail).toContain('5 pts')
 
     const search = await (
       await app.request(`${base}/app/search?q=Editable`, { headers: { cookie } })

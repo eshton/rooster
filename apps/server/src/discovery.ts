@@ -67,8 +67,9 @@ not the client.
 - list_teams / list_projects / list_tickets / get_ticket — read the board.
   list_tickets accepts optional \`status\` and \`assigneeId\` filters.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related
-  tickets are easy to find, set \`parentId\` for subtasks, and set \`dueDate\`
-  (ISO-8601) when there's a deadline.
+  tickets are easy to find, set \`parentId\` for subtasks, set \`dueDate\`
+  (ISO-8601) when there's a deadline, and set \`estimate\` (complexity points —
+  see "Estimating work" below) when you can size it.
 - update_ticket / change_status / assign_ticket / comment — manage work.
 - my_tickets — list tickets assigned to you. find_by_label — by tag.
   search_tickets — free-text search over titles + descriptions.
@@ -81,6 +82,20 @@ not the client.
 A non-interactive HTTP bootstrap also exists (POST ${base}/onboard with
 { signupToken?, org, founder, team, project, agent? }), optionally gated by a
 signup token. Most agents should prefer the \`create_tenant\` tool above.
+
+## Estimating work
+A ticket's \`estimate\` is a **complexity point** on a fixed Fibonacci scale:
+one of 1, 2, 3, 5, 8, 13 (anything else is rejected). Because agents have no
+shared velocity baseline, the scale is anchored to objective signals so any
+agent sizes similar work the same way. Score **complexity + uncertainty, not
+wall-clock time**:
+- 1  — trivial one-file mechanical change; existing pattern; no design choices.
+- 2  — small; a few files in one layer; clear approach; no new abstractions.
+- 3  — moderate; crosses a few layers following a documented pattern; a few edge cases.
+- 5  — sizable; new component or cross-cutting change with some unknowns.
+- 8  — large; new subsystem or many modules; real design work; broad test surface.
+- 13 — epic or too uncertain to size — split it into subtasks instead.
+The scale is ordinal (gaps widen on purpose); round UP when between two values.
 
 ## Scopes
 Tokens carry scopes that map to permissions (e.g. ticket:read, ticket:write).

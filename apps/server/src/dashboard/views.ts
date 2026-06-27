@@ -9,7 +9,7 @@ import type {
   Ticket,
   TicketStatus,
 } from '@rooster/schema'
-import { TICKET_PRIORITIES, TICKET_STATUSES } from '@rooster/schema'
+import { ESTIMATE_POINTS, TICKET_PRIORITIES, TICKET_STATUSES } from '@rooster/schema'
 
 /** Escape untrusted text for safe HTML interpolation. */
 export function esc(value: unknown): string {
@@ -555,6 +555,16 @@ function priorityOptions(selected: string): string {
   ).join('')
 }
 
+// Estimate is constrained to the canonical Fibonacci scale (see ESTIMATE_RUBRIC)
+// so the form can't produce an off-scale value the service would reject.
+function estimateOptions(selected: number | null): string {
+  const opts = [`<option value=""${selected == null ? ' selected' : ''}>– pts</option>`]
+  for (const p of ESTIMATE_POINTS) {
+    opts.push(`<option value="${p}"${p === selected ? ' selected' : ''}>${p} pts</option>`)
+  }
+  return opts.join('')
+}
+
 export function projectBoard(data: {
   project: Project
   tickets: Ticket[]
@@ -569,7 +579,7 @@ export function projectBoard(data: {
         <input name="labels" placeholder="tags, comma-separated">
         <select name="priority" title="priority">${priorityOptions('none')}</select>
         <input name="dueDate" type="date" title="due date">
-        <input name="estimate" type="number" min="0" step="0.5" placeholder="pts" title="estimate (story points)" style="width:5rem">
+        <select name="estimate" title="estimate (complexity points)">${estimateOptions(null)}</select>
         <button class="btn" type="submit">Create ticket</button>
       </form>`
     : ''
@@ -662,7 +672,7 @@ export function ticketDetail(data: {
           <div class="actions" style="margin:0">
             <select name="priority" title="priority">${priorityOptions(t.priority)}</select>
             <input name="dueDate" type="date" value="${esc(t.dueDate?.slice(0, 10) ?? '')}" title="due date">
-            <input name="estimate" type="number" min="0" step="0.5" value="${t.estimate ?? ''}" placeholder="pts" title="estimate (story points)" style="width:5rem">
+            <select name="estimate" title="estimate (complexity points)">${estimateOptions(t.estimate)}</select>
             <input name="labels" value="${esc(t.labels.join(', '))}" placeholder="tags, comma-separated">
           </div>
           <button class="btn sm" type="submit">Save changes</button>

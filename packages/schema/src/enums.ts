@@ -51,6 +51,43 @@ export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as 
 export const ticketPrioritySchema = z.enum(TICKET_PRIORITIES)
 export type TicketPriority = z.infer<typeof ticketPrioritySchema>
 
+/**
+ * Ticket effort estimate scale: Fibonacci **complexity points**.
+ *
+ * Estimation here is done mostly by *agents*, which (unlike a human team) share
+ * no velocity baseline — so a freeform number would diverge between callers. A
+ * fixed discrete scale anchored to objective signals makes estimates
+ * reproducible: similarly-shaped work gets the same score regardless of who or
+ * what estimates it. Score **complexity + uncertainty, not wall-clock time**
+ * (estimator speed varies; complexity is intrinsic to the work). The full
+ * rubric with worked examples lives in `docs/ESTIMATION.md`.
+ */
+export const ESTIMATE_POINTS = [1, 2, 3, 5, 8, 13] as const
+export type EstimatePoints = (typeof ESTIMATE_POINTS)[number]
+
+/**
+ * Compact rubric surfaced in the MCP tool schema (via `.describe()`) so an
+ * agent calling `create_ticket`/`update_ticket` reads the rules inline. Keep in
+ * sync with `docs/ESTIMATION.md`.
+ */
+export const ESTIMATE_RUBRIC =
+  'Effort estimate as Fibonacci COMPLEXITY points — one of 1, 2, 3, 5, 8, 13. ' +
+  'Score complexity + uncertainty, NOT wall-clock time. ' +
+  '1=trivial one-file mechanical change, existing pattern, no design choices. ' +
+  '2=small, a few files in one layer, clear approach, no new abstractions. ' +
+  '3=moderate, crosses a few layers following a documented pattern, a few edge cases. ' +
+  '5=sizable, new component or cross-cutting change with some unknowns. ' +
+  '8=large, new subsystem or many modules, real design work, broad test surface. ' +
+  '13=epic or too uncertain to size — split into subtasks instead. ' +
+  'The scale is ordinal (gaps widen on purpose); round UP when between two values. See docs/ESTIMATION.md.'
+
+export const estimatePointsSchema = z
+  .number()
+  .refine((n): n is EstimatePoints => (ESTIMATE_POINTS as readonly number[]).includes(n), {
+    message: `estimate must be one of ${ESTIMATE_POINTS.join(', ')} (Fibonacci complexity points; see docs/ESTIMATION.md)`,
+  })
+  .describe(ESTIMATE_RUBRIC)
+
 /** Policy governing how new agents are admitted to an org. */
 export const ENROLLMENT_POLICIES = ['token', 'approval', 'open'] as const
 export const enrollmentPolicySchema = z.enum(ENROLLMENT_POLICIES)
