@@ -16,6 +16,8 @@ import {
   type Id,
   type LinkTicketsInput,
   linkTicketsInput,
+  type MoveTicketInput,
+  moveTicketInput,
   type Ticket,
   type TicketLinkType,
   type TicketStatus,
@@ -79,6 +81,8 @@ export interface TicketService {
   unlink(actor: Actor, input: UnlinkTicketsInput): Promise<{ removed: true }>
   /** List a ticket's relationships, resolved from that ticket's perspective. */
   listLinks(actor: Actor, ticketId: Id): Promise<RelatedTicket[]>
+  /** Move a ticket to another project; it gets a fresh key + number there. */
+  move(actor: Actor, input: MoveTicketInput): Promise<Ticket>
   update(actor: Actor, id: Id, input: UpdateTicketInput): Promise<Ticket>
   changeStatus(actor: Actor, input: ChangeStatusInput): Promise<Ticket>
   assign(actor: Actor, input: AssignTicketInput): Promise<Ticket>
@@ -319,6 +323,35 @@ export function createTicketService(
         related.push({ relation, ticketId: other.id, key: other.key, title: other.title })
       }
       return related
+    },
+
+    async move(actor, rawInput) {
+      authorize(actor, 'ticket:write')
+      const input = parse(moveTicketInput, rawInput)
+      const before = await load(actor, input.ticketId)
+      if (before.projectId === input.toProjectId) {
+        throw new ValidationError('Ticket is already in that project')
+      }
+
+      const dest = await repos.projects.getById(actor.orgId, input.toProjectId)
+      if (!dest) throw new NotFoundError(`Project ${input.toProjectId} not found`)
+      if (!dest.key) throw new NotFoundError(`Project ${input.toProjectId} has no ticket key`)
+
+      // Fresh number from the destination's (self-healing) sequence → new key.
+      const number = await repos.tickets.nextNumber(actor.orgId, dest.id)
+      const after = await repos.tickets.update(actor.orgId, input.ticketId, {
+        projectId: dest.id,
+        key: `${dest.key}-${number}`,
+        number,
+      })
+      await recordAudit(repos, actor, {
+        action: 'ticket.move',
+        targetType: 'ticket',
+        targetId: input.ticketId,
+        before: { projectId: before.projectId, key: before.key },
+        after: { projectId: after.projectId, key: after.key },
+      })
+      return after
     },
 
     async update(actor, id, rawInput) {

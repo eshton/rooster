@@ -45,6 +45,7 @@ export interface ProjectRepository {
   create(orgId: Id, input: Omit<Project, keyof TimestampedId | 'orgId'>): Promise<Project>
   getById(orgId: Id, id: Id): Promise<Project | null>
   list(orgId: Id, teamId?: Id, opts?: ListOptions): Promise<Project[]>
+  update(orgId: Id, id: Id, patch: Partial<Project>): Promise<Project>
 }
 
 export interface TicketRepository {
@@ -65,6 +66,11 @@ export interface TicketRepository {
   /** Direct children (subtasks) of a parent ticket. */
   listChildren(orgId: Id, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(orgId: Id, id: Id, patch: Partial<Ticket>): Promise<Ticket>
+  /**
+   * Rewrite the key prefix of every ticket in a project (`<oldPrefix>-<n>` →
+   * `<newPrefix>-<n>`), leaving numbers untouched. Returns the count updated.
+   */
+  reKeyForProject(orgId: Id, projectId: Id, oldPrefix: string, newPrefix: string): Promise<number>
   /** Allocate the next sequential ticket number for a project. */
   nextNumber(orgId: Id, projectId: Id): Promise<number>
 }

@@ -56,6 +56,25 @@ describe('ticket numbering', () => {
     const c = await db.repositories.tickets.nextNumber(org.id, project.id)
     expect([a, b, c]).toEqual([1, 2, 3])
   })
+
+  it('self-heals a lagging counter so it never re-mints an existing number', async () => {
+    const { org, project } = await makeOrgWithTeamProject('acme')
+    // A ticket landed ahead of the counter (e.g. a manual re-key) — seq is still 0.
+    await db.repositories.tickets.create(org.id, {
+      projectId: project.id,
+      key: 'PRJ-5',
+      number: 5,
+      title: 'out-of-band',
+      description: null,
+      status: 'todo',
+      priority: 'none',
+      labels: [],
+      assigneeId: null,
+      parentId: null,
+    })
+    // nextNumber must clear the existing max (5), not return the stale 1.
+    expect(await db.repositories.tickets.nextNumber(org.id, project.id)).toBe(6)
+  })
 })
 
 describe('ticket JSON fields + updates', () => {

@@ -165,6 +165,20 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .limit(limitOf(opts))
         ).map(toProject)
       },
+      async update(orgId, id, patch) {
+        const set: Record<string, unknown> = { updatedAt: now() }
+        for (const [k, v] of Object.entries(patch)) {
+          if (k === 'id' || k === 'orgId' || k === 'createdAt' || k === 'updatedAt') continue
+          set[k] = v
+        }
+        const [row] = await db
+          .update(s.projects)
+          .set(set)
+          .where(and(eq(s.projects.orgId, orgId), eq(s.projects.id, id)))
+          .returning()
+        if (!row) throw new Error(`Project ${id} not found in org ${orgId}`)
+        return toProject(row)
+      },
     },
 
     tickets: {
@@ -290,6 +304,21 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           .returning()
         if (!row) throw new Error(`Ticket ${id} not found in org ${orgId}`)
         return toTicket(row)
+      },
+      async reKeyForProject(orgId, projectId, oldPrefix, newPrefix) {
+        // Rewrite "<old>-<n>" → "<new>-<n>" keeping the numeric suffix. `substr`
+        // + `||` are dialect-neutral; the cut point is the old prefix length + 2
+        // (1-based, past the "-"). Scoped to this project's tickets only.
+        const cut = oldPrefix.length + 2
+        const rows = await db
+          .update(s.tickets)
+          .set({
+            key: sql`${newPrefix} || '-' || substr(${s.tickets.key}, ${cut})`,
+            updatedAt: now(),
+          })
+          .where(and(eq(s.tickets.orgId, orgId), eq(s.tickets.projectId, projectId)))
+          .returning({ id: s.tickets.id })
+        return rows.length
       },
       async nextNumber(orgId, projectId) {
         // Atomically allocate the next number from the project's sequence counter.
@@ -711,15 +740,28 @@ export function createRepositories(db: DB, s: Schema): Repositories {
 }
 
 /**
- * Allocate the next ticket number by atomically incrementing the project's
+ * Allocate the next ticket number by atomically advancing the project's
  * sequence counter in a single `UPDATE ... RETURNING` statement. Atomic on both
  * SQLite and Postgres without an explicit transaction, so it stays correct
  * under concurrency and avoids per-connection in-memory transaction quirks.
+ *
+ * Self-healing: the counter advances past the highest number among tickets that
+ * already share this project's **current key prefix**, as well as its own value.
+ * So a `ticket_seq` that has drifted behind reality (manual re-key, out-of-band
+ * insert, a backfill that skipped the project) can never re-mint an existing
+ * `<key>-<n>` and trip the unique constraint. The prefix filter matters: a
+ * project re-keyed to a fresh prefix restarts at 1 even if it holds tickets
+ * under an old prefix. `CASE WHEN` (not SQLite `MAX(a,b)` / Postgres `GREATEST`)
+ * keeps it dialect-neutral.
  */
 async function repoNextNumber(db: DB, s: Schema, orgId: Id, projectId: Id): Promise<number> {
+  const maxExisting = sql`COALESCE((SELECT MAX(${s.tickets.number}) FROM ${s.tickets} WHERE ${s.tickets.orgId} = ${orgId} AND ${s.tickets.projectId} = ${projectId} AND ${s.tickets.key} LIKE ${s.projects.key} || '-%'), 0)`
   const [row] = await db
     .update(s.projects)
-    .set({ ticketSeq: sql`${s.projects.ticketSeq} + 1`, updatedAt: now() })
+    .set({
+      ticketSeq: sql`(CASE WHEN ${s.projects.ticketSeq} >= ${maxExisting} THEN ${s.projects.ticketSeq} ELSE ${maxExisting} END) + 1`,
+      updatedAt: now(),
+    })
     .where(and(eq(s.projects.orgId, orgId), eq(s.projects.id, projectId)))
     .returning({ ticketSeq: s.projects.ticketSeq })
   if (!row) throw new Error(`Project ${projectId} not found in org ${orgId}`)

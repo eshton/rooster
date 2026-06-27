@@ -117,6 +117,20 @@ export type LinkTicketsInput = z.infer<typeof linkTicketsInput>
 export const unlinkTicketsInput = linkTicketsInput
 export type UnlinkTicketsInput = LinkTicketsInput
 
+/** Rename a project's ticket-key prefix (re-keys all its tickets in lockstep). */
+export const setProjectKeyInput = z.object({
+  projectId: idSchema,
+  key: projectKeySchema,
+})
+export type SetProjectKeyInput = z.infer<typeof setProjectKeyInput>
+
+/** Move a ticket to another project (it gets a fresh key + number there). */
+export const moveTicketInput = z.object({
+  ticketId: idSchema,
+  toProjectId: idSchema,
+})
+export type MoveTicketInput = z.infer<typeof moveTicketInput>
+
 // --- Agents -----------------------------------------------------------------
 
 /**

@@ -69,6 +69,9 @@ not the client.
   prefer 3 chars, widen to 4–5 on collision); its tickets are keyed "<key>-<n>"
   with a per-project number sequence. Teams are just optional grouping (no key
   required).
+- set_project_key — rename a project's prefix; re-keys all its tickets in
+  lockstep. move_ticket — move a ticket to another project (fresh key + number).
+  Use these rather than editing the database by hand.
 - list_teams / list_projects / list_tickets / get_ticket — read the board.
   list_tickets accepts optional \`status\` and \`assigneeId\` filters.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related

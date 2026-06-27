@@ -19,8 +19,10 @@ import {
   inviteMemberInput,
   joinTenantInput,
   linkTicketsInput,
+  moveTicketInput,
   registerAgentInput,
   removeAttachmentInput,
+  setProjectKeyInput,
   ticketStatusSchema,
   unlinkTicketsInput,
   updateTicketInput,
@@ -183,6 +185,19 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'set_project_key',
+    {
+      title: 'Set project key',
+      description:
+        "Rename a project's ticket-key prefix (3–5 chars, unique per workspace). " +
+        'Re-keys every existing ticket in lockstep (<old>-<n> → <new>-<n>); numbers are unchanged. ' +
+        'Use this instead of hand-editing the database.',
+      inputSchema: setProjectKeyInput.shape,
+    },
+    async (args) => runTool(() => services.projects.setKey(actor, args)),
+  )
+
+  server.registerTool(
     'list_tickets',
     {
       title: 'List tickets',
@@ -241,6 +256,18 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { id: z.uuid(), ...updateTicketInput.shape },
     },
     async ({ id, ...patch }) => runTool(() => services.tickets.update(actor, id, patch)),
+  )
+
+  server.registerTool(
+    'move_ticket',
+    {
+      title: 'Move ticket',
+      description:
+        'Move a ticket to another project. It gets a fresh key + number in the destination ' +
+        '(the old key is freed). Use this instead of hand-editing the database.',
+      inputSchema: moveTicketInput.shape,
+    },
+    async (args) => runTool(() => services.tickets.move(actor, args)),
   )
 
   server.registerTool(

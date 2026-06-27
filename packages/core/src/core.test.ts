@@ -473,6 +473,61 @@ describe('attachments', () => {
   })
 })
 
+// --- re-key + move -----------------------------------------------------------
+
+describe('set_project_key and move_ticket', () => {
+  it('renames a project prefix and re-keys its tickets in lockstep', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner) // key ROOST
+    const t1 = await services.tickets.create(owner, { projectId: project.id, title: 'a' })
+    const t2 = await services.tickets.create(owner, { projectId: project.id, title: 'b' })
+    expect([t1.key, t2.key]).toEqual(['ROOST-1', 'ROOST-2'])
+
+    const updated = await services.projects.setKey(owner, { projectId: project.id, key: 'NEW' })
+    expect(updated.key).toBe('NEW')
+    expect((await services.tickets.get(owner, t1.id)).key).toBe('NEW-1')
+    expect((await services.tickets.get(owner, t2.id)).key).toBe('NEW-2')
+
+    // The sequence continues under the new prefix (self-healing nextNumber).
+    const t3 = await services.tickets.create(owner, { projectId: project.id, title: 'c' })
+    expect(t3.key).toBe('NEW-3')
+  })
+
+  it('rejects a duplicate or unchanged project key', async () => {
+    const { owner } = await bootstrap()
+    const team = await services.teams.create(owner, { name: 'Eng' })
+    const a = await services.projects.create(owner, { teamId: team.id, key: 'AAA', name: 'A' })
+    await services.projects.create(owner, { teamId: team.id, key: 'BBB', name: 'B' })
+
+    await expect(
+      services.projects.setKey(owner, { projectId: a.id, key: 'BBB' }),
+    ).rejects.toBeInstanceOf(ConflictError)
+    await expect(
+      services.projects.setKey(owner, { projectId: a.id, key: 'AAA' }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('moves a ticket to another project with a fresh key + number', async () => {
+    const { owner } = await bootstrap()
+    const team = await services.teams.create(owner, { name: 'Eng' })
+    const src = await services.projects.create(owner, { teamId: team.id, key: 'SRC', name: 'S' })
+    const dst = await services.projects.create(owner, { teamId: team.id, key: 'DST', name: 'D' })
+    const t = await services.tickets.create(owner, { projectId: src.id, title: 'x' })
+    expect(t.key).toBe('SRC-1')
+
+    const moved = await services.tickets.move(owner, { ticketId: t.id, toProjectId: dst.id })
+    expect(moved.projectId).toBe(dst.id)
+    expect(moved.key).toBe('DST-1')
+    expect((await services.tickets.list(owner, dst.id)).map((x) => x.id)).toContain(t.id)
+    expect((await services.tickets.list(owner, src.id)).map((x) => x.id)).not.toContain(t.id)
+
+    // Moving to the same project is a no-op error.
+    await expect(
+      services.tickets.move(owner, { ticketId: t.id, toProjectId: dst.id }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+})
+
 // --- permission enforcement -------------------------------------------------
 
 describe('permission enforcement', () => {

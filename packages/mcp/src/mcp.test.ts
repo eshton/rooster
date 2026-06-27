@@ -237,6 +237,24 @@ describe('MCP server end-to-end', () => {
     expect(audit.map((a) => a.action)).toEqual(expect.arrayContaining(['member.invite']))
   })
 
+  it('re-keys a project and moves a ticket through tools', async () => {
+    const team = await services.teams.create(owner, { key: 'ENG', name: 'Eng' })
+    const src = await services.projects.create(owner, { teamId: team.id, key: 'SRC', name: 'S' })
+    const dst = await services.projects.create(owner, { teamId: team.id, key: 'DST', name: 'D' })
+    const t = payload((await call('create_ticket', { projectId: src.id, title: 'x' })) as never)
+    expect(t.key).toBe('SRC-1')
+
+    // Rename the source project's prefix — the existing ticket re-keys with it.
+    await call('set_project_key', { projectId: src.id, key: 'SRX' })
+    expect(payload((await call('get_ticket', { id: t.id })) as never).key).toBe('SRX-1')
+
+    // Move it to the destination project — fresh key + number there.
+    const moved = payload(
+      (await call('move_ticket', { ticketId: t.id, toProjectId: dst.id })) as never,
+    )
+    expect(moved.key).toBe('DST-1')
+  })
+
   it('registers, lists and suspends an agent', async () => {
     const reg = payload(
       (await call('register_agent', {
