@@ -339,6 +339,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
         labels,
         dueDate: body.dueDate ? String(body.dueDate) : null,
+        startDate: body.startDate ? String(body.startDate) : null,
         estimate: estimateOf(body.estimate),
       })
       return `/app/projects/${id}`
@@ -359,6 +360,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
         labels,
         dueDate: body.dueDate ? String(body.dueDate) : null,
+        startDate: body.startDate ? String(body.startDate) : null,
         estimate: estimateOf(body.estimate),
       })
       return `/app/tickets/${ticket.key}`

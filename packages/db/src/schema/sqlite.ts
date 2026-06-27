@@ -128,6 +128,7 @@ export const tickets = sqliteTable(
     assigneeId: text('assignee_id'),
     parentId: text('parent_id'),
     dueDate: text('due_date'),
+    startDate: text('start_date'),
     estimate: real('estimate'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

@@ -173,12 +173,20 @@ describe('MCP server end-to-end', () => {
         projectId: project.id,
         title: 'With a deadline',
         dueDate: '2026-07-01',
+        startDate: '2026-06-15',
         estimate: 3,
         assigneeId: owner.principalId,
       })) as never,
     )
     expect(created.dueDate).toBe('2026-07-01')
+    expect(created.startDate).toBe('2026-06-15')
     expect(created.estimate).toBe(3)
+
+    // startDate is editable + clearable like any optional field.
+    const rescheduled = payload(
+      (await call('update_ticket', { id: created.id, startDate: '2026-06-20' })) as never,
+    )
+    expect(rescheduled.startDate).toBe('2026-06-20')
 
     // update_ticket can re-size on the canonical scale and clear the estimate.
     const resized = payload((await call('update_ticket', { id: created.id, estimate: 5 })) as never)

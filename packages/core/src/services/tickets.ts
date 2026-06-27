@@ -189,6 +189,7 @@ export function createTicketService(
         assigneeId: input.assigneeId ?? null,
         parentId: input.parentId ?? null,
         dueDate: input.dueDate ?? null,
+        startDate: input.startDate ?? null,
         estimate: input.estimate ?? null,
       })
 

@@ -56,6 +56,8 @@ export const createTicketInput = z.object({
   parentId: idSchema.optional(),
   /** Optional ISO-8601 due date (e.g. "2026-07-01" or a full datetime). */
   dueDate: z.string().max(40).nullable().optional(),
+  /** Optional ISO-8601 planned start date. */
+  startDate: z.string().max(40).nullable().optional(),
   /** Optional effort estimate as Fibonacci complexity points (see ESTIMATE_RUBRIC). */
   estimate: estimatePointsSchema.nullable().optional(),
 })
@@ -70,6 +72,7 @@ export const updateTicketInput = z
     assigneeId: idSchema.nullable(),
     parentId: idSchema.nullable(),
     dueDate: z.string().max(40).nullable(),
+    startDate: z.string().max(40).nullable(),
     estimate: estimatePointsSchema.nullable(),
   })
   .partial()

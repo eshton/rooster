@@ -1,0 +1,1 @@
+ALTER TABLE `tickets` ADD `start_date` text;

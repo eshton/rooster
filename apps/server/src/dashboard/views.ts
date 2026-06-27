@@ -580,6 +580,7 @@ export function projectBoard(data: {
         <input name="title" placeholder="New ticket title" required maxlength="300">
         <input name="labels" placeholder="tags, comma-separated">
         <select name="priority" title="priority">${priorityOptions('none')}</select>
+        <input name="startDate" type="date" title="start date">
         <input name="dueDate" type="date" title="due date">
         <select name="estimate" title="estimate (complexity points)">${estimateOptions(null)}</select>
         <button class="btn" type="submit">Create ticket</button>
@@ -674,6 +675,7 @@ export function ticketDetail(data: {
           <textarea name="description" placeholder="Description">${esc(t.description ?? '')}</textarea>
           <div class="actions" style="margin:0">
             <select name="priority" title="priority">${priorityOptions(t.priority)}</select>
+            <input name="startDate" type="date" value="${esc(t.startDate?.slice(0, 10) ?? '')}" title="start date">
             <input name="dueDate" type="date" value="${esc(t.dueDate?.slice(0, 10) ?? '')}" title="due date">
             <select name="estimate" title="estimate (complexity points)">${estimateOptions(t.estimate)}</select>
             <input name="labels" value="${esc(t.labels.join(', '))}" placeholder="tags, comma-separated">
@@ -721,6 +723,7 @@ export function ticketDetail(data: {
     <div class="row"><h1><span class="key">${esc(t.key)}</span> ${esc(t.title)}</h1></div>
     <div style="margin:.25rem 0 1rem"><span class="badge amber">${esc(STATUS_LABEL[t.status])}</span>
       <span class="badge"><span class="prio ${esc(t.priority)}"></span>${esc(t.priority)}</span>
+      ${t.startDate ? `<span class="badge">starts ${esc(t.startDate.slice(0, 10))}</span>` : ''}
       ${t.dueDate ? dueChip(t.dueDate) : ''}
       ${estimateChip(t.estimate)}
       ${t.assigneeId ? `<span class="badge">${avatar(nameOf(t.assigneeId))} ${esc(nameOf(t.assigneeId))}</span>` : '<span class="badge">unassigned</span>'}</div>

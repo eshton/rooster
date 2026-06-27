@@ -99,6 +99,7 @@ export async function seed(repos: Repositories): Promise<SeedResult> {
       assigneeId: spec.assignee,
       parentId: null,
       dueDate: null,
+      startDate: null,
       estimate: null,
     })
     ticketKeys.push(ticket.key)

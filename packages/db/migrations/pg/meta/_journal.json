@@ -71,6 +71,13 @@
       "when": 1782561654172,
       "tag": "0009_wet_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782580822248,
+      "tag": "0010_glorious_hawkeye",
+      "breakpoints": true
     }
   ]
 }
