@@ -17,8 +17,10 @@ import {
   createTicketInput,
   inviteMemberInput,
   joinTenantInput,
+  linkTicketsInput,
   registerAgentInput,
   ticketStatusSchema,
+  unlinkTicketsInput,
   updateTicketInput,
 } from '@rooster/schema'
 import { z } from 'zod'
@@ -297,6 +299,42 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { parentId: z.uuid() },
     },
     async ({ parentId }) => runTool(() => services.tickets.listSubtasks(actor, parentId)),
+  )
+
+  server.registerTool(
+    'link_tickets',
+    {
+      title: 'Link tickets',
+      description:
+        'Relate two tickets with a directed link: type "blocks" (from blocks to), ' +
+        '"duplicates" (from duplicates to), or "relates" (symmetric). The inverse ' +
+        '(blocked-by / duplicated-by) is derived automatically; blocks links may not form a cycle.',
+      inputSchema: linkTicketsInput.shape,
+    },
+    async (args) => runTool(() => services.tickets.link(actor, args)),
+  )
+
+  server.registerTool(
+    'unlink_tickets',
+    {
+      title: 'Unlink tickets',
+      description:
+        'Remove a directed link previously created with link_tickets (same from/to/type).',
+      inputSchema: unlinkTicketsInput.shape,
+    },
+    async (args) => runTool(() => services.tickets.unlink(actor, args)),
+  )
+
+  server.registerTool(
+    'list_links',
+    {
+      title: 'List links',
+      description:
+        "List a ticket's relationships from its own perspective (blocks, blocked_by, " +
+        "relates, duplicates, duplicated_by), each with the other ticket's key + title.",
+      inputSchema: { ticketId: z.uuid() },
+    },
+    async ({ ticketId }) => runTool(() => services.tickets.listLinks(actor, ticketId)),
   )
 
   server.registerTool(

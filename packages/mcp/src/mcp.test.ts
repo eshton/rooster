@@ -102,6 +102,27 @@ describe('MCP server end-to-end', () => {
     const res = await client.readResource({ uri: 'ticket://ROOST-1' })
     const fromResource = JSON.parse(res.contents[0]?.text as string)
     expect(fromResource.id).toBe(created.id)
+
+    // Linking: a second ticket that the first one blocks.
+    const other = payload(
+      (await call('create_ticket', { projectId: project.id, title: 'Blocked work' })) as never,
+    )
+    await call('link_tickets', { fromTicketId: created.id, toTicketId: other.id, type: 'blocks' })
+    const links = payload((await call('list_links', { ticketId: other.id })) as never) as Array<{
+      relation: string
+      key: string
+    }>
+    expect(links).toEqual([
+      {
+        relation: 'blocked_by',
+        ticketId: created.id,
+        key: 'ROOST-1',
+        title: 'Wire the MCP server',
+      },
+    ])
+
+    await call('unlink_tickets', { fromTicketId: created.id, toTicketId: other.id, type: 'blocks' })
+    expect(payload((await call('list_links', { ticketId: other.id })) as never)).toEqual([])
   })
 
   it('surfaces domain errors as isError results, not crashes', async () => {

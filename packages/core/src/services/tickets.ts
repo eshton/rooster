@@ -1,7 +1,7 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
-import { NotFoundError, ValidationError } from '../errors.js'
+import { ConflictError, NotFoundError, ValidationError } from '../errors.js'
 import type { CrowNotifier } from '../notify.js'
 import { authorize } from '../permissions.js'
 import { canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
@@ -14,12 +14,39 @@ import {
   changeStatusInput,
   createTicketInput,
   type Id,
+  type LinkTicketsInput,
+  linkTicketsInput,
   type Ticket,
+  type TicketLinkType,
   type TicketStatus,
+  type UnlinkTicketsInput,
   type UpdateTicketInput,
+  unlinkTicketsInput,
   updateTicketInput,
   z,
 } from './deps.js'
+
+/** A ticket link seen from one ticket's perspective (inverse types resolved). */
+export type RelatedRelation = 'blocks' | 'blocked_by' | 'relates' | 'duplicates' | 'duplicated_by'
+
+export interface RelatedTicket {
+  /** The relation from the queried ticket's point of view. */
+  relation: RelatedRelation
+  /** The ticket on the other end of the link. */
+  ticketId: Id
+  key: string
+  title: string
+}
+
+/** Inverse relation labels for an incoming edge (relates is symmetric). */
+const INVERSE_RELATION: Record<TicketLinkType, RelatedRelation> = {
+  blocks: 'blocked_by',
+  duplicates: 'duplicated_by',
+  relates: 'relates',
+}
+
+/** Guard against runaway walks of the blocks graph on malformed data. */
+const MAX_BLOCKS_DEPTH = 1000
 
 /** Optional server-side filters for {@link TicketService.list}. */
 export interface TicketListFilter {
@@ -46,6 +73,12 @@ export interface TicketService {
   search(actor: Actor, query: string, opts?: ListOptions): Promise<Ticket[]>
   /** List the direct subtasks (children) of a ticket. */
   listSubtasks(actor: Actor, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
+  /** Create a directed relationship between two tickets (blocks/relates/duplicates). */
+  link(actor: Actor, input: LinkTicketsInput): Promise<RelatedTicket>
+  /** Remove a previously created link. */
+  unlink(actor: Actor, input: UnlinkTicketsInput): Promise<{ removed: true }>
+  /** List a ticket's relationships, resolved from that ticket's perspective. */
+  listLinks(actor: Actor, ticketId: Id): Promise<RelatedTicket[]>
   update(actor: Actor, id: Id, input: UpdateTicketInput): Promise<Ticket>
   changeStatus(actor: Actor, input: ChangeStatusInput): Promise<Ticket>
   assign(actor: Actor, input: AssignTicketInput): Promise<Ticket>
@@ -94,6 +127,32 @@ export function createTicketService(
         break
       }
       cursor = node.parentId
+    }
+  }
+
+  /**
+   * The `blocks` graph must stay acyclic: adding "from blocks to" is illegal if
+   * `to` already (transitively) blocks `from`. Walks outgoing `blocks` edges
+   * from `to` looking for `from`.
+   */
+  async function requireAcyclicBlocks(actor: Actor, fromId: Id, toId: Id): Promise<void> {
+    const seen = new Set<Id>()
+    let frontier: Id[] = [toId]
+    for (let depth = 0; frontier.length && depth < MAX_BLOCKS_DEPTH; depth++) {
+      const next: Id[] = []
+      for (const nodeId of frontier) {
+        if (seen.has(nodeId)) continue
+        seen.add(nodeId)
+        const links = await repos.ticketLinks.listForTicket(actor.orgId, nodeId)
+        for (const l of links) {
+          if (l.type !== 'blocks' || l.fromTicketId !== nodeId) continue
+          if (l.toTicketId === fromId) {
+            throw new ValidationError('Link would create a cycle in the blocks graph')
+          }
+          next.push(l.toTicketId)
+        }
+      }
+      frontier = next
     }
   }
 
@@ -176,6 +235,90 @@ export function createTicketService(
       authorize(actor, 'ticket:read')
       await load(actor, parentId) // 404 if the parent doesn't exist in this org
       return repos.tickets.listChildren(actor.orgId, parentId, opts)
+    },
+
+    async link(actor, rawInput) {
+      authorize(actor, 'ticket:write')
+      const input = parse(linkTicketsInput, rawInput)
+      if (input.fromTicketId === input.toTicketId) {
+        throw new ValidationError('A ticket cannot be linked to itself')
+      }
+      // Both ends must exist in this org (load throws NotFound otherwise).
+      await load(actor, input.fromTicketId)
+      const to = await load(actor, input.toTicketId)
+
+      // Reject an exact duplicate; for the symmetric `relates`, also reject the
+      // mirror edge so a pair is only related once.
+      const existing = await repos.ticketLinks.find(
+        actor.orgId,
+        input.fromTicketId,
+        input.toTicketId,
+        input.type,
+      )
+      const mirror =
+        input.type === 'relates'
+          ? await repos.ticketLinks.find(
+              actor.orgId,
+              input.toTicketId,
+              input.fromTicketId,
+              'relates',
+            )
+          : null
+      if (existing || mirror) {
+        throw new ConflictError(`Tickets are already linked as '${input.type}'`)
+      }
+
+      if (input.type === 'blocks') {
+        await requireAcyclicBlocks(actor, input.fromTicketId, input.toTicketId)
+      }
+
+      const created = await repos.ticketLinks.create(actor.orgId, {
+        fromTicketId: input.fromTicketId,
+        toTicketId: input.toTicketId,
+        type: input.type,
+      })
+      await recordAudit(repos, actor, {
+        action: 'ticket.link',
+        targetType: 'ticket',
+        targetId: input.fromTicketId,
+        after: created,
+      })
+      return { relation: input.type, ticketId: to.id, key: to.key, title: to.title }
+    },
+
+    async unlink(actor, rawInput) {
+      authorize(actor, 'ticket:write')
+      const input = parse(unlinkTicketsInput, rawInput)
+      const removed = await repos.ticketLinks.delete(
+        actor.orgId,
+        input.fromTicketId,
+        input.toTicketId,
+        input.type,
+      )
+      if (!removed) throw new NotFoundError('No such link to remove')
+      await recordAudit(repos, actor, {
+        action: 'ticket.unlink',
+        targetType: 'ticket',
+        targetId: input.fromTicketId,
+        before: input,
+      })
+      return { removed: true }
+    },
+
+    async listLinks(actor, ticketId) {
+      authorize(actor, 'ticket:read')
+      await load(actor, ticketId) // 404 if the ticket isn't in this org
+      const links = await repos.ticketLinks.listForTicket(actor.orgId, ticketId)
+      const related: RelatedTicket[] = []
+      for (const l of links) {
+        const outgoing = l.fromTicketId === ticketId
+        const otherId = outgoing ? l.toTicketId : l.fromTicketId
+        const relation = outgoing ? l.type : INVERSE_RELATION[l.type]
+        const other = await repos.tickets.getById(actor.orgId, otherId)
+        if (!other) continue // tolerate a dangling endpoint
+        related.push({ relation, ticketId: other.id, key: other.key, title: other.title })
+      }
+      return related
     },
 
     async update(actor, id, rawInput) {

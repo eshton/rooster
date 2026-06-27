@@ -79,6 +79,10 @@ not the client.
 - my_tickets — list tickets assigned to you. find_by_label — by tag.
   search_tickets — free-text search over titles + descriptions.
 - list_subtasks — list a ticket's children.
+- link_tickets / unlink_tickets / list_links — relate tickets beyond the
+  parent/subtask hierarchy: "blocks" (and its derived "blocked_by"),
+  "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't
+  form a cycle. list_links reports a ticket's relations from its own viewpoint.
 - crow — wake/notify a ticket's assignee.
 - invite_member — invite a human teammate by email (admin). create_invite —
   mint a shareable join code (admin). read_audit — read the audit log (admin).

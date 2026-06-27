@@ -61,6 +61,19 @@ async function makeProject(owner: Actor) {
   return { team, project }
 }
 
+/** A separate org with one ticket — for cross-tenant isolation checks. */
+async function bootstrap2() {
+  const { org, founder } = await services.orgs.bootstrap({
+    org: { slug: 'other', name: 'Other', enrollmentPolicy: 'open' },
+    founder: { displayName: 'Bo', email: 'bo@other.test', name: 'Bo', avatarUrl: null },
+  })
+  const owner = await services.resolveActor({ orgId: org.id, principalId: founder.id })
+  const team = await services.teams.create(owner, { name: 'T' })
+  const project = await services.projects.create(owner, { teamId: team.id, key: 'OTH', name: 'P' })
+  const ticket = await services.tickets.create(owner, { projectId: project.id, title: 'foreign' })
+  return { orgId: org.id, ticketId: ticket.id }
+}
+
 // --- pure units -------------------------------------------------------------
 
 describe('permissions', () => {
@@ -311,6 +324,93 @@ describe('project keys', () => {
     const { owner } = await bootstrap()
     const team = await services.teams.create(owner, { name: 'Keyless' })
     expect(team.key).toBeNull()
+  })
+})
+
+// --- ticket links ------------------------------------------------------------
+
+describe('ticket links', () => {
+  async function threeTickets() {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const mk = (title: string) => services.tickets.create(owner, { projectId: project.id, title })
+    const a = await mk('A')
+    const b = await mk('B')
+    const c = await mk('C')
+    return { owner, a, b, c }
+  }
+
+  it('links tickets and resolves inverse relations from each perspective', async () => {
+    const { owner, a, b } = await threeTickets()
+    await services.tickets.link(owner, { fromTicketId: a.id, toTicketId: b.id, type: 'blocks' })
+
+    const fromA = await services.tickets.listLinks(owner, a.id)
+    expect(fromA).toEqual([{ relation: 'blocks', ticketId: b.id, key: b.key, title: 'B' }])
+
+    const fromB = await services.tickets.listLinks(owner, b.id)
+    expect(fromB).toEqual([{ relation: 'blocked_by', ticketId: a.id, key: a.key, title: 'A' }])
+  })
+
+  it('rejects self-links and duplicates (including the relates mirror)', async () => {
+    const { owner, a, b } = await threeTickets()
+    await expect(
+      services.tickets.link(owner, { fromTicketId: a.id, toTicketId: a.id, type: 'relates' }),
+    ).rejects.toBeInstanceOf(ValidationError)
+
+    await services.tickets.link(owner, { fromTicketId: a.id, toTicketId: b.id, type: 'relates' })
+    // exact duplicate
+    await expect(
+      services.tickets.link(owner, { fromTicketId: a.id, toTicketId: b.id, type: 'relates' }),
+    ).rejects.toBeInstanceOf(ConflictError)
+    // mirror of a symmetric relation is also a duplicate
+    await expect(
+      services.tickets.link(owner, { fromTicketId: b.id, toTicketId: a.id, type: 'relates' }),
+    ).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('prevents cycles in the blocks graph', async () => {
+    const { owner, a, b, c } = await threeTickets()
+    await services.tickets.link(owner, { fromTicketId: a.id, toTicketId: b.id, type: 'blocks' })
+    await services.tickets.link(owner, { fromTicketId: b.id, toTicketId: c.id, type: 'blocks' })
+    // c blocks a would close the loop a→b→c→a
+    await expect(
+      services.tickets.link(owner, { fromTicketId: c.id, toTicketId: a.id, type: 'blocks' }),
+    ).rejects.toBeInstanceOf(ValidationError)
+    // a non-blocks relation between the same pair is still allowed
+    const ok = await services.tickets.link(owner, {
+      fromTicketId: c.id,
+      toTicketId: a.id,
+      type: 'relates',
+    })
+    expect(ok.relation).toBe('relates')
+  })
+
+  it('unlinks, and rejects removing a link that does not exist', async () => {
+    const { owner, a, b } = await threeTickets()
+    await services.tickets.link(owner, { fromTicketId: a.id, toTicketId: b.id, type: 'duplicates' })
+    expect(
+      await services.tickets.unlink(owner, {
+        fromTicketId: a.id,
+        toTicketId: b.id,
+        type: 'duplicates',
+      }),
+    ).toEqual({ removed: true })
+    expect(await services.tickets.listLinks(owner, a.id)).toEqual([])
+    await expect(
+      services.tickets.unlink(owner, { fromTicketId: a.id, toTicketId: b.id, type: 'duplicates' }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+  })
+
+  it('rejects linking a ticket from another org (404)', async () => {
+    const { owner, a } = await threeTickets()
+    const other = await bootstrap2()
+    await expect(
+      services.tickets.link(owner, {
+        fromTicketId: a.id,
+        toTicketId: other.ticketId,
+        type: 'relates',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError)
   })
 })
 

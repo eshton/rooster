@@ -17,6 +17,7 @@ export type {
   Invite,
   InviteMemberInput,
   JoinTenantInput,
+  LinkTicketsInput,
   Membership,
   Org,
   Principal,
@@ -25,7 +26,10 @@ export type {
   Role,
   Team,
   Ticket,
+  TicketLink,
+  TicketLinkType,
   TicketStatus,
+  UnlinkTicketsInput,
   UpdateTicketInput,
   User,
 } from '@rooster/schema'
@@ -40,7 +44,9 @@ export {
   createTicketInput,
   inviteMemberInput,
   joinTenantInput,
+  linkTicketsInput,
   registerAgentInput,
+  unlinkTicketsInput,
   updateTicketInput,
 } from '@rooster/schema'
 export { z } from 'zod'

@@ -88,6 +88,16 @@ export const estimatePointsSchema = z
   })
   .describe(ESTIMATE_RUBRIC)
 
+/**
+ * Directed ticket relationship types, beyond the parent/subtask hierarchy. A
+ * link is stored as a single directed edge (from → to); the inverse is derived
+ * on read — `blocks` ⇄ blocked-by, `duplicates` ⇄ duplicated-by, and `relates`
+ * is symmetric.
+ */
+export const TICKET_LINK_TYPES = ['blocks', 'relates', 'duplicates'] as const
+export const ticketLinkTypeSchema = z.enum(TICKET_LINK_TYPES)
+export type TicketLinkType = z.infer<typeof ticketLinkTypeSchema>
+
 /** Policy governing how new agents are admitted to an org. */
 export const ENROLLMENT_POLICIES = ['token', 'approval', 'open'] as const
 export const enrollmentPolicySchema = z.enum(ENROLLMENT_POLICIES)

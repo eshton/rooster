@@ -11,9 +11,10 @@ import type {
   Project,
   Team,
   Ticket,
+  TicketLink,
   User,
 } from '@rooster/schema'
-import { and, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import type { Repositories } from '../repositories.js'
 import type { sqliteSchema } from '../schema/sqlite.js'
@@ -66,6 +67,7 @@ const toTicket = (r: Rows['tickets']): Ticket =>
     labels: dec<string[]>(r.labels, []),
   }) as Ticket
 const toComment = (r: Rows['comments']): Comment => r as Comment
+const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
 const toAudit = (r: Rows['auditLog']): AuditLog => ({
   ...r,
   before: dec<unknown>(r.before, null),
@@ -311,6 +313,66 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .orderBy(s.comments.createdAt)
             .limit(limitOf(opts))
         ).map(toComment)
+      },
+    },
+
+    ticketLinks: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.ticketLinks)
+          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toTicketLink(row!)
+      },
+      async listForTicket(orgId, ticketId) {
+        return (
+          await db
+            .select()
+            .from(s.ticketLinks)
+            .where(
+              and(
+                eq(s.ticketLinks.orgId, orgId),
+                or(
+                  eq(s.ticketLinks.fromTicketId, ticketId),
+                  eq(s.ticketLinks.toTicketId, ticketId),
+                ),
+              ),
+            )
+            .orderBy(s.ticketLinks.createdAt)
+        ).map(toTicketLink)
+      },
+      async find(orgId, fromTicketId, toTicketId, type) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.ticketLinks)
+              .where(
+                and(
+                  eq(s.ticketLinks.orgId, orgId),
+                  eq(s.ticketLinks.fromTicketId, fromTicketId),
+                  eq(s.ticketLinks.toTicketId, toTicketId),
+                  eq(s.ticketLinks.type, type),
+                ),
+              )
+              .limit(1)
+          ).map(toTicketLink),
+        )
+      },
+      async delete(orgId, fromTicketId, toTicketId, type) {
+        const rows = await db
+          .delete(s.ticketLinks)
+          .where(
+            and(
+              eq(s.ticketLinks.orgId, orgId),
+              eq(s.ticketLinks.fromTicketId, fromTicketId),
+              eq(s.ticketLinks.toTicketId, toTicketId),
+              eq(s.ticketLinks.type, type),
+            ),
+          )
+          .returning({ id: s.ticketLinks.id })
+        return rows.length > 0
       },
     },
 

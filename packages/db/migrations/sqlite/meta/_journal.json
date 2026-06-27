@@ -57,6 +57,13 @@
       "when": 1782553424236,
       "tag": "0007_friendly_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1782558926453,
+      "tag": "0008_tense_green_goblin",
+      "breakpoints": true
     }
   ]
 }

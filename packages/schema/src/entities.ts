@@ -6,6 +6,7 @@ import {
   estimatePointsSchema,
   principalTypeSchema,
   roleSchema,
+  ticketLinkTypeSchema,
   ticketPrioritySchema,
   ticketStatusSchema,
 } from './enums.js'
@@ -140,6 +141,19 @@ export const ticketSchema = z.object({
   estimate: estimatePointsSchema.nullable(),
 })
 export type Ticket = z.infer<typeof ticketSchema>
+
+/**
+ * A directed relationship between two tickets in the same org (see
+ * `ticketLinkTypeSchema`). Distinct from `parentId` (subtask hierarchy).
+ */
+export const ticketLinkSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  fromTicketId: idSchema,
+  toTicketId: idSchema,
+  type: ticketLinkTypeSchema,
+})
+export type TicketLink = z.infer<typeof ticketLinkSchema>
 
 export const commentSchema = z.object({
   ...base,

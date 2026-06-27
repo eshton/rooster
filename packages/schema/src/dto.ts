@@ -3,6 +3,7 @@ import {
   agentKindSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
+  ticketLinkTypeSchema,
   ticketPrioritySchema,
   ticketStatusSchema,
 } from './enums.js'
@@ -91,6 +92,18 @@ export const commentInput = z.object({
   body: z.string().min(1).max(50_000),
 })
 export type CommentInput = z.infer<typeof commentInput>
+
+/** Create a directed relationship from one ticket to another. */
+export const linkTicketsInput = z.object({
+  fromTicketId: idSchema,
+  toTicketId: idSchema,
+  type: ticketLinkTypeSchema,
+})
+export type LinkTicketsInput = z.infer<typeof linkTicketsInput>
+
+/** Remove a previously created link (identified by its from/to/type triple). */
+export const unlinkTicketsInput = linkTicketsInput
+export type UnlinkTicketsInput = LinkTicketsInput
 
 // --- Agents -----------------------------------------------------------------
 

@@ -10,6 +10,7 @@ import type {
   Project,
   Team,
   Ticket,
+  TicketLink,
   User,
 } from '@rooster/schema'
 
@@ -70,6 +71,16 @@ export interface TicketRepository {
 export interface CommentRepository {
   create(orgId: Id, input: Omit<Comment, keyof TimestampedId | 'orgId'>): Promise<Comment>
   listForTicket(orgId: Id, ticketId: Id, opts?: ListOptions): Promise<Comment[]>
+}
+
+export interface TicketLinkRepository {
+  create(orgId: Id, input: Omit<TicketLink, keyof TimestampedId | 'orgId'>): Promise<TicketLink>
+  /** Every link where the ticket is either endpoint (outgoing or incoming). */
+  listForTicket(orgId: Id, ticketId: Id): Promise<TicketLink[]>
+  /** An existing link of `type` from one ticket to another, if any. */
+  find(orgId: Id, fromTicketId: Id, toTicketId: Id, type: string): Promise<TicketLink | null>
+  /** Remove a link by its from/to/type triple; true if a row was deleted. */
+  delete(orgId: Id, fromTicketId: Id, toTicketId: Id, type: string): Promise<boolean>
 }
 
 export interface PrincipalRepository {
@@ -170,6 +181,7 @@ export interface Repositories {
   teams: TeamRepository
   projects: ProjectRepository
   tickets: TicketRepository
+  ticketLinks: TicketLinkRepository
   comments: CommentRepository
   principals: PrincipalRepository
   users: UserRepository
