@@ -346,7 +346,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     'search_tickets',
     {
       title: 'Search tickets',
-      description: 'Full-text search across ticket titles and descriptions in your org.',
+      description:
+        'Relevance-ranked, multi-term search across ticket titles and descriptions in your org ' +
+        '(title matches and full-phrase matches rank highest).',
       inputSchema: { query: z.string().min(1).max(200) },
     },
     async ({ query }) => runTool(() => services.tickets.search(actor, query)),

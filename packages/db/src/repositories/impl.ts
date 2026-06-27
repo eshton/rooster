@@ -39,6 +39,9 @@ const dec = <T>(v: string | null, fallback: T): T => (v == null ? fallback : (JS
 const limitOf = (opts?: { limit?: number }) =>
   Math.min(Math.max(opts?.limit ?? DEFAULT_LIMIT, 1), 200)
 
+/** Upper bound on rows pulled into memory for relevance ranking in `search`. */
+const SEARCH_CANDIDATE_CAP = 1000
+
 // --- row → domain mappers ---------------------------------------------------
 
 type Rows = { [K in keyof Schema]: Schema[K]['$inferSelect'] }
@@ -263,23 +266,48 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         return rows.filter((t) => t.labels.includes(label))
       },
       async search(orgId, query, opts) {
-        // Case-insensitive LIKE over title + description, escaping wildcards so
-        // the query matches literally. lower() is portable across both dialects.
-        const needle = query.replace(/([\\%_])/g, '\\$1').toLowerCase()
-        const like = `%${needle}%`
-        return (
+        // Tokenized, relevance-ranked search over title + description. Portable
+        // (plain LIKE + in-memory ranking, identical on both dialects; no FTS5/
+        // tsvector or migration). Recall: any term may match (so multi-word
+        // queries still surface partial hits); ranking rewards term coverage,
+        // title matches over body, and a full-phrase match.
+        const terms = query
+          .toLowerCase()
+          .split(/\s+/)
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .slice(0, 12)
+        if (terms.length === 0) return []
+
+        const escLike = (t: string) => `%${t.replace(/([\\%_])/g, '\\$1')}%`
+        const perTerm = terms.map(
+          (t) =>
+            sql`(lower(${s.tickets.title}) LIKE ${escLike(t)} ESCAPE '\\' OR lower(coalesce(${s.tickets.description}, '')) LIKE ${escLike(t)} ESCAPE '\\')`,
+        )
+        const candidates = (
           await db
             .select()
             .from(s.tickets)
-            .where(
-              and(
-                eq(s.tickets.orgId, orgId),
-                sql`(lower(${s.tickets.title}) LIKE ${like} ESCAPE '\\' OR lower(coalesce(${s.tickets.description}, '')) LIKE ${like} ESCAPE '\\')`,
-              ),
-            )
+            .where(and(eq(s.tickets.orgId, orgId), or(...perTerm)))
             .orderBy(desc(s.tickets.createdAt))
-            .limit(limitOf(opts))
+            .limit(SEARCH_CANDIDATE_CAP)
         ).map(toTicket)
+
+        const phrase = query.toLowerCase().trim()
+        const scored = candidates.map((t) => {
+          const title = t.title.toLowerCase()
+          const body = (t.description ?? '').toLowerCase()
+          let score = 0
+          for (const term of terms) {
+            if (title.includes(term)) score += 3
+            else if (body.includes(term)) score += 1
+          }
+          if (terms.length > 1 && title.includes(phrase)) score += 4
+          else if (terms.length > 1 && body.includes(phrase)) score += 2
+          return { t, score }
+        })
+        scored.sort((a, b) => b.score - a.score || b.t.createdAt.localeCompare(a.t.createdAt))
+        return scored.slice(0, limitOf(opts)).map((r) => r.t)
       },
       async listChildren(orgId, parentId, opts) {
         return (

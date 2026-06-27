@@ -238,6 +238,33 @@ describe('tags + subtask relationships', () => {
     expect(await db.repositories.tickets.listByLabel(org.id, '5')).toHaveLength(0)
   })
 
+  it('ranks search by term coverage, title weight and phrase match', async () => {
+    const { org, project } = await makeOrgWithTeamProject('acme')
+    const mk = (key: string, number: number, title: string, description: string | null) =>
+      db.repositories.tickets.create(org.id, {
+        projectId: project.id,
+        key,
+        number,
+        title,
+        description,
+        status: 'todo',
+        priority: 'none',
+        labels: [],
+        assigneeId: null,
+        parentId: null,
+      })
+    await mk('PRJ-1', 1, 'Wire the MCP server', 'connect the transport')
+    await mk('PRJ-2', 2, 'MCP transport bug', null)
+    await mk('PRJ-3', 3, 'Unrelated chore', 'mentions a server once')
+
+    const hits = await db.repositories.tickets.search(org.id, 'MCP server')
+    // PRJ-1: both terms in title + full phrase; PRJ-2: one title term; PRJ-3: one body term.
+    expect(hits.map((t) => t.key)).toEqual(['PRJ-1', 'PRJ-2', 'PRJ-3'])
+
+    // A term that appears nowhere yields no results.
+    expect(await db.repositories.tickets.search(org.id, 'kubernetes')).toEqual([])
+  })
+
   it('lists direct subtasks of a parent', async () => {
     const { org, project } = await makeOrgWithTeamProject('acme')
     const parent = await mkTicket(org.id, project.id, { key: 'ROOST-1', number: 1 })
