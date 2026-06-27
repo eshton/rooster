@@ -739,6 +739,52 @@ describe('listWorkspaces', () => {
   })
 })
 
+describe('createWorkspace', () => {
+  it('creates a second workspace owned by the same account', async () => {
+    const { owner } = await bootstrap()
+    const res = await services.orgs.createWorkspace(owner, {
+      workspace: { name: 'Second' },
+      project: { name: 'Core', key: 'SEC' },
+    })
+    expect(res.org.slug).toBe('second')
+    expect(res.project.key).toBe('SEC')
+
+    // The account now belongs to both orgs.
+    const ws = await services.orgs.listWorkspaces(owner)
+    expect(ws.map((w) => w.orgId).sort()).toEqual([owner.orgId, res.org.id].sort())
+
+    // The caller is owner in the new org and can file a ticket there.
+    const newOwner = await services.resolveActor({
+      orgId: res.org.id,
+      principalId: res.founder.id,
+    })
+    expect(newOwner.role).toBe('owner')
+    const t = await services.tickets.create(newOwner, { projectId: res.project.id, title: 'hi' })
+    expect(t.key).toBe('SEC-1')
+  })
+
+  it('rejects an agent (single-org, no account)', async () => {
+    const { org } = await bootstrap()
+    const agent = await db.repositories.principals.create(org.id, {
+      type: 'agent',
+      displayName: 'bot',
+    })
+    const agentActor: Actor = {
+      orgId: org.id,
+      principalId: agent.id,
+      type: 'agent',
+      role: 'owner',
+      scopes: [],
+    }
+    await expect(
+      services.orgs.createWorkspace(agentActor, {
+        workspace: { name: 'X' },
+        project: { name: 'P', key: 'XXX' },
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError)
+  })
+})
+
 // --- watchers + notifications -----------------------------------------------
 
 describe('watchers', () => {

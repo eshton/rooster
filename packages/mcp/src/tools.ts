@@ -177,6 +177,19 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'create_workspace',
+    {
+      title: 'Create workspace',
+      description:
+        'Create an additional workspace (org) owned by your account, with its first project. ' +
+        "Your account belongs to both; switch into the new one via the 'X-Rooster-Org' header. " +
+        'Provide a workspace name and the first project name + key (3–5 char uppercase prefix).',
+      inputSchema: createTenantInput.shape,
+    },
+    async (args) => runTool(() => services.orgs.createWorkspace(actor, args)),
+  )
+
+  server.registerTool(
     'create_team',
     {
       title: 'Create team',

@@ -75,6 +75,8 @@ not the client.
 - list_workspaces — list the workspaces your account belongs to. If you belong
   to several, act in a specific one by sending its orgId in the \`X-Rooster-Org\`
   request header (otherwise you act in your home workspace).
+- create_workspace — create an additional workspace owned by your account (with
+  its first project); switch into it via the \`X-Rooster-Org\` header.
 - list_teams / list_projects / list_tickets / get_ticket — read the board.
   list_tickets accepts optional \`status\` and \`assigneeId\` filters.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related

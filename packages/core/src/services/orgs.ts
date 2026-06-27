@@ -1,16 +1,34 @@
 import type { Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
-import { ConflictError } from '../errors.js'
+import { ConflictError, ForbiddenError } from '../errors.js'
 import { parse } from '../validate.js'
 import {
   type CreateOrgInput,
+  type CreateTenantInput,
   createOrgInput,
+  createTenantInput,
   type Org,
   type Principal,
+  type Project,
+  type Team,
   type User,
   z,
 } from './deps.js'
+
+/** Upper bound on workspaces a single account may own (anti-abuse guardrail). */
+const MAX_WORKSPACES_PER_ACCOUNT = 25
+
+/** Derive a valid org slug from a free-text workspace name (inlined to avoid an
+ * import cycle with `onboarding.ts`). */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  return base.length >= 2 ? base : 'workspace'
+}
 
 const founderInput = z.object({
   displayName: z.string().min(1).max(120),
@@ -33,6 +51,13 @@ export interface BootstrapResult {
   user: User
 }
 
+export interface CreateWorkspaceResult {
+  org: Org
+  founder: Principal
+  team: Team
+  project: Project
+}
+
 export interface OrgService {
   /**
    * Create a new org together with its founding human owner (principal + user +
@@ -41,6 +66,14 @@ export interface OrgService {
    */
   bootstrap(input: BootstrapOrgInput): Promise<BootstrapResult>
   get(actor: Actor): Promise<Org>
+  /**
+   * Create an additional workspace for an already-onboarded account. Unlike
+   * `bootstrap` (which mints a fresh user at signup), this reuses the caller's
+   * global account: a new founder principal in the new org is linked to the
+   * same `userId`, so the account belongs to both. Agents (single-org, no
+   * userId) cannot create workspaces.
+   */
+  createWorkspace(actor: Actor, input: CreateTenantInput): Promise<CreateWorkspaceResult>
   /**
    * The workspaces (orgs) the calling principal's account belongs to — for an
    * agent acting on behalf of a multi-workspace human to discover and choose
@@ -112,6 +145,74 @@ export function createOrgService(repos: Repositories): OrgService {
       const org = await repos.orgs.getById(actor.orgId)
       if (!org) throw new ConflictError('Actor org no longer exists')
       return org
+    },
+
+    async createWorkspace(actor, rawInput) {
+      const input = parse(createTenantInput, rawInput)
+
+      // Only a human account (a user principal linked to a global account) may
+      // create workspaces; agents are bound to their single org.
+      const principal = await repos.principals.findById(actor.principalId)
+      if (principal?.type !== 'user' || !principal.userId) {
+        throw new ForbiddenError('Only a human account can create a workspace')
+      }
+      const userId = principal.userId
+
+      // Guardrail: cap workspaces per account.
+      const mine = await repos.principals.listByUserId(userId)
+      if (new Set(mine.map((p) => p.orgId)).size >= MAX_WORKSPACES_PER_ACCOUNT) {
+        throw new ConflictError(`Account is at the workspace limit (${MAX_WORKSPACES_PER_ACCOUNT})`)
+      }
+
+      // Allocate a unique slug from the workspace name (de-dupe on collision).
+      const baseSlug = input.workspace.slug ?? slugify(input.workspace.name)
+      let org: Org | null = null
+      for (let attempt = 0; attempt <= 25 && !org; attempt++) {
+        const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`
+        if (await repos.orgs.getBySlug(slug)) continue
+        org = await repos.orgs.create({
+          slug,
+          name: input.workspace.name,
+          enrollmentPolicy: 'open',
+        })
+      }
+      if (!org) {
+        throw new ConflictError(`Could not find an available workspace slug near '${baseSlug}'`)
+      }
+
+      // New founder principal in the new org, linked to the SAME account.
+      const founder = await repos.principals.create(org.id, {
+        type: 'user',
+        displayName: principal.displayName,
+        userId,
+      })
+      await repos.memberships.upsert(org.id, {
+        principalId: founder.id,
+        teamId: null,
+        role: 'owner',
+      })
+
+      // A first team + project so tickets can be filed immediately.
+      const team = await repos.teams.create(org.id, { key: null, name: input.workspace.name })
+      const project = await repos.projects.create(org.id, {
+        teamId: team.id,
+        key: input.project.key,
+        name: input.project.name,
+        description: null,
+        archived: false,
+      })
+
+      await recordAudit(
+        repos,
+        { orgId: org.id, principalId: founder.id, type: 'user', role: 'owner', scopes: [] },
+        {
+          action: 'org.create_workspace',
+          targetType: 'org',
+          targetId: org.id,
+          after: { slug: org.slug, projectKey: project.key },
+        },
+      )
+      return { org, founder, team, project }
     },
 
     async listWorkspaces(actor) {
