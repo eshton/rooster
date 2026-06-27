@@ -3,7 +3,7 @@ import { createDatabase, type Database } from '@rooster/db'
 import type { Role } from '@rooster/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Actor } from './actor.js'
-import { ForbiddenError, NotFoundError, ValidationError } from './errors.js'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from './errors.js'
 import type { CrowEvent } from './notify.js'
 import { provisionTenant } from './onboarding.js'
 import { authorize, can } from './permissions.js'
@@ -53,7 +53,11 @@ async function makeUser(orgId: string, owner: Actor, role: Role): Promise<Actor>
 
 async function makeProject(owner: Actor) {
   const team = await services.teams.create(owner, { key: 'ROOST', name: 'Roost' })
-  const project = await services.projects.create(owner, { teamId: team.id, name: 'Henhouse' })
+  const project = await services.projects.create(owner, {
+    teamId: team.id,
+    key: 'ROOST',
+    name: 'Henhouse',
+  })
   return { team, project }
 }
 
@@ -239,7 +243,7 @@ describe('provisionTenant', () => {
       org: { slug: 'rooster', name: 'Rooster' },
       founder: { name: 'Al', email: 'al@rooster.test' },
       team: { key: 'ROOST', name: 'Roost' },
-      project: { name: 'Rooster Core' },
+      project: { name: 'Rooster Core', key: 'ROOST' },
       agent: {
         displayName: 'Dev Claude',
         kind: 'claude-code',
@@ -265,6 +269,48 @@ describe('provisionTenant', () => {
       labels: ['bootstrap'],
     })
     expect(ticket.key).toBe('ROOST-1')
+  })
+})
+
+// --- project keys ------------------------------------------------------------
+
+describe('project keys', () => {
+  it('keys tickets by project, numbers each project independently', async () => {
+    const { owner } = await bootstrap()
+    const team = await services.teams.create(owner, { name: 'Eng' })
+    const asa = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'ASA',
+      name: 'Aston',
+    })
+    const web = await services.projects.create(owner, { teamId: team.id, key: 'WEB', name: 'Web' })
+
+    const a1 = await services.tickets.create(owner, { projectId: asa.id, title: 'a' })
+    const w1 = await services.tickets.create(owner, { projectId: web.id, title: 'w' })
+    const a2 = await services.tickets.create(owner, { projectId: asa.id, title: 'a2' })
+
+    expect([a1.key, a2.key]).toEqual(['ASA-1', 'ASA-2'])
+    expect(w1.key).toBe('WEB-1') // independent per-project sequence
+  })
+
+  it('rejects a duplicate project key in the same org (collision → widen the key)', async () => {
+    const { owner } = await bootstrap()
+    const team = await services.teams.create(owner, { name: 'Eng' })
+    await services.projects.create(owner, { teamId: team.id, key: 'ASA', name: 'Aston' })
+
+    await expect(
+      services.projects.create(owner, { teamId: team.id, key: 'ASA', name: 'Aston 2' }),
+    ).rejects.toBeInstanceOf(ConflictError)
+
+    // Widening to a 4-char key resolves the collision.
+    const ok = await services.projects.create(owner, { teamId: team.id, key: 'ASA2', name: 'A2' })
+    expect(ok.key).toBe('ASA2')
+  })
+
+  it('allows creating a team without a key', async () => {
+    const { owner } = await bootstrap()
+    const team = await services.teams.create(owner, { name: 'Keyless' })
+    expect(team.key).toBeNull()
   })
 })
 

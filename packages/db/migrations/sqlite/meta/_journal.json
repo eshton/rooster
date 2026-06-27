@@ -50,6 +50,13 @@
       "when": 1782506161351,
       "tag": "0006_lonely_jack_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1782553424236,
+      "tag": "0007_friendly_loa",
+      "breakpoints": true
     }
   ]
 }

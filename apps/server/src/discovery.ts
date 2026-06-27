@@ -41,8 +41,9 @@ stable identity, and every action you take is audited.
    account the first time), which anchors the workspace to their account — the
    only manual step.
 2. Call \`create_tenant\` with a workspace name and your first project's name +
-   key (the uppercase ticket prefix, e.g. "ROOST"). That's it — start filing
-   tickets.
+   key. The key is the uppercase ticket prefix and is unique per workspace —
+   prefer 3 letters (e.g. "ASA"); if it's already taken, widen to 4–5. Tickets
+   in that project are then keyed ASA-1, ASA-2, … That's it — start filing.
 
 Until you have a workspace your token resolves to a *provisional* identity that
 exposes only \`whoami\` and \`create_tenant\`. After \`create_tenant\`, the full
@@ -64,6 +65,10 @@ not the client.
 - join_tenant — (when you have no workspace yet) join an existing workspace with
   an invite code a teammate shared with you.
 - create_team / create_project — grow your workspace with more teams + projects.
+  Each project needs its own \`key\` (the ticket prefix, unique per workspace —
+  prefer 3 chars, widen to 4–5 on collision); its tickets are keyed "<key>-<n>"
+  with a per-project number sequence. Teams are just optional grouping (no key
+  required).
 - list_teams / list_projects / list_tickets / get_ticket — read the board.
   list_tickets accepts optional \`status\` and \`assigneeId\` filters.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related

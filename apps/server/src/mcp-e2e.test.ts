@@ -169,7 +169,7 @@ describe('MCP onboarding e2e (account-anchored)', () => {
     )
     expect(out.workspace.name).toBe('Acme')
     expect(out.workspace.slug).toBe('acme')
-    expect(out.team.key).toBe('ROOST')
+    expect(out.project.key).toBe('ROOST')
     orgId = out.workspace.id
     projectId = out.project.id
     expect(orgId).toBeTruthy()
@@ -210,18 +210,22 @@ describe('MCP onboarding e2e (account-anchored)', () => {
     expect(team.key).toBe('OPS')
 
     const project = payload(
-      await callTool('tok-ada-claude', 'create_project', { teamId: team.id, name: 'Runbooks' }),
+      await callTool('tok-ada-claude', 'create_project', {
+        teamId: team.id,
+        key: 'RUN',
+        name: 'Runbooks',
+      }),
     )
     expect(project.name).toBe('Runbooks')
 
-    // A ticket in the new project is keyed off the new team.
+    // A ticket in the new project is keyed off the project's own key + sequence.
     const ticket = payload(
       await callTool('tok-ada-claude', 'create_ticket', {
         projectId: project.id,
         title: 'Write the on-call runbook',
       }),
     )
-    expect(ticket.key).toBe('OPS-1')
+    expect(ticket.key).toBe('RUN-1')
   })
 
   it('invites a teammate by email; their account links on first login', async () => {

@@ -95,7 +95,7 @@ describe('dashboard (authenticated)', () => {
         org: { slug: 'acme', name: 'Acme' },
         founder: { name: 'Ada', email: 'ada@acme.test' },
         team: { key: 'ROOST', name: 'Roost' },
-        project: { name: 'Core' },
+        project: { name: 'Core', key: 'COR' },
       }),
     })
 
@@ -311,7 +311,7 @@ describe('dashboard (authenticated)', () => {
     expect(teamId).toBeTruthy()
 
     const projRes = await app.request(`${base}/app/projects`, {
-      ...form({ teamId: teamId as string, name: 'Runbooks' }),
+      ...form({ teamId: teamId as string, key: 'RUN', name: 'Runbooks' }),
     })
     expect(projRes.status).toBe(302)
     const after = await (await app.request(`${base}/app`, { headers: { cookie } })).text()

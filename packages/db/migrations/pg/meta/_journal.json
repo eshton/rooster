@@ -50,6 +50,13 @@
       "when": 1782506162318,
       "tag": "0006_romantic_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782553425980,
+      "tag": "0007_magical_pet_avengers",
+      "breakpoints": true
     }
   ]
 }

@@ -42,6 +42,21 @@ Rooster uses **two** sets of tables in the same database:
    (The Node entry also auto-migrates on startup; the command above is for
    serverless/CI where you migrate once, out of band.)
 
+   > **Upgrading across the project-key change (migration 0007):** the ticket
+   > prefix moved from teams to projects, and ticket numbering is now per
+   > project. Migration 0007 adds `projects.key` (nullable) + `projects.ticket_seq`
+   > but **cannot backfill them** — a fresh install is fine, but an existing
+   > database needs a one-time data fix: set each project's `key` to a unique
+   > 3–5 char prefix and set its `ticket_seq` to the highest existing ticket
+   > number in that project, e.g.
+   > ```sql
+   > UPDATE projects SET key = 'ROOST' WHERE id = '…';
+   > UPDATE projects SET ticket_seq =
+   >   (SELECT COALESCE(MAX(number), 0) FROM tickets WHERE tickets.project_id = projects.id)
+   >   WHERE key IS NOT NULL;
+   > ```
+   > Until a project has a non-null `key`, new tickets can't be filed in it.
+
 2. **Auth tables** (user, session, account, oauth*, …) — owned and migrated by
    **better-auth itself**. On Postgres:
 

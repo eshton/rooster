@@ -459,11 +459,11 @@ export function orgOverview(data: {
             ? projects
                 .map(
                   (p) =>
-                    `<div class="row"><a href="/app/projects/${esc(p.id)}">${esc(p.name)}</a>${p.archived ? '<span class="badge">archived</span>' : ''}</div>`,
+                    `<div class="row"><span class="key">${esc(p.key)}</span><a href="/app/projects/${esc(p.id)}">${esc(p.name)}</a>${p.archived ? '<span class="badge">archived</span>' : ''}</div>`,
                 )
                 .join('')
             : '<div class="empty">🪹 No projects</div>'
-          return `<div class="card"><div class="row"><strong>${esc(t.name)}</strong><span class="key">${esc(t.key)}</span></div><div style="margin-top:.5rem">${items}</div></div>`
+          return `<div class="card"><div class="row"><strong>${esc(t.name)}</strong>${t.key ? `<span class="key">${esc(t.key)}</span>` : ''}</div><div style="margin-top:.5rem">${items}</div></div>`
         })
         .join('')
     : '<div class="empty">🪹 No teams yet.</div>'
@@ -495,7 +495,7 @@ export function orgOverview(data: {
   const createTeam = data.canCreateTeam
     ? `<fieldset><legend>New team</legend>
         <form method="post" action="/app/teams" class="actions">
-          <input name="key" placeholder="KEY (e.g. OPS)" required style="max-width:8rem;text-transform:uppercase">
+          <input name="key" placeholder="KEY (optional)" style="max-width:8rem;text-transform:uppercase">
           <input name="name" placeholder="Team name" required>
           <button class="btn sm" type="submit">Create team</button>
         </form></fieldset>`
@@ -505,6 +505,7 @@ export function orgOverview(data: {
       ? `<fieldset><legend>New project</legend>
         <form method="post" action="/app/projects" class="actions">
           <select name="teamId">${data.teams.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select>
+          <input name="key" placeholder="KEY (e.g. ASA)" required minlength="3" maxlength="5" style="max-width:7rem;text-transform:uppercase" title="ticket prefix, 3–5 chars">
           <input name="name" placeholder="Project name" required>
           <button class="btn sm" type="submit">Create project</button>
         </form></fieldset>`
@@ -616,7 +617,7 @@ export function projectBoard(data: {
   return chrome(
     data.project.name,
     data.actor,
-    `<p class="muted"><a href="/app">← Overview</a></p><h1>${esc(data.project.name)}</h1>
+    `<p class="muted"><a href="/app">← Overview</a></p><h1><span class="key">${esc(data.project.key)}</span> ${esc(data.project.name)}</h1>
     ${data.project.description ? `<p class="muted">${esc(data.project.description)}</p>` : ''}
     ${createForm}
     ${filter}

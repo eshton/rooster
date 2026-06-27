@@ -83,8 +83,8 @@ export function registerProvisioningTools(
         return {
           workspace: { id: result.org.id, slug: result.org.slug, name: result.org.name },
           team: { id: result.team.id, key: result.team.key },
-          project: { id: result.project.id, name: result.project.name },
-          message: `Workspace '${result.org.name}' is ready. Create tickets in '${result.project.name}' — they'll be keyed ${result.team.key}-1, ${result.team.key}-2, …`,
+          project: { id: result.project.id, name: result.project.name, key: result.project.key },
+          message: `Workspace '${result.org.name}' is ready. Create tickets in '${result.project.name}' — they'll be keyed ${result.project.key}-1, ${result.project.key}-2, …`,
         }
       }),
   )

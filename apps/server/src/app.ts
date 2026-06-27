@@ -102,7 +102,7 @@ export function createApp(ctx: ServerContext): Hono {
         {
           org: { id: result.org.id, slug: result.org.slug, name: result.org.name },
           team: { id: result.team.id, key: result.team.key },
-          project: { id: result.project.id, name: result.project.name },
+          project: { id: result.project.id, name: result.project.name, key: result.project.key },
           agent: result.agent
             ? { id: result.agent.id, principalId: result.agent.principalId }
             : null,

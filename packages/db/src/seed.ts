@@ -59,6 +59,7 @@ export async function seed(repos: Repositories): Promise<SeedResult> {
   const team = await repos.teams.create(org.id, { key: 'ROOST', name: 'Roost' })
   const project = await repos.projects.create(org.id, {
     teamId: team.id,
+    key: 'HEN',
     name: 'Henhouse',
     description: 'The flagship coop.',
     archived: false,
@@ -85,10 +86,10 @@ export async function seed(repos: Repositories): Promise<SeedResult> {
     { title: 'Lay the foundation', assignee: null },
     { title: 'Wire up the roost', assignee: agentPrincipal.id },
   ].entries()) {
-    const number = await repos.tickets.nextNumber(org.id, team.id)
+    const number = await repos.tickets.nextNumber(org.id, project.id)
     const ticket = await repos.tickets.create(org.id, {
       projectId: project.id,
-      key: `${team.key}-${number}`,
+      key: `${project.key}-${number}`,
       number,
       title: spec.title,
       description: null,

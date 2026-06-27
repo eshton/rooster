@@ -418,8 +418,11 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
   app.post('/app/teams', (c) =>
     action(c, async (actor) => {
       const body = await c.req.parseBody()
+      const key = String(body.key ?? '')
+        .trim()
+        .toUpperCase()
       await ctx.services.teams.create(actor, {
-        key: String(body.key ?? '').toUpperCase(),
+        key: key === '' ? undefined : key,
         name: String(body.name ?? ''),
       })
       return '/app'
@@ -431,6 +434,9 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       const body = await c.req.parseBody()
       await ctx.services.projects.create(actor, {
         teamId: String(body.teamId ?? ''),
+        key: String(body.key ?? '')
+          .trim()
+          .toUpperCase(),
         name: String(body.name ?? ''),
         description: body.description ? String(body.description) : undefined,
       })

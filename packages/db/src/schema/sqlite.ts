@@ -28,8 +28,10 @@ export const teams = sqliteTable(
   {
     id: id(),
     orgId: text('org_id').notNull(),
-    key: text('key').notNull(),
+    // Optional team grouping key (the ticket prefix moved to projects).
+    key: text('key'),
     name: text('name').notNull(),
+    // Deprecated: ticket numbering is now per-project (projects.ticket_seq).
     ticketSeq: integer('ticket_seq').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -37,16 +39,24 @@ export const teams = sqliteTable(
   (t) => [uniqueIndex('teams_org_key_uq').on(t.orgId, t.key)],
 )
 
-export const projects = sqliteTable('projects', {
-  id: id(),
-  orgId: text('org_id').notNull(),
-  teamId: text('team_id').notNull(),
-  name: text('name').notNull(),
-  description: text('description'),
-  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-})
+export const projects = sqliteTable(
+  'projects',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    teamId: text('team_id').notNull(),
+    // The ticket-key prefix for this project, unique per org.
+    key: text('key'),
+    name: text('name').notNull(),
+    description: text('description'),
+    archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    // Per-project ticket number sequence (atomically incremented on create).
+    ticketSeq: integer('ticket_seq').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('projects_org_key_uq').on(t.orgId, t.key)],
+)
 
 export const principals = sqliteTable('principals', {
   id: id(),

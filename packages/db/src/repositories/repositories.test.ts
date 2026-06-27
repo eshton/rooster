@@ -23,6 +23,7 @@ async function makeOrgWithTeamProject(slug: string) {
   const team = await repos.teams.create(org.id, { key: 'ROOST', name: 'Roost' })
   const project = await repos.projects.create(org.id, {
     teamId: team.id,
+    key: 'PRJ',
     name: 'P',
     description: null,
     archived: false,
@@ -48,11 +49,11 @@ describe('org / team / project round-trip', () => {
 })
 
 describe('ticket numbering', () => {
-  it('allocates sequential, gap-free numbers per team', async () => {
-    const { org, team } = await makeOrgWithTeamProject('acme')
-    const a = await db.repositories.tickets.nextNumber(org.id, team.id)
-    const b = await db.repositories.tickets.nextNumber(org.id, team.id)
-    const c = await db.repositories.tickets.nextNumber(org.id, team.id)
+  it('allocates sequential, gap-free numbers per project', async () => {
+    const { org, project } = await makeOrgWithTeamProject('acme')
+    const a = await db.repositories.tickets.nextNumber(org.id, project.id)
+    const b = await db.repositories.tickets.nextNumber(org.id, project.id)
+    const c = await db.repositories.tickets.nextNumber(org.id, project.id)
     expect([a, b, c]).toEqual([1, 2, 3])
   })
 })
@@ -233,7 +234,7 @@ describe('tags + subtask relationships', () => {
 describe('seed', () => {
   it('produces a coherent demo dataset and is idempotent', async () => {
     const first = await seed(db.repositories)
-    expect(first.ticketKeys).toEqual(['ROOST-1', 'ROOST-2'])
+    expect(first.ticketKeys).toEqual(['HEN-1', 'HEN-2'])
     expect(await db.repositories.orgs.getBySlug('acme')).not.toBeNull()
 
     const agents = await db.repositories.agents.list(first.orgId)

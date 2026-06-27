@@ -9,7 +9,7 @@ import {
   ticketPrioritySchema,
   ticketStatusSchema,
 } from './enums.js'
-import { idSchema, ticketKeySchema, timestampSchema } from './ids.js'
+import { idSchema, projectKeySchema, ticketKeySchema, timestampSchema } from './ids.js'
 
 const base = {
   id: idSchema,
@@ -33,11 +33,17 @@ export type Org = z.infer<typeof orgSchema>
 export const teamSchema = z.object({
   ...base,
   orgId: idSchema,
+  /**
+   * Optional grouping key. Ticket prefixes now live on the **project**, so a
+   * team no longer needs a key; the column is kept (nullable, unique per org
+   * when set) for future per-team grouping.
+   */
   key: z
     .string()
     .min(2)
     .max(10)
-    .regex(/^[A-Z][A-Z0-9]*$/, 'Uppercase ticket-key prefix, e.g. "ROOST"'),
+    .regex(/^[A-Z][A-Z0-9]*$/, 'Uppercase key, e.g. "ENG"')
+    .nullable(),
   name: z.string().min(1).max(120),
 })
 export type Team = z.infer<typeof teamSchema>
@@ -46,6 +52,8 @@ export const projectSchema = z.object({
   ...base,
   orgId: idSchema,
   teamId: idSchema,
+  /** The project's ticket-key prefix (unique per org); tickets are "<key>-<n>". */
+  key: projectKeySchema,
   name: z.string().min(1).max(120),
   description: z.string().max(4000).nullable(),
   archived: z.boolean(),

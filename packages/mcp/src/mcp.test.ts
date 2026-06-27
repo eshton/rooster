@@ -75,7 +75,11 @@ describe('MCP server end-to-end', () => {
 
   it('drives a full ticket workflow through tools', async () => {
     const team = await services.teams.create(owner, { key: 'ROOST', name: 'Roost' })
-    const project = await services.projects.create(owner, { teamId: team.id, name: 'Henhouse' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'ROOST',
+      name: 'Henhouse',
+    })
 
     const created = payload(
       (await call('create_ticket', {
@@ -102,7 +106,11 @@ describe('MCP server end-to-end', () => {
 
   it('surfaces domain errors as isError results, not crashes', async () => {
     const team = await services.teams.create(owner, { key: 'ROOST', name: 'Roost' })
-    const project = await services.projects.create(owner, { teamId: team.id, name: 'P' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'ROOST',
+      name: 'P',
+    })
     const created = payload(
       (await call('create_ticket', { projectId: project.id, title: 'x' })) as never,
     )
@@ -118,7 +126,11 @@ describe('MCP server end-to-end', () => {
 
   it('supports due dates, status filters and my_tickets', async () => {
     const team = await services.teams.create(owner, { key: 'DUE', name: 'Due' })
-    const project = await services.projects.create(owner, { teamId: team.id, name: 'P' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'DUE',
+      name: 'P',
+    })
 
     // dueDate + estimate + assignee to the owner principal.
     const created = payload(
@@ -173,9 +185,10 @@ describe('MCP server end-to-end', () => {
     expect(team.key).toBe('OPS')
 
     const project = payload(
-      (await call('create_project', { teamId: team.id, name: 'Runbooks' })) as never,
+      (await call('create_project', { teamId: team.id, key: 'RUN', name: 'Runbooks' })) as never,
     )
     expect(project.name).toBe('Runbooks')
+    expect(project.key).toBe('RUN')
 
     const invite = payload(
       (await call('invite_member', { email: 'bob@acme.test', name: 'Bob' })) as never,

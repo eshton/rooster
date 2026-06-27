@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createTicketInput, ROLES, roleRank, ticketKeySchema, ticketStatusSchema } from './index.js'
+import {
+  createTicketInput,
+  projectKeySchema,
+  ROLES,
+  roleRank,
+  ticketKeySchema,
+  ticketStatusSchema,
+} from './index.js'
 
 describe('enums', () => {
   it('orders roles by privilege', () => {
@@ -22,6 +29,20 @@ describe('ticketKeySchema', () => {
   it('rejects malformed keys', () => {
     for (const bad of ['roost-42', 'ROOST', 'ROOST-', '-42', 'R-1']) {
       expect(ticketKeySchema.safeParse(bad).success).toBe(false)
+    }
+  })
+})
+
+describe('projectKeySchema', () => {
+  it('accepts 3–5 char uppercase keys (prefer 3, widen on collision)', () => {
+    for (const ok of ['ASA', 'ENG', 'ROOST', 'API2', 'AB12']) {
+      expect(projectKeySchema.safeParse(ok).success).toBe(true)
+    }
+  })
+
+  it('rejects too-short, too-long, lowercase, or digit-leading keys', () => {
+    for (const bad of ['AS', 'TOOLONG', 'asa', '1AB', 'A-B', '']) {
+      expect(projectKeySchema.safeParse(bad).success).toBe(false)
     }
   })
 })

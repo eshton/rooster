@@ -6,7 +6,7 @@ import {
   ticketPrioritySchema,
   ticketStatusSchema,
 } from './enums.js'
-import { idSchema } from './ids.js'
+import { idSchema, projectKeySchema } from './ids.js'
 
 // --- Org / Team / Project ---------------------------------------------------
 
@@ -22,11 +22,14 @@ export const createOrgInput = z.object({
 export type CreateOrgInput = z.infer<typeof createOrgInput>
 
 export const createTeamInput = z.object({
+  // Teams no longer carry the ticket prefix (it lives on the project), so a key
+  // is optional — provide one only if you want a team-level grouping key.
   key: z
     .string()
     .min(2)
     .max(10)
-    .regex(/^[A-Z][A-Z0-9]*$/),
+    .regex(/^[A-Z][A-Z0-9]*$/)
+    .optional(),
   name: z.string().min(1).max(120),
 })
 export type CreateTeamInput = z.infer<typeof createTeamInput>
@@ -34,6 +37,8 @@ export type CreateTeamInput = z.infer<typeof createTeamInput>
 export const createProjectInput = z.object({
   teamId: idSchema,
   name: z.string().min(1).max(120),
+  /** The ticket-key prefix for this project (unique per org). Prefer 3 chars. */
+  key: projectKeySchema,
   description: z.string().max(4000).optional(),
 })
 export type CreateProjectInput = z.infer<typeof createProjectInput>
@@ -147,11 +152,7 @@ export const createTenantInput = z.object({
   }),
   project: z.object({
     name: z.string().min(1).max(120),
-    key: z
-      .string()
-      .min(2)
-      .max(10)
-      .regex(/^[A-Z][A-Z0-9]*$/),
+    key: projectKeySchema,
   }),
 })
 export type CreateTenantInput = z.infer<typeof createTenantInput>
@@ -183,11 +184,14 @@ export const registerTenantInput = z.object({
       .string()
       .min(2)
       .max(10)
-      .regex(/^[A-Z][A-Z0-9]*$/),
+      .regex(/^[A-Z][A-Z0-9]*$/)
+      .optional(),
     name: z.string().min(1).max(120),
   }),
   project: z.object({
     name: z.string().min(1).max(120),
+    /** The ticket-key prefix for the first project (unique per org). Prefer 3 chars. */
+    key: projectKeySchema,
     description: z.string().max(4000).optional(),
   }),
   agent: z

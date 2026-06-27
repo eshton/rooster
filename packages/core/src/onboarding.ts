@@ -18,8 +18,8 @@ import type { Services } from './services/index.js'
 export interface ProvisionTenantSpec {
   org: { slug: string; name: string; enrollmentPolicy?: EnrollmentPolicy }
   founder: { name: string; email: string; authUserId?: string | null }
-  team: { key: string; name: string }
-  project: { name: string; description?: string }
+  team: { key?: string | null; name: string }
+  project: { name: string; key: string; description?: string }
   /** Optional first agent; if `oauthClientId` is set it is bound 1:1. */
   agent?: { displayName: string; kind?: AgentKind; scopes?: string[]; oauthClientId?: string }
 }
@@ -59,9 +59,13 @@ export async function provisionTenant(
 
   const owner = await services.resolveActor({ orgId: org.id, principalId: founder.id })
 
-  const team = await services.teams.create(owner, { key: spec.team.key, name: spec.team.name })
+  const team = await services.teams.create(owner, {
+    key: spec.team.key ?? undefined,
+    name: spec.team.name,
+  })
   const project = await services.projects.create(owner, {
     teamId: team.id,
+    key: spec.project.key,
     name: spec.project.name,
     description: spec.project.description,
   })
@@ -130,8 +134,8 @@ export async function provisionTenantForAccount(
       return await provisionTenant(services, {
         org: { slug, name: input.workspace.name, enrollmentPolicy: 'open' },
         founder,
-        team: { key: input.project.key, name: input.workspace.name },
-        project: { name: input.project.name },
+        team: { name: input.workspace.name },
+        project: { name: input.project.name, key: input.project.key },
       })
     } catch (err) {
       // Only a slug collision is retryable; surface anything else immediately.

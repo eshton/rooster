@@ -1,7 +1,7 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
-import { NotFoundError } from '../errors.js'
+import { ConflictError, NotFoundError } from '../errors.js'
 import { authorize } from '../permissions.js'
 import { parse } from '../validate.js'
 import { type CreateProjectInput, createProjectInput, type Id, type Project } from './deps.js'
@@ -21,8 +21,18 @@ export function createProjectService(repos: Repositories): ProjectService {
       const team = await repos.teams.getById(actor.orgId, input.teamId)
       if (!team) throw new NotFoundError(`Team ${input.teamId} not found`)
 
+      // The project key is the ticket prefix and must be unique within the org.
+      // On collision the caller should retry with a longer (4–5 char) key.
+      const existing = await repos.projects.list(actor.orgId, undefined, { limit: 500 })
+      if (existing.some((p) => p.key === input.key)) {
+        throw new ConflictError(
+          `Project key '${input.key}' is already used in this org — try a longer (4–5 char) key`,
+        )
+      }
+
       const project = await repos.projects.create(actor.orgId, {
         teamId: input.teamId,
+        key: input.key,
         name: input.name,
         description: input.description ?? null,
         archived: false,

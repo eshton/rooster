@@ -63,8 +63,8 @@ export interface TicketRepository {
   /** Direct children (subtasks) of a parent ticket. */
   listChildren(orgId: Id, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(orgId: Id, id: Id, patch: Partial<Ticket>): Promise<Ticket>
-  /** Allocate the next sequential ticket number for a team's key. */
-  nextNumber(orgId: Id, teamId: Id): Promise<number>
+  /** Allocate the next sequential ticket number for a project. */
+  nextNumber(orgId: Id, projectId: Id): Promise<number>
 }
 
 export interface CommentRepository {

@@ -133,7 +133,7 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         const ts = now()
         const [row] = await db
           .insert(s.projects)
-          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .values({ id: newId(), orgId, ...input, ticketSeq: 0, createdAt: ts, updatedAt: ts })
           .returning()
         return toProject(row!)
       },
@@ -287,9 +287,9 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         if (!row) throw new Error(`Ticket ${id} not found in org ${orgId}`)
         return toTicket(row)
       },
-      async nextNumber(orgId, teamId) {
-        // Atomically allocate the next number from the team's sequence counter.
-        return repoNextNumber(db, s, orgId, teamId)
+      async nextNumber(orgId, projectId) {
+        // Atomically allocate the next number from the project's sequence counter.
+        return repoNextNumber(db, s, orgId, projectId)
       },
     },
 
@@ -608,17 +608,17 @@ export function createRepositories(db: DB, s: Schema): Repositories {
 }
 
 /**
- * Allocate the next ticket number by atomically incrementing the team's
+ * Allocate the next ticket number by atomically incrementing the project's
  * sequence counter in a single `UPDATE ... RETURNING` statement. Atomic on both
  * SQLite and Postgres without an explicit transaction, so it stays correct
  * under concurrency and avoids per-connection in-memory transaction quirks.
  */
-async function repoNextNumber(db: DB, s: Schema, orgId: Id, teamId: Id): Promise<number> {
+async function repoNextNumber(db: DB, s: Schema, orgId: Id, projectId: Id): Promise<number> {
   const [row] = await db
-    .update(s.teams)
-    .set({ ticketSeq: sql`${s.teams.ticketSeq} + 1`, updatedAt: now() })
-    .where(and(eq(s.teams.orgId, orgId), eq(s.teams.id, teamId)))
-    .returning({ ticketSeq: s.teams.ticketSeq })
-  if (!row) throw new Error(`Team ${teamId} not found in org ${orgId}`)
+    .update(s.projects)
+    .set({ ticketSeq: sql`${s.projects.ticketSeq} + 1`, updatedAt: now() })
+    .where(and(eq(s.projects.orgId, orgId), eq(s.projects.id, projectId)))
+    .returning({ ticketSeq: s.projects.ticketSeq })
+  if (!row) throw new Error(`Project ${projectId} not found in org ${orgId}`)
   return row.ticketSeq
 }

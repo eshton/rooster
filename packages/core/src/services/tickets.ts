@@ -104,8 +104,7 @@ export function createTicketService(
 
       const project = await repos.projects.getById(actor.orgId, input.projectId)
       if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
-      const team = await repos.teams.getById(actor.orgId, project.teamId)
-      if (!team) throw new NotFoundError(`Team ${project.teamId} not found`)
+      if (!project.key) throw new NotFoundError(`Project ${input.projectId} has no ticket key`)
 
       await requireAssignee(actor, input.assigneeId ?? null)
       if (input.parentId != null) {
@@ -113,10 +112,11 @@ export function createTicketService(
         if (!parent) throw new NotFoundError(`Parent ticket ${input.parentId} not found`)
       }
 
-      const number = await repos.tickets.nextNumber(actor.orgId, team.id)
+      // Ticket numbering is per-project, so keys read "<project key>-<n>".
+      const number = await repos.tickets.nextNumber(actor.orgId, project.id)
       const ticket = await repos.tickets.create(actor.orgId, {
         projectId: input.projectId,
-        key: `${team.key}-${number}`,
+        key: `${project.key}-${number}`,
         number,
         title: input.title,
         description: input.description ?? null,

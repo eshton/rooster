@@ -100,7 +100,7 @@ describe('tenant onboarding', () => {
     org: { slug: 'acme', name: 'Acme' },
     founder: { name: 'Ada', email: 'ada@acme.test' },
     team: { key: 'ROOST', name: 'Roost' },
-    project: { name: 'Henhouse' },
+    project: { name: 'Henhouse', key: 'HEN' },
     agent: { displayName: 'Backend Claude', kind: 'claude-code', oauthClientId: 'client-xyz' },
     ...over,
   })
@@ -150,7 +150,7 @@ describe('onboarding signup-token gate', () => {
       org: { slug: 'acme', name: 'Acme' },
       founder: { name: 'Ada', email: 'ada@acme.test' },
       team: { key: 'ROOST', name: 'Roost' },
-      project: { name: 'Henhouse' },
+      project: { name: 'Henhouse', key: 'HEN' },
     }
 
     const denied = await gatedApp.request(`${base}/onboard`, {
