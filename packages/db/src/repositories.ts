@@ -12,6 +12,7 @@ import type {
   Project,
   Team,
   Ticket,
+  TicketAssignee,
   TicketLink,
   User,
   Watcher,
@@ -59,7 +60,10 @@ export interface TicketRepository {
     projectId: Id,
     opts?: ListOptions & { status?: string; assigneeId?: Id; milestoneId?: Id },
   ): Promise<Ticket[]>
-  /** Tickets across the org assigned to a given principal. */
+  /**
+   * Tickets across the org assigned to a principal — as the primary
+   * (`assigneeId`) OR a co-assignee (the `ticket_assignees` join).
+   */
   listAssigned(orgId: Id, assigneeId: Id, opts?: ListOptions): Promise<Ticket[]>
   /** Tickets across the org carrying a given label/tag (exact match). */
   listByLabel(orgId: Id, label: string, opts?: ListOptions): Promise<Ticket[]>
@@ -94,6 +98,15 @@ export interface AttachmentRepository {
   getById(orgId: Id, id: Id): Promise<Attachment | null>
   /** Delete an attachment by id; true if a row was removed. */
   delete(orgId: Id, id: Id): Promise<boolean>
+}
+
+export interface AssigneeRepository {
+  /** Idempotently add a co-assignee; returns the (existing or new) row. */
+  add(orgId: Id, ticketId: Id, principalId: Id): Promise<TicketAssignee>
+  /** Remove a co-assignee; true if a row was removed. */
+  remove(orgId: Id, ticketId: Id, principalId: Id): Promise<boolean>
+  /** The co-assignees of a ticket (the join only; excludes the primary). */
+  listForTicket(orgId: Id, ticketId: Id): Promise<TicketAssignee[]>
 }
 
 export interface WatcherRepository {
@@ -217,6 +230,7 @@ export interface Repositories {
   tickets: TicketRepository
   ticketLinks: TicketLinkRepository
   watchers: WatcherRepository
+  assignees: AssigneeRepository
   milestones: MilestoneRepository
   comments: CommentRepository
   attachments: AttachmentRepository

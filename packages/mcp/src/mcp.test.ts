@@ -223,6 +223,55 @@ describe('MCP server end-to-end', () => {
     expect(hits.some((t) => t.id === created.id)).toBe(true)
   })
 
+  it('manages co-assignees alongside the primary', async () => {
+    const team = await services.teams.create(owner, { key: 'COO', name: 'Co' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'COO',
+      name: 'P',
+    })
+    const created = payload(
+      (await call('create_ticket', {
+        projectId: project.id,
+        title: 'pair work',
+        assigneeId: owner.principalId,
+      })) as never,
+    )
+
+    // A second principal to share ownership with.
+    const bob = await db.repositories.principals.create(owner.orgId, {
+      type: 'agent',
+      displayName: 'Bob',
+    })
+
+    expect(
+      payload(
+        (await call('add_assignee', {
+          ticketId: created.id,
+          principalId: bob.id,
+        })) as never,
+      ),
+    ).toEqual({ added: true })
+
+    const assignees = payload(
+      (await call('list_assignees', { ticketId: created.id })) as never,
+    ) as string[]
+    expect([...assignees].sort()).toEqual([owner.principalId, bob.id].sort())
+
+    // Removing a co-assignee leaves the primary intact.
+    expect(
+      payload(
+        (await call('remove_assignee', {
+          ticketId: created.id,
+          principalId: bob.id,
+        })) as never,
+      ),
+    ).toEqual({ removed: true })
+    expect(payload((await call('list_assignees', { ticketId: created.id })) as never)).toEqual([
+      owner.principalId,
+    ])
+  })
+
   it('creates teams + projects and invites a teammate by email', async () => {
     const team = payload((await call('create_team', { key: 'OPS', name: 'Ops' })) as never)
     expect(team.key).toBe('OPS')

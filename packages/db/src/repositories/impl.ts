@@ -13,6 +13,7 @@ import type {
   Project,
   Team,
   Ticket,
+  TicketAssignee,
   TicketLink,
   User,
   Watcher,
@@ -76,6 +77,7 @@ const toComment = (r: Rows['comments']): Comment => r as Comment
 const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
 const toWatcher = (r: Rows['ticketWatchers']): Watcher => r as Watcher
 const toMilestone = (r: Rows['milestones']): Milestone => r as Milestone
+const toTicketAssignee = (r: Rows['ticketAssignees']): TicketAssignee => r as TicketAssignee
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
 const toAudit = (r: Rows['auditLog']): AuditLog => ({
   ...r,
@@ -241,11 +243,20 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         ).map(toTicket)
       },
       async listAssigned(orgId, assigneeId, opts) {
+        // Primary assignee OR a co-assignee via the join table.
         return (
           await db
             .select()
             .from(s.tickets)
-            .where(and(eq(s.tickets.orgId, orgId), eq(s.tickets.assigneeId, assigneeId)))
+            .where(
+              and(
+                eq(s.tickets.orgId, orgId),
+                or(
+                  eq(s.tickets.assigneeId, assigneeId),
+                  sql`${s.tickets.id} IN (SELECT ${s.ticketAssignees.ticketId} FROM ${s.ticketAssignees} WHERE ${s.ticketAssignees.orgId} = ${orgId} AND ${s.ticketAssignees.principalId} = ${assigneeId})`,
+                ),
+              ),
+            )
             .orderBy(desc(s.tickets.createdAt))
             .limit(limitOf(opts))
         ).map(toTicket)
@@ -537,6 +548,57 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .orderBy(desc(s.ticketWatchers.createdAt))
             .limit(limitOf(opts))
         ).map((r) => r.ticketId)
+      },
+    },
+
+    assignees: {
+      async add(orgId, ticketId, principalId) {
+        const existing = first(
+          (
+            await db
+              .select()
+              .from(s.ticketAssignees)
+              .where(
+                and(
+                  eq(s.ticketAssignees.orgId, orgId),
+                  eq(s.ticketAssignees.ticketId, ticketId),
+                  eq(s.ticketAssignees.principalId, principalId),
+                ),
+              )
+              .limit(1)
+          ).map(toTicketAssignee),
+        )
+        if (existing) return existing
+        const ts = now()
+        const [row] = await db
+          .insert(s.ticketAssignees)
+          .values({ id: newId(), orgId, ticketId, principalId, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toTicketAssignee(row!)
+      },
+      async remove(orgId, ticketId, principalId) {
+        const rows = await db
+          .delete(s.ticketAssignees)
+          .where(
+            and(
+              eq(s.ticketAssignees.orgId, orgId),
+              eq(s.ticketAssignees.ticketId, ticketId),
+              eq(s.ticketAssignees.principalId, principalId),
+            ),
+          )
+          .returning({ id: s.ticketAssignees.id })
+        return rows.length > 0
+      },
+      async listForTicket(orgId, ticketId) {
+        return (
+          await db
+            .select()
+            .from(s.ticketAssignees)
+            .where(
+              and(eq(s.ticketAssignees.orgId, orgId), eq(s.ticketAssignees.ticketId, ticketId)),
+            )
+            .orderBy(s.ticketAssignees.createdAt)
+        ).map(toTicketAssignee)
       },
     },
 

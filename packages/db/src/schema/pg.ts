@@ -160,6 +160,19 @@ export const invites = pgTable('invites', {
   updatedAt: updatedAt(),
 })
 
+export const ticketAssignees = pgTable(
+  'ticket_assignees',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    ticketId: text('ticket_id').notNull(),
+    principalId: text('principal_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('ticket_assignees_uq').on(t.orgId, t.ticketId, t.principalId)],
+)
+
 export const milestones = pgTable('milestones', {
   id: id(),
   orgId: text('org_id').notNull(),
@@ -237,6 +250,7 @@ export const pgSchema = {
   tickets,
   ticketLinks,
   ticketWatchers,
+  ticketAssignees,
   milestones,
   comments,
   attachments,

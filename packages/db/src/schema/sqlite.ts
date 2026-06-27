@@ -174,6 +174,19 @@ export const comments = sqliteTable('comments', {
   updatedAt: updatedAt(),
 })
 
+export const ticketAssignees = sqliteTable(
+  'ticket_assignees',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    ticketId: text('ticket_id').notNull(),
+    principalId: text('principal_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('ticket_assignees_uq').on(t.orgId, t.ticketId, t.principalId)],
+)
+
 export const milestones = sqliteTable('milestones', {
   id: id(),
   orgId: text('org_id').notNull(),
@@ -241,6 +254,7 @@ export const sqliteSchema = {
   tickets,
   ticketLinks,
   ticketWatchers,
+  ticketAssignees,
   milestones,
   comments,
   attachments,

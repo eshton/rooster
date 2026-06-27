@@ -5,6 +5,7 @@ export type {
   AddAttachmentInput,
   Agent,
   AgentStatus,
+  AssigneeRefInput,
   AssignTicketInput,
   Attachment,
   ChangeStatusInput,
@@ -34,6 +35,7 @@ export type {
   SetProjectKeyInput,
   Team,
   Ticket,
+  TicketAssignee,
   TicketLink,
   TicketLinkType,
   TicketStatus,
@@ -45,6 +47,7 @@ export type {
 } from '@rooster/schema'
 export {
   addAttachmentInput,
+  assigneeRefInput,
   assignTicketInput,
   changeStatusInput,
   commentInput,

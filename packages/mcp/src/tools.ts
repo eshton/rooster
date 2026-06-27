@@ -8,6 +8,7 @@ import {
 import {
   addAttachmentInput,
   agentStatusSchema,
+  assigneeRefInput,
   assignTicketInput,
   changeStatusInput,
   commentInput,
@@ -340,6 +341,38 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: assignTicketInput.shape,
     },
     async (args) => runTool(() => services.tickets.assign(actor, args)),
+  )
+
+  server.registerTool(
+    'add_assignee',
+    {
+      title: 'Add assignee',
+      description:
+        'Add a co-assignee (shared ownership — pair/mob, human + agent) alongside the primary ' +
+        'assignee. They auto-follow the ticket. Use assign_ticket to set/clear the primary.',
+      inputSchema: assigneeRefInput.shape,
+    },
+    async (args) => runTool(() => services.tickets.addAssignee(actor, args)),
+  )
+
+  server.registerTool(
+    'remove_assignee',
+    {
+      title: 'Remove assignee',
+      description: 'Remove an assignee from a ticket — the primary (clears it) or a co-assignee.',
+      inputSchema: assigneeRefInput.shape,
+    },
+    async (args) => runTool(() => services.tickets.removeAssignee(actor, args)),
+  )
+
+  server.registerTool(
+    'list_assignees',
+    {
+      title: 'List assignees',
+      description: 'List all assignees of a ticket (primary + co-assignees), as principal ids.',
+      inputSchema: { ticketId: z.uuid() },
+    },
+    async ({ ticketId }) => runTool(() => services.tickets.listAssignees(actor, ticketId)),
   )
 
   server.registerTool(

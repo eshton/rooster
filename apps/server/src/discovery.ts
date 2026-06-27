@@ -84,7 +84,11 @@ not the client.
   (ISO-8601) when there's a deadline, and set \`estimate\` (complexity points —
   see "Estimating work" below) when you can size it.
 - update_ticket / change_status / assign_ticket / comment — manage work.
-- my_tickets — list tickets assigned to you. find_by_label — by tag.
+  assign_ticket sets the single PRIMARY assignee; for shared work add co-owners
+  with add_assignee / remove_assignee / list_assignees (a ticket's effective
+  assignees are the primary plus the co-assignees).
+- my_tickets — list tickets assigned to you (primary OR co-assignee).
+  find_by_label — by tag.
   search_tickets — free-text search over titles + descriptions.
 - list_subtasks — list a ticket's children.
 - create_milestone / list_milestones — group tickets into a milestone / cycle

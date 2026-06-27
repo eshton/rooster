@@ -200,6 +200,15 @@ export const milestoneSchema = z.object({
 })
 export type Milestone = z.infer<typeof milestoneSchema>
 
+/** A co-assignee of a ticket (shared ownership beyond the primary assigneeId). */
+export const ticketAssigneeSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  ticketId: idSchema,
+  principalId: idSchema,
+})
+export type TicketAssignee = z.infer<typeof ticketAssigneeSchema>
+
 /** A principal following a ticket — notified on status/assignee/comment changes. */
 export const watcherSchema = z.object({
   ...base,

@@ -109,6 +109,13 @@ export const commentInput = z.object({
 })
 export type CommentInput = z.infer<typeof commentInput>
 
+/** Add or remove a co-assignee (shared ownership) on a ticket. */
+export const assigneeRefInput = z.object({
+  ticketId: idSchema,
+  principalId: idSchema,
+})
+export type AssigneeRefInput = z.infer<typeof assigneeRefInput>
+
 /** Follow / unfollow a ticket (subscribe to its activity notifications). */
 export const watchTicketInput = z.object({ ticketId: idSchema })
 export type WatchTicketInput = z.infer<typeof watchTicketInput>

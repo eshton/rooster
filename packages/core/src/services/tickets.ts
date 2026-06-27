@@ -7,7 +7,9 @@ import { authorize } from '../permissions.js'
 import { canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
 import { parse } from '../validate.js'
 import {
+  type AssigneeRefInput,
   type AssignTicketInput,
+  assigneeRefInput,
   assignTicketInput,
   type ChangeStatusInput,
   type CreateTicketInput,
@@ -88,6 +90,12 @@ export interface TicketService {
   update(actor: Actor, id: Id, input: UpdateTicketInput): Promise<Ticket>
   changeStatus(actor: Actor, input: ChangeStatusInput): Promise<Ticket>
   assign(actor: Actor, input: AssignTicketInput): Promise<Ticket>
+  /** Add a co-assignee (shared ownership) alongside the primary assignee. */
+  addAssignee(actor: Actor, input: AssigneeRefInput): Promise<{ added: true }>
+  /** Remove an assignee — the primary (clears assigneeId) or a co-assignee. */
+  removeAssignee(actor: Actor, input: AssigneeRefInput): Promise<{ removed: boolean }>
+  /** All assignees of a ticket: the primary + co-assignees (principal ids, deduped). */
+  listAssignees(actor: Actor, ticketId: Id): Promise<Id[]>
   /** Wake/notify the ticket's assignee (records an audited wake intent). */
   crow(actor: Actor, ticketId: Id): Promise<{ ticket: Ticket; assigneeId: Id | null }>
 }
@@ -441,6 +449,62 @@ export function createTicketService(
         assigneeId: after.assigneeId,
       })
       return after
+    },
+
+    async addAssignee(actor, rawInput) {
+      authorize(actor, 'ticket:write')
+      const input = parse(assigneeRefInput, rawInput)
+      const ticket = await load(actor, input.ticketId)
+      await requireAssignee(actor, input.principalId)
+
+      await repos.assignees.add(actor.orgId, input.ticketId, input.principalId)
+      // A co-assignee follows the ticket, like the primary does.
+      await repos.watchers.add(actor.orgId, input.ticketId, input.principalId)
+      await recordAudit(repos, actor, {
+        action: 'ticket.add_assignee',
+        targetType: 'ticket',
+        targetId: input.ticketId,
+        after: { principalId: input.principalId },
+      })
+      await emitToWatchers(repos, crowNotifier, actor, ticket, {
+        kind: 'assigned',
+        assigneeId: input.principalId,
+      })
+      return { added: true }
+    },
+
+    async removeAssignee(actor, rawInput) {
+      authorize(actor, 'ticket:write')
+      const input = parse(assigneeRefInput, rawInput)
+      const ticket = await load(actor, input.ticketId)
+
+      // The primary lives on the ticket row; co-assignees in the join.
+      let removed = false
+      if (ticket.assigneeId === input.principalId) {
+        await repos.tickets.update(actor.orgId, input.ticketId, { assigneeId: null })
+        removed = true
+      } else {
+        removed = await repos.assignees.remove(actor.orgId, input.ticketId, input.principalId)
+      }
+      if (removed) {
+        await recordAudit(repos, actor, {
+          action: 'ticket.remove_assignee',
+          targetType: 'ticket',
+          targetId: input.ticketId,
+          before: { principalId: input.principalId },
+        })
+      }
+      return { removed }
+    },
+
+    async listAssignees(actor, ticketId) {
+      authorize(actor, 'ticket:read')
+      const ticket = await load(actor, ticketId)
+      const co = await repos.assignees.listForTicket(actor.orgId, ticketId)
+      const ids = new Set<Id>()
+      if (ticket.assigneeId) ids.add(ticket.assigneeId)
+      for (const a of co) ids.add(a.principalId)
+      return [...ids]
     },
 
     async crow(actor, ticketId) {

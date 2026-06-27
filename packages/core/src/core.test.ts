@@ -875,6 +875,86 @@ describe('watchers', () => {
   })
 })
 
+// --- multiple assignees -----------------------------------------------------
+
+describe('multiple assignees', () => {
+  it('lists the primary plus co-assignees, deduped', async () => {
+    const { org, owner, founder } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'shared' })
+    const bob = await makeUser(org.id, owner, 'member')
+
+    await services.tickets.assign(owner, { ticketId: t.id, assigneeId: founder.id })
+    expect(
+      await services.tickets.addAssignee(owner, {
+        ticketId: t.id,
+        principalId: bob.principalId,
+      }),
+    ).toEqual({ added: true })
+
+    const ids = await services.tickets.listAssignees(owner, t.id)
+    expect([...ids].sort()).toEqual([founder.id, bob.principalId].sort())
+  })
+
+  it('add is idempotent and auto-follows the co-assignee', async () => {
+    const { org, owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'x' })
+    const bob = await makeUser(org.id, owner, 'member')
+
+    await services.tickets.addAssignee(owner, { ticketId: t.id, principalId: bob.principalId })
+    await services.tickets.addAssignee(owner, { ticketId: t.id, principalId: bob.principalId })
+
+    expect(await services.tickets.listAssignees(owner, t.id)).toEqual([bob.principalId])
+    expect((await services.watchers.listWatchers(owner, t.id)).map((w) => w.principalId)).toEqual([
+      bob.principalId,
+    ])
+  })
+
+  it('my_tickets unions primary and co-assignee tickets', async () => {
+    const { org, owner, founder } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const bob = await makeUser(org.id, owner, 'member')
+
+    const primary = await services.tickets.create(owner, { projectId: project.id, title: 'mine' })
+    await services.tickets.assign(owner, { ticketId: primary.id, assigneeId: bob.principalId })
+
+    const shared = await services.tickets.create(owner, { projectId: project.id, title: 'ours' })
+    await services.tickets.assign(owner, { ticketId: shared.id, assigneeId: founder.id })
+    await services.tickets.addAssignee(owner, { ticketId: shared.id, principalId: bob.principalId })
+
+    const mine = await services.tickets.myTickets(bob)
+    expect(mine.map((x) => x.id).sort()).toEqual([primary.id, shared.id].sort())
+  })
+
+  it('removing the primary clears assigneeId; removing a co-assignee drops the join', async () => {
+    const { org, owner, founder } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'x' })
+    const bob = await makeUser(org.id, owner, 'member')
+
+    await services.tickets.assign(owner, { ticketId: t.id, assigneeId: founder.id })
+    await services.tickets.addAssignee(owner, { ticketId: t.id, principalId: bob.principalId })
+
+    expect(
+      await services.tickets.removeAssignee(owner, {
+        ticketId: t.id,
+        principalId: founder.id,
+      }),
+    ).toEqual({ removed: true })
+    expect((await services.tickets.get(owner, t.id)).assigneeId).toBeNull()
+    expect(await services.tickets.listAssignees(owner, t.id)).toEqual([bob.principalId])
+
+    expect(
+      await services.tickets.removeAssignee(owner, {
+        ticketId: t.id,
+        principalId: bob.principalId,
+      }),
+    ).toEqual({ removed: true })
+    expect(await services.tickets.listAssignees(owner, t.id)).toEqual([])
+  })
+})
+
 // --- tenant isolation -------------------------------------------------------
 
 describe('tenant isolation at the service layer', () => {
