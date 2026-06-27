@@ -184,3 +184,95 @@ jobs:
             exit 1
           fi
           echo "Worker bundle is pg-free ✓"
+
+  # ── Deploy (main only, after every verify job passes) ─────────────────────
+  # `needs:` gates these on the verify matrix; the `if` restricts to pushes to
+  # main; `environment: production` scopes the secrets and allows branch/approval
+  # protection. Configure in the repo's "production" GitHub Environment:
+  #   Secrets — CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, DATABASE_URL
+  #     (libsql://… Turso), DATABASE_AUTH_TOKEN, ROOSTER_AUTH_SECRET
+  #   Variables — CLOUDFLARE_PAGES_PROJECT (the Pages project name)
+  # If these aren't set the jobs simply fail at the deploy step; the verify
+  # matrix above is unaffected.
+
+  # Deploy the Worker + apply both schema migrations to Turso first so the schema
+  # lands with the code: db:migrate (domain tables) then auth:migrate (better-auth
+  # tables — its drizzle libSQL adapter is durable on Turso). Both are
+  # non-interactive and idempotent.
+  deploy-server:
+    needs: [verify, postgres, migrations-in-sync, worker-bundle]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+      ROOSTER_AUTH_SECRET: ${{ secrets.ROOSTER_AUTH_SECRET }}
+      BASE_URL: https://app.airooster.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build server
+        run: pnpm --filter @rooster/server build
+
+      # Migrate first so new columns/tables exist before the new code serves.
+      - name: Apply domain migrations (Turso)
+        run: pnpm --filter @rooster/db db:migrate
+
+      - name: Apply better-auth migrations (Turso)
+        run: pnpm --filter @rooster/server auth:migrate
+
+      - name: Deploy Worker
+        working-directory: apps/server
+        run: pnpm dlx wrangler@4 deploy
+
+      - name: Post-deploy smoke
+        run: |
+          set -euo pipefail
+          echo "Smoke-testing $BASE_URL"
+          curl -fsS "$BASE_URL/healthz" | grep -q '"ok":true'
+          curl -fsS "$BASE_URL/.well-known/rooster" -o /tmp/disc.json
+          # Discovery must advertise the correct base URL (a stale base breaks OAuth/MCP).
+          grep -q "$BASE_URL" /tmp/disc.json
+          curl -fsS "$BASE_URL/llms.txt" -o /dev/null
+          curl -fsS "$BASE_URL/api/auth/.well-known/oauth-authorization-server" -o /dev/null
+          curl -fsS "$BASE_URL/api/auth/.well-known/oauth-protected-resource" -o /dev/null
+          echo "Post-deploy smoke passed ✓"
+
+  # Deploy the marketing + docs sites (Cloudflare Pages).
+  deploy-sites:
+    needs: [verify, sites]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build marketing + docs bundle
+        run: pnpm build:web
+
+      - name: Deploy to Cloudflare Pages
+        run: pnpm dlx wrangler@4 pages deploy dist-web --project-name "${{ vars.CLOUDFLARE_PAGES_PROJECT }}"

@@ -155,6 +155,32 @@ config is in `apps/server/wrangler.toml` (note
 > keep its table/column names **camelCase** to match `auth:migrate` — see the
 > note at the top of that file.
 
+### Continuous deploy (GitHub Actions → Cloudflare)
+
+`ci.yml` auto-deploys on push to `main`, gated on the full verify matrix passing
+(`needs:` the lint/build/test, Postgres, migration-drift, and Worker-bundle
+jobs). The `deploy-server` job migrates Turso (`db:migrate` then `auth:migrate`)
+and `wrangler deploy`s the Worker, then post-deploy smoke-tests
+`/healthz`, `/.well-known/rooster` (asserting the base URL),
+`/llms.txt`, and the OAuth discovery aliases. `deploy-sites` builds + deploys the
+marketing/docs Pages bundle. Both run under the `production` GitHub Environment
+(add branch/approval protection there).
+
+Configure the **production** Environment:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `CLOUDFLARE_API_TOKEN` | Workers + Pages deploy token |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id |
+| Secret | `DATABASE_URL` | `libsql://<db>.turso.io` |
+| Secret | `DATABASE_AUTH_TOKEN` | Turso token |
+| Secret | `ROOSTER_AUTH_SECRET` | 32-byte random (must match the Worker's) |
+| Variable | `CLOUDFLARE_PAGES_PROJECT` | the Pages project name |
+
+If a secret is missing the deploy job fails at its step; the verify matrix is
+unaffected. The base URL is pinned to `https://app.airooster.dev` in the job env
+— change it there and in `wrangler.toml [vars]` together.
+
 > **Rate limiting:** the per-agent MCP rate limit
 > (`ROOSTER_MCP_RATE_LIMIT_PER_MINUTE`) is backed by a shared `rate_limits`
 > table (a single atomic upsert per request), so it limits correctly across
