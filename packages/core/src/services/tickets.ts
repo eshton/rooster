@@ -158,6 +158,31 @@ export function createTicketService(
   }
 
   /**
+   * Apply a ticket patch, honoring an optional optimistic-concurrency guard.
+   * With `expectedUpdatedAt` set the write is conditional on the ticket's
+   * `updatedAt` being unchanged, and a mismatch throws {@link ConflictError}
+   * (the caller has already confirmed the ticket exists). Without it,
+   * last-write-wins — the prior behaviour, preserved for back-compat.
+   */
+  async function applyUpdate(
+    orgId: Id,
+    id: Id,
+    patch: Partial<Ticket>,
+    expectedUpdatedAt?: string,
+  ): Promise<Ticket> {
+    if (expectedUpdatedAt !== undefined) {
+      const after = await repos.tickets.updateIfMatches(orgId, id, patch, expectedUpdatedAt)
+      if (!after) {
+        throw new ConflictError(
+          'Ticket was modified since you last read it (expectedUpdatedAt mismatch); re-read and retry',
+        )
+      }
+      return after
+    }
+    return repos.tickets.update(orgId, id, patch)
+  }
+
+  /**
    * Validate that linking `ticketId` under `parentId` won't form a cycle: the
    * parent must exist, not be the ticket itself, and not be a descendant of it.
    */
@@ -215,6 +240,18 @@ export function createTicketService(
    * responsible for `authorize`; this is shared by `create` and `createMany`.
    */
   async function createOneTicket(actor: Actor, input: CreateTicketInput): Promise<Ticket> {
+    // Idempotency: a repeat with a previously-seen key returns the original
+    // ticket (no new row, no new audit) — making a retried/flaky call safe.
+    if (input.idempotencyKey) {
+      const seen = await repos.idempotency.lookup(actor.orgId, input.idempotencyKey)
+      if (seen) {
+        const existing = await repos.tickets.getById(actor.orgId, seen.ticketId)
+        if (existing) return existing
+        // Mapping points at a vanished ticket (shouldn't happen): fall through
+        // and recreate, re-binding the key below.
+      }
+    }
+
     const project = await repos.projects.getById(actor.orgId, input.projectId)
     if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
     if (!project.key) throw new NotFoundError(`Project ${input.projectId} has no ticket key`)
@@ -251,6 +288,20 @@ export function createTicketService(
       targetId: ticket.id,
       after: ticket,
     })
+
+    // Bind the idempotency key to this new ticket. If we lost a concurrent race
+    // (another create recorded the same key first), return that winner instead —
+    // the ticket we just made is a rare, harmless orphan.
+    if (input.idempotencyKey) {
+      const won = await repos.idempotency.record(actor.orgId, input.idempotencyKey, ticket.id)
+      if (!won) {
+        const winner = await repos.idempotency.lookup(actor.orgId, input.idempotencyKey)
+        if (winner && winner.ticketId !== ticket.id) {
+          const original = await repos.tickets.getById(actor.orgId, winner.ticketId)
+          if (original) return original
+        }
+      }
+    }
     return ticket
   }
 
@@ -467,13 +518,15 @@ export function createTicketService(
     async update(actor, id, rawInput) {
       authorize(actor, 'ticket:write')
       const input = parse(updateTicketInput, rawInput)
+      // expectedUpdatedAt is a control field, not a column — keep it out of patch.
+      const { expectedUpdatedAt, ...patch } = input
       const before = await load(actor, id)
 
-      if ('assigneeId' in input) await requireAssignee(actor, input.assigneeId ?? null)
-      if ('milestoneId' in input) await requireMilestone(actor, input.milestoneId ?? null)
-      if ('parentId' in input) await requireAcyclicParent(actor, id, input.parentId ?? null)
+      if ('assigneeId' in patch) await requireAssignee(actor, patch.assigneeId ?? null)
+      if ('milestoneId' in patch) await requireMilestone(actor, patch.milestoneId ?? null)
+      if ('parentId' in patch) await requireAcyclicParent(actor, id, patch.parentId ?? null)
 
-      const after = await repos.tickets.update(actor.orgId, id, input)
+      const after = await applyUpdate(actor.orgId, id, patch, expectedUpdatedAt)
       await recordAudit(repos, actor, {
         action: 'ticket.update',
         targetType: 'ticket',
@@ -496,9 +549,12 @@ export function createTicketService(
         throw new ValidationError(`Illegal transition '${before.status}' → '${input.status}'`)
       }
 
-      const after = await repos.tickets.update(actor.orgId, input.ticketId, {
-        status: input.status,
-      })
+      const after = await applyUpdate(
+        actor.orgId,
+        input.ticketId,
+        { status: input.status },
+        input.expectedUpdatedAt,
+      )
       await recordAudit(repos, actor, {
         action: 'ticket.change_status',
         targetType: 'ticket',
@@ -556,9 +612,12 @@ export function createTicketService(
       const before = await load(actor, input.ticketId)
       await requireAssignee(actor, input.assigneeId)
 
-      const after = await repos.tickets.update(actor.orgId, input.ticketId, {
-        assigneeId: input.assigneeId,
-      })
+      const after = await applyUpdate(
+        actor.orgId,
+        input.ticketId,
+        { assigneeId: input.assigneeId },
+        input.expectedUpdatedAt,
+      )
       // The assignee follows their own work automatically.
       if (input.assigneeId) {
         await repos.watchers.add(actor.orgId, input.ticketId, input.assigneeId)

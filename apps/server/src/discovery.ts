@@ -88,13 +88,18 @@ not the client.
 - create_ticket — open work. ALWAYS add relevant \`labels\` (tags) so related
   tickets are easy to find, set \`parentId\` for subtasks, set \`dueDate\`
   (ISO-8601) when there's a deadline, and set \`estimate\` (complexity points —
-  see "Estimating work" below) when you can size it.
+  see "Estimating work" below) when you can size it. If you might retry the call
+  (timeouts, flaky network), pass an \`idempotencyKey\` — a repeat with the same
+  key returns the original ticket instead of filing a duplicate.
 - create_tickets — open many at once (e.g. project bootstrap): pass \`tickets\`
   as an array of create_ticket inputs (1–100), one round-trip instead of N.
 - update_ticket / change_status / assign_ticket / comment — manage work.
   assign_ticket sets the single PRIMARY assignee; for shared work add co-owners
   with add_assignee / remove_assignee / list_assignees (a ticket's effective
-  assignees are the primary plus the co-assignees).
+  assignees are the primary plus the co-assignees). When several principals may
+  edit one ticket, pass \`expectedUpdatedAt\` (the updatedAt you last read) to
+  update_ticket / change_status / assign_ticket: the write applies only if the
+  ticket is unchanged, otherwise it fails with a conflict so you re-read + retry.
 - claim_next — ask for the next thing to do: atomically claims the
   highest-priority, oldest, unblocked, unassigned ticket (backlog/todo) in a
   project and assigns it to you. Racing agents never get the same ticket; when

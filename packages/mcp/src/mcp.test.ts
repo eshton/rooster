@@ -183,6 +183,64 @@ describe('MCP server end-to-end', () => {
     expect(empty.ticket).toBeNull()
   })
 
+  it('dedupes create_ticket by idempotencyKey', async () => {
+    const team = await services.teams.create(owner, { key: 'IDM', name: 'Idem' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'IDM',
+      name: 'P',
+    })
+
+    const first = payload(
+      (await call('create_ticket', {
+        projectId: project.id,
+        title: 'retry-safe',
+        idempotencyKey: 'abc-123',
+      })) as never,
+    )
+    const repeat = payload(
+      (await call('create_ticket', {
+        projectId: project.id,
+        title: 'ignored on repeat',
+        idempotencyKey: 'abc-123',
+      })) as never,
+    )
+    expect(repeat.id).toBe(first.id)
+    expect(repeat.title).toBe('retry-safe')
+  })
+
+  it('guards update_ticket with expectedUpdatedAt (optimistic concurrency)', async () => {
+    const team = await services.teams.create(owner, { key: 'OCC', name: 'Occ' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'OCC',
+      name: 'P',
+    })
+    const created = payload(
+      (await call('create_ticket', { projectId: project.id, title: 'guarded' })) as never,
+    )
+
+    // A stale guard is rejected as a conflict, not applied.
+    const conflict = (await call('update_ticket', {
+      id: created.id,
+      title: 'nope',
+      expectedUpdatedAt: '2000-01-01T00:00:00.000Z',
+    })) as { isError?: boolean; content: Array<{ text?: string }> }
+    expect(conflict.isError).toBe(true)
+    expect(conflict.content[0]?.text).toContain('conflict')
+
+    // The matching guard applies.
+    const fresh = payload((await call('get_ticket', { id: created.id })) as never)
+    const ok = payload(
+      (await call('update_ticket', {
+        id: created.id,
+        title: 'applied',
+        expectedUpdatedAt: fresh.updatedAt,
+      })) as never,
+    )
+    expect(ok.title).toBe('applied')
+  })
+
   it('supports due dates, status filters and my_tickets', async () => {
     const team = await services.teams.create(owner, { key: 'DUE', name: 'Due' })
     const project = await services.projects.create(owner, {

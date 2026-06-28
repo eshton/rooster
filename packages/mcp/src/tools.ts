@@ -347,7 +347,10 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     {
       title: 'Create ticket',
       description:
-        'Create a ticket. Always add relevant `labels` (tags) so related work is easy to find later, and set `parentId` when this is a subtask of another ticket.',
+        'Create a ticket. Always add relevant `labels` (tags) so related work is easy to find ' +
+        'later, and set `parentId` when this is a subtask of another ticket. Pass an ' +
+        '`idempotencyKey` to make a retried create safe — a repeat with the same key returns the ' +
+        'original ticket instead of filing a duplicate.',
       inputSchema: createTicketInput.shape,
     },
     async (args) => runTool(() => services.tickets.create(actor, args)),
@@ -371,7 +374,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     {
       title: 'Update ticket',
       description:
-        "Update a ticket's fields (title, description, priority, labels, assignee, parent).",
+        "Update a ticket's fields (title, description, priority, labels, assignee, parent). For " +
+        'safe concurrent edits, pass `expectedUpdatedAt` (the updatedAt you last read): the write ' +
+        'applies only if the ticket is unchanged, else it fails with a conflict so you re-read and retry.',
       inputSchema: { id: z.uuid(), ...updateTicketInput.shape },
     },
     async ({ id, ...patch }) => runTool(() => services.tickets.update(actor, id, patch)),
@@ -393,7 +398,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     'change_status',
     {
       title: 'Change status',
-      description: 'Move a ticket to a new status (validated against the workflow).',
+      description:
+        'Move a ticket to a new status (validated against the workflow). Optionally pass ' +
+        '`expectedUpdatedAt` for an optimistic-concurrency guard (conflicts if changed meanwhile).',
       inputSchema: changeStatusInput.shape,
     },
     async (args) => runTool(() => services.tickets.changeStatus(actor, args)),
@@ -422,7 +429,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     'assign_ticket',
     {
       title: 'Assign ticket',
-      description: 'Assign a ticket to a principal (user or agent), or pass null to unassign.',
+      description:
+        'Assign a ticket to a principal (user or agent), or pass null to unassign. Optionally pass ' +
+        '`expectedUpdatedAt` for an optimistic-concurrency guard (conflicts if changed meanwhile).',
       inputSchema: assignTicketInput.shape,
     },
     async (args) => runTool(() => services.tickets.assign(actor, args)),

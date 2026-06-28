@@ -42,6 +42,17 @@ const dec = <T>(v: string | null, fallback: T): T => (v == null ? fallback : (JS
 const limitOf = (opts?: { limit?: number }) =>
   Math.min(Math.max(opts?.limit ?? DEFAULT_LIMIT, 1), 200)
 
+/** Build a ticket UPDATE `set` from a patch: bump updatedAt, JSON-encode labels,
+ * and never let the patch overwrite identity/timestamp columns. */
+const ticketUpdateSet = (patch: Record<string, unknown>): Record<string, unknown> => {
+  const set: Record<string, unknown> = { updatedAt: now() }
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'id' || k === 'orgId' || k === 'createdAt' || k === 'updatedAt') continue
+    set[k] = k === 'labels' ? enc(v) : v
+  }
+  return set
+}
+
 /** Upper bound on rows pulled into memory for relevance ranking in `search`. */
 const SEARCH_CANDIDATE_CAP = 1000
 
@@ -336,18 +347,30 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         ).map(toTicket)
       },
       async update(orgId, id, patch) {
-        const set: Record<string, unknown> = { updatedAt: now() }
-        for (const [k, v] of Object.entries(patch)) {
-          if (k === 'id' || k === 'orgId' || k === 'createdAt' || k === 'updatedAt') continue
-          set[k] = k === 'labels' ? enc(v) : v
-        }
         const [row] = await db
           .update(s.tickets)
-          .set(set)
+          .set(ticketUpdateSet(patch))
           .where(and(eq(s.tickets.orgId, orgId), eq(s.tickets.id, id)))
           .returning()
         if (!row) throw new Error(`Ticket ${id} not found in org ${orgId}`)
         return toTicket(row)
+      },
+      async updateIfMatches(orgId, id, patch, expectedUpdatedAt) {
+        // Conditional on the unchanged updatedAt — atomic optimistic concurrency.
+        // No matching row ⇒ the guard failed (concurrent write) or the ticket is
+        // gone; either way the caller treats null as a conflict.
+        const [row] = await db
+          .update(s.tickets)
+          .set(ticketUpdateSet(patch))
+          .where(
+            and(
+              eq(s.tickets.orgId, orgId),
+              eq(s.tickets.id, id),
+              eq(s.tickets.updatedAt, expectedUpdatedAt),
+            ),
+          )
+          .returning()
+        return row ? toTicket(row) : null
       },
       async claimNext(orgId, projectId, principalId, claimableStatuses) {
         if (claimableStatuses.length === 0) return null
@@ -967,6 +990,30 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           })
           .returning()
         return { count: row!.count, windowStart: row!.windowStart }
+      },
+    },
+
+    idempotency: {
+      async lookup(orgId, key) {
+        return first(
+          (
+            await db
+              .select({ ticketId: s.idempotencyKeys.ticketId })
+              .from(s.idempotencyKeys)
+              .where(and(eq(s.idempotencyKeys.orgId, orgId), eq(s.idempotencyKeys.key, key)))
+              .limit(1)
+          ).map((r) => ({ ticketId: r.ticketId })),
+        )
+      },
+      async record(orgId, key, ticketId) {
+        // Claim the key with a single insert; onConflictDoNothing makes a
+        // duplicate (already-recorded) key a no-op. A returned row means we won.
+        const rows = await db
+          .insert(s.idempotencyKeys)
+          .values({ id: newId(), orgId, key, ticketId, createdAt: now() })
+          .onConflictDoNothing({ target: [s.idempotencyKeys.orgId, s.idempotencyKeys.key] })
+          .returning({ id: s.idempotencyKeys.id })
+        return rows.length > 0
       },
     },
 

@@ -244,6 +244,20 @@ export const rateLimits = sqliteTable('rate_limits', {
   count: integer('count').notNull(),
 })
 
+export const idempotencyKeys = sqliteTable(
+  'idempotency_keys',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    // Client-supplied key, unique per org (the retry-dedup gate).
+    key: text('key').notNull(),
+    // The ticket created for this key (returned on a repeat).
+    ticketId: text('ticket_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('idempotency_keys_org_key_uq').on(t.orgId, t.key)],
+)
+
 export const auditLog = sqliteTable(
   'audit_log',
   {
@@ -279,5 +293,6 @@ export const sqliteSchema = {
   comments,
   attachments,
   rateLimits,
+  idempotencyKeys,
   auditLog,
 }

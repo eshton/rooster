@@ -73,6 +73,18 @@ export interface TicketRepository {
   listChildren(orgId: Id, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(orgId: Id, id: Id, patch: Partial<Ticket>): Promise<Ticket>
   /**
+   * Optimistic-concurrency update: apply `patch` only if the ticket's current
+   * `updatedAt` still equals `expectedUpdatedAt` (a single conditional
+   * `UPDATE … RETURNING`, no transaction). Returns the updated ticket, or `null`
+   * when the guard didn't match (the row was modified concurrently, or is gone).
+   */
+  updateIfMatches(
+    orgId: Id,
+    id: Id,
+    patch: Partial<Ticket>,
+    expectedUpdatedAt: string,
+  ): Promise<Ticket | null>
+  /**
    * Atomically claim the next actionable ticket in a project for a principal:
    * the highest-priority, then oldest, **unblocked**, **unassigned** ticket
    * whose status is one of `claimableStatuses`. Assigns it to `principalId` and
@@ -240,6 +252,21 @@ export interface AuditLogRepository {
   list(orgId: Id, opts?: ListOptions): Promise<AuditLog[]>
 }
 
+/**
+ * Per-org idempotency-key → ticket mapping, backing retry-safe `create_ticket`.
+ * Keys are retained (no expiry); cleanup, if ever needed, is out of band.
+ */
+export interface IdempotencyRepository {
+  /** The ticket id previously recorded for `(orgId, key)`, or null. */
+  lookup(orgId: Id, key: string): Promise<{ ticketId: Id } | null>
+  /**
+   * Record `(orgId, key) → ticketId` if the key is unused (a single
+   * insert-on-conflict-do-nothing). Returns true if this call claimed the key,
+   * false if it was already taken (lost a concurrent race).
+   */
+  record(orgId: Id, key: string, ticketId: Id): Promise<boolean>
+}
+
 /** Convenience alias for the fields the persistence layer assigns. */
 interface TimestampedId {
   id: Id
@@ -264,5 +291,6 @@ export interface Repositories {
   memberships: MembershipRepository
   invites: InviteRepository
   rateLimits: RateLimitRepository
+  idempotency: IdempotencyRepository
   audit: AuditLogRepository
 }
