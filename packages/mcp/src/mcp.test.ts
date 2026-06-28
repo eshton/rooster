@@ -403,6 +403,42 @@ describe('MCP server end-to-end', () => {
     expect(ctx.subtasks).toHaveLength(1)
   })
 
+  it('records and reads a staged conversation trace through tools', async () => {
+    const team = await services.teams.create(owner, { key: 'CONV', name: 'Conv' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'CONV',
+      name: 'Conv',
+    })
+    const ticket = payload(
+      (await call('create_ticket', { projectId: project.id, title: 'design auth' })) as never,
+    )
+
+    const appended = payload(
+      (await call('append_messages', {
+        ticketId: ticket.id,
+        stage: 'plan',
+        messages: [
+          { role: 'human', body: 'How should agents recall past discussions?' },
+          { role: 'agent', body: 'Embed messages and search by vector, scoped to the org.' },
+        ],
+      })) as never,
+    ) as Array<{ seq: number; role: string }>
+    expect(appended.map((m) => m.seq)).toEqual([1, 2])
+
+    const listed = payload(
+      (await call('list_messages', { ticketId: ticket.id, stage: 'plan' })) as never,
+    ) as Array<{ body: string }>
+    expect(listed).toHaveLength(2)
+
+    // The trace also surfaces in the one-call context bundle.
+    const ctx = payload((await call('get_ticket_context', { id: ticket.id })) as never) as {
+      conversation: Array<{ role: string; stage: string }>
+    }
+    expect(ctx.conversation).toHaveLength(2)
+    expect(ctx.conversation[0]?.stage).toBe('plan')
+  })
+
   it('creates teams + projects and invites a teammate by email', async () => {
     const team = payload((await call('create_team', { key: 'OPS', name: 'Ops' })) as never)
     expect(team.key).toBe('OPS')

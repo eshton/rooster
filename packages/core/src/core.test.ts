@@ -1445,3 +1445,151 @@ describe('optimistic concurrency (expectedUpdatedAt)', () => {
     expect(ok.title).toBe('no guard')
   })
 })
+
+// --- conversation traces ----------------------------------------------------
+
+describe('conversation traces', () => {
+  it('appends staged messages with monotonic seq across batches', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'feature' })
+
+    const first = await services.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [
+        { role: 'human', body: 'How should we model stages?' },
+        {
+          role: 'agent',
+          kind: 'text',
+          body: 'A fixed enum per message.',
+          metadata: { model: 'x' },
+        },
+      ],
+    })
+    expect(first.map((m) => m.seq)).toEqual([1, 2])
+    // A second flush of the same stage continues the sequence (not from createdAt).
+    const second = await services.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'Sounds good.' }],
+    })
+    expect(second[0]?.seq).toBe(3)
+    expect(second[0]?.authorId).toBe(owner.principalId) // trusted attribution
+    expect(second[0]?.metadata).toBeNull()
+
+    const all = await services.conversation.list(owner, { ticketId: t.id })
+    expect(all.map((m) => m.body)).toEqual([
+      'How should we model stages?',
+      'A fixed enum per message.',
+      'Sounds good.',
+    ])
+    // round-trips structured metadata
+    expect(all[1]?.metadata).toEqual({ model: 'x' })
+  })
+
+  it('filters by stage and is independent of ticket status', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'x' })
+    await services.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'input',
+      messages: [{ role: 'human', body: 'the ask' }],
+    })
+    await services.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'execution',
+      messages: [{ role: 'agent', body: 'did the thing' }],
+    })
+    // appending a stage does not move the ticket's status
+    expect((await services.tickets.get(owner, t.id)).status).toBe('backlog')
+
+    const exec = await services.conversation.list(owner, { ticketId: t.id, stage: 'execution' })
+    expect(exec.map((m) => m.body)).toEqual(['did the thing'])
+  })
+
+  it('404s on a missing ticket', async () => {
+    const { owner } = await bootstrap()
+    await expect(
+      services.conversation.append(owner, {
+        ticketId: '00000000-0000-4000-8000-000000000000',
+        stage: 'plan',
+        messages: [{ role: 'human', body: 'hi' }],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+  })
+
+  it('gates transcripts behind conversation:read (not ticket:read)', async () => {
+    const { org, owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'secret design',
+    })
+    await services.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'sensitive transcript' }],
+    })
+
+    // An agent with only ticket:* scopes can read the board but NOT the trace.
+    const agent = await services.resolveActor({
+      orgId: org.id,
+      principalId: (await makeUser(org.id, owner, 'member')).principalId,
+    })
+    const scoped: Actor = { ...agent, type: 'agent', scopes: ['ticket:read', 'ticket:write'] }
+
+    // get_ticket_context omits the conversation for the unscoped actor…
+    const ctx = await services.tickets.getContext(scoped, t.id)
+    expect(ctx.conversation).toEqual([])
+    // …and a direct list is forbidden.
+    await expect(services.conversation.list(scoped, { ticketId: t.id })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+
+    // The owner (a human, role-gated only) sees it in context.
+    const ownerCtx = await services.tickets.getContext(owner, t.id)
+    expect(ownerCtx.conversation.map((m) => m.body)).toEqual(['sensitive transcript'])
+  })
+
+  it('redacts a ticket’s messages (hard delete + audit)', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'x' })
+    await services.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [
+        { role: 'human', body: 'a' },
+        { role: 'agent', body: 'b' },
+      ],
+    })
+    expect(await services.conversation.redactForTicket(owner, t.id)).toEqual({ removed: 2 })
+    expect(await services.conversation.list(owner, { ticketId: t.id })).toEqual([])
+    const audit = await services.audit.list(owner)
+    expect(audit.some((e) => e.action === 'conversation.redact')).toBe(true)
+  })
+
+  it('isolates messages by org', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 'x' })
+    await services.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'mine' }],
+    })
+    const { owner: other } = await (async () => {
+      const b = await services.orgs.bootstrap({
+        org: { slug: 'isolated', name: 'Iso', enrollmentPolicy: 'open' },
+        founder: { displayName: 'Z', email: 'z@iso.test', name: 'Z', avatarUrl: null },
+      })
+      return { owner: await services.resolveActor({ orgId: b.org.id, principalId: b.founder.id }) }
+    })()
+    // The other org can't even see the ticket, let alone its messages.
+    await expect(services.conversation.list(other, { ticketId: t.id })).rejects.toBeInstanceOf(
+      NotFoundError,
+    )
+  })
+})

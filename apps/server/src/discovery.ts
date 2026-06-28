@@ -114,6 +114,13 @@ not the client.
 - add_attachment / list_attachments / remove_attachment — attach context to a
   ticket. Links only: Rooster does not host files, so pass a \`url\` to an
   externally hosted resource (log, design, doc) with an optional label.
+- append_messages / list_messages — record the human↔agent conversation trace on
+  a ticket, tagged by \`stage\` (input | plan | execution | review). Flush a
+  stage's turns in ONE batch call (1–50); SUMMARISE — persist the curated trace
+  (the human ask, the plan, key decisions/results), not raw tool output. Set each
+  message's \`role\` (human|agent). \`get_ticket_context\` returns the trace too.
+  Needs the conversation:read / conversation:write scopes (kept separate from
+  ticket:* because transcripts are more sensitive).
 - link_tickets / unlink_tickets / list_links — relate tickets beyond the
   parent/subtask hierarchy: "blocks" (and its derived "blocked_by"),
   "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't

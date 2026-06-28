@@ -2,8 +2,11 @@ import { z } from 'zod'
 import {
   agentKindSchema,
   agentStatusSchema,
+  conversationStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
+  messageKindSchema,
+  messageRoleSchema,
   principalTypeSchema,
   roleSchema,
   ticketLinkTypeSchema,
@@ -185,6 +188,31 @@ export const commentSchema = z.object({
   body: z.string().min(1).max(50_000),
 })
 export type Comment = z.infer<typeof commentSchema>
+
+/**
+ * A single message in a ticket's conversation trace — one turn of the human↔agent
+ * collaboration, tagged with the workflow `stage` it belongs to. Distinct from
+ * `comment` (a flat human-facing thread): messages are stage-aware, role-tagged,
+ * ordered within a stage by `seq`, and carry optional structured `metadata`.
+ * `authorId` is the trusted attribution; `role` and `metadata` are descriptive
+ * (untrusted), never used for authorization — like the audit log's `clientInfo`.
+ */
+export const conversationMessageSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  ticketId: idSchema,
+  stage: conversationStageSchema,
+  /** Principal (human or agent) who authored the message — trusted. */
+  authorId: idSchema,
+  role: messageRoleSchema,
+  kind: messageKindSchema,
+  /** Monotonic order within (ticketId, stage); server-allocated. */
+  seq: z.number().int().nonnegative(),
+  body: z.string().min(1).max(50_000),
+  /** Optional structured metadata (agent/model/tool names, tokens…). Untrusted. */
+  metadata: z.unknown().nullable(),
+})
+export type ConversationMessage = z.infer<typeof conversationMessageSchema>
 
 /** A milestone / cycle (sprint): a named, optionally time-boxed grouping of
  * tickets within a project. */

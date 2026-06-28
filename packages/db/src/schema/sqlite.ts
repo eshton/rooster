@@ -185,6 +185,30 @@ export const comments = sqliteTable(
   (t) => [index('comments_org_ticket_idx').on(t.orgId, t.ticketId)],
 )
 
+export const conversationMessages = sqliteTable(
+  'conversation_messages',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    ticketId: text('ticket_id').notNull(),
+    stage: text('stage').notNull(),
+    authorId: text('author_id').notNull(),
+    role: text('role').notNull(),
+    kind: text('kind').notNull().default('text'),
+    // Monotonic order within (org, ticket, stage); server-allocated.
+    seq: integer('seq').notNull(),
+    body: text('body').notNull(),
+    // Optional JSON metadata (model/tool names, tokens…), encoded as TEXT.
+    metadata: text('metadata'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  // Backs the staged per-ticket read (get_ticket_context / list_messages).
+  (t) => [
+    index('conversation_messages_org_ticket_stage_seq_idx').on(t.orgId, t.ticketId, t.stage, t.seq),
+  ],
+)
+
 export const ticketAssignees = sqliteTable(
   'ticket_assignees',
   {
@@ -291,6 +315,7 @@ export const sqliteSchema = {
   ticketAssignees,
   milestones,
   comments,
+  conversationMessages,
   attachments,
   rateLimits,
   idempotencyKeys,

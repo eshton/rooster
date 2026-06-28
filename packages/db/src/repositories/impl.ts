@@ -4,6 +4,7 @@ import type {
   AuditLog,
   ClientInfo,
   Comment,
+  ConversationMessage,
   Id,
   Invite,
   Membership,
@@ -85,6 +86,11 @@ const toTicket = (r: Rows['tickets']): Ticket =>
     labels: dec<string[]>(r.labels, []),
   }) as Ticket
 const toComment = (r: Rows['comments']): Comment => r as Comment
+const toConversationMessage = (r: Rows['conversationMessages']): ConversationMessage =>
+  ({
+    ...r,
+    metadata: dec<unknown>(r.metadata, null),
+  }) as ConversationMessage
 const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
 const toWatcher = (r: Rows['ticketWatchers']): Watcher => r as Watcher
 const toMilestone = (r: Rows['milestones']): Milestone => r as Milestone
@@ -464,6 +470,78 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             .orderBy(s.comments.createdAt)
             .limit(limitOf(opts))
         ).map(toComment)
+      },
+    },
+
+    conversation: {
+      async appendMany(orgId, ticketId, stage, messages) {
+        if (messages.length === 0) return []
+        const ts = now()
+        // Allocate seq after the current max for this (ticket, stage). One read +
+        // one multi-row insert (no transaction — respects the in-memory caveat);
+        // all rows in a batch share createdAt, so (createdAt, seq) orders them.
+        const [maxRow] = await db
+          .select({ max: sql<number>`COALESCE(MAX(${s.conversationMessages.seq}), 0)` })
+          .from(s.conversationMessages)
+          .where(
+            and(
+              eq(s.conversationMessages.orgId, orgId),
+              eq(s.conversationMessages.ticketId, ticketId),
+              eq(s.conversationMessages.stage, stage),
+            ),
+          )
+        const base = Number(maxRow?.max ?? 0)
+        const rows = messages.map((m, i) => ({
+          id: newId(),
+          orgId,
+          ticketId,
+          stage,
+          authorId: m.authorId,
+          role: m.role,
+          kind: m.kind,
+          seq: base + 1 + i,
+          body: m.body,
+          metadata: m.metadata == null ? null : enc(m.metadata),
+          createdAt: ts,
+          updatedAt: ts,
+        }))
+        return (await db.insert(s.conversationMessages).values(rows).returning()).map(
+          toConversationMessage,
+        )
+      },
+      async listForTicket(orgId, ticketId, opts) {
+        const filters = [
+          eq(s.conversationMessages.orgId, orgId),
+          eq(s.conversationMessages.ticketId, ticketId),
+        ]
+        if (opts?.stage) filters.push(eq(s.conversationMessages.stage, opts.stage))
+        return (
+          await db
+            .select()
+            .from(s.conversationMessages)
+            .where(and(...filters))
+            .orderBy(s.conversationMessages.createdAt, s.conversationMessages.seq)
+            .limit(limitOf(opts))
+        ).map(toConversationMessage)
+      },
+      async delete(orgId, id) {
+        const rows = await db
+          .delete(s.conversationMessages)
+          .where(and(eq(s.conversationMessages.orgId, orgId), eq(s.conversationMessages.id, id)))
+          .returning({ id: s.conversationMessages.id })
+        return rows.length > 0
+      },
+      async deleteForTicket(orgId, ticketId) {
+        const rows = await db
+          .delete(s.conversationMessages)
+          .where(
+            and(
+              eq(s.conversationMessages.orgId, orgId),
+              eq(s.conversationMessages.ticketId, ticketId),
+            ),
+          )
+          .returning({ id: s.conversationMessages.id })
+        return rows.length
       },
     },
 

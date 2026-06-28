@@ -3,7 +3,7 @@ import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js'
 import type { CrowNotifier } from '../notify.js'
-import { authorize } from '../permissions.js'
+import { authorize, can } from '../permissions.js'
 import { CLAIMABLE_STATUSES, canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
 import { parse } from '../validate.js'
 import {
@@ -15,6 +15,7 @@ import {
   type ChangeStatusInput,
   type ClaimNextInput,
   type Comment,
+  type ConversationMessage,
   type CreateTicketInput,
   type CreateTicketsInput,
   changeStatusInput,
@@ -64,6 +65,12 @@ export interface TicketContext {
   subtasks: Ticket[]
   /** Links resolved from this ticket's perspective. */
   links: RelatedTicket[]
+  /**
+   * The staged human↔agent conversation trace, chronological. Only populated
+   * when the actor holds `conversation:read` (transcripts are gated separately
+   * from `ticket:read`); otherwise an empty array.
+   */
+  conversation: ConversationMessage[]
 }
 
 /** Inverse relation labels for an incoming edge (relates is symmetric). */
@@ -334,13 +341,21 @@ export function createTicketService(
     async getContext(actor, id) {
       authorize(actor, 'ticket:read')
       const ticket = await load(actor, id)
-      const [comments, attachments, subtasks, links, coAssignees] = await Promise.all([
-        repos.comments.listForTicket(actor.orgId, id),
-        repos.attachments.listForTicket(actor.orgId, id),
-        repos.tickets.listChildren(actor.orgId, id),
-        repos.ticketLinks.listForTicket(actor.orgId, id),
-        repos.assignees.listForTicket(actor.orgId, id),
-      ])
+      // Transcripts are gated by conversation:read, not ticket:read — only load
+      // them for a permitted actor; everyone else gets an empty conversation.
+      const includeConversation = can(actor, 'conversation:read')
+      const [comments, attachments, subtasks, links, coAssignees, conversation] = await Promise.all(
+        [
+          repos.comments.listForTicket(actor.orgId, id),
+          repos.attachments.listForTicket(actor.orgId, id),
+          repos.tickets.listChildren(actor.orgId, id),
+          repos.ticketLinks.listForTicket(actor.orgId, id),
+          repos.assignees.listForTicket(actor.orgId, id),
+          includeConversation
+            ? repos.conversation.listForTicket(actor.orgId, id, { limit: 200 })
+            : Promise.resolve([]),
+        ],
+      )
 
       // Resolve links from this ticket's perspective (mirrors listLinks).
       const resolvedLinks: RelatedTicket[] = []
@@ -364,6 +379,7 @@ export function createTicketService(
         attachments,
         subtasks,
         links: resolvedLinks,
+        conversation,
       }
     },
 

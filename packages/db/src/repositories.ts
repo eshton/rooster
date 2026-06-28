@@ -3,6 +3,7 @@ import type {
   Attachment,
   AuditLog,
   Comment,
+  ConversationMessage,
   Id,
   Invite,
   Membership,
@@ -117,6 +118,32 @@ export interface MilestoneRepository {
 export interface CommentRepository {
   create(orgId: Id, input: Omit<Comment, keyof TimestampedId | 'orgId'>): Promise<Comment>
   listForTicket(orgId: Id, ticketId: Id, opts?: ListOptions): Promise<Comment[]>
+}
+
+export interface ConversationRepository {
+  /**
+   * Append a batch of messages to a (ticket, stage). `seq` is allocated
+   * server-side starting after the current max for that (ticket, stage), so a
+   * chunked flush stays correctly ordered. Returns the inserted rows in order.
+   */
+  appendMany(
+    orgId: Id,
+    ticketId: Id,
+    stage: string,
+    messages: Array<
+      Omit<ConversationMessage, keyof TimestampedId | 'orgId' | 'ticketId' | 'stage' | 'seq'>
+    >,
+  ): Promise<ConversationMessage[]>
+  /** A ticket's messages, chronological (createdAt, then seq); optional stage filter. */
+  listForTicket(
+    orgId: Id,
+    ticketId: Id,
+    opts?: ListOptions & { stage?: string },
+  ): Promise<ConversationMessage[]>
+  /** Hard-delete one message (redaction); true if a row was removed. */
+  delete(orgId: Id, id: Id): Promise<boolean>
+  /** Hard-delete all of a ticket's messages (redaction); returns the count removed. */
+  deleteForTicket(orgId: Id, ticketId: Id): Promise<number>
 }
 
 export interface AttachmentRepository {
@@ -284,6 +311,7 @@ export interface Repositories {
   assignees: AssigneeRepository
   milestones: MilestoneRepository
   comments: CommentRepository
+  conversation: ConversationRepository
   attachments: AttachmentRepository
   principals: PrincipalRepository
   users: UserRepository

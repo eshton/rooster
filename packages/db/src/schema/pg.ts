@@ -243,6 +243,27 @@ export const comments = pgTable(
   (t) => [index('comments_org_ticket_idx').on(t.orgId, t.ticketId)],
 )
 
+export const conversationMessages = pgTable(
+  'conversation_messages',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    ticketId: text('ticket_id').notNull(),
+    stage: text('stage').notNull(),
+    authorId: text('author_id').notNull(),
+    role: text('role').notNull(),
+    kind: text('kind').notNull().default('text'),
+    seq: integer('seq').notNull(),
+    body: text('body').notNull(),
+    metadata: text('metadata'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('conversation_messages_org_ticket_stage_seq_idx').on(t.orgId, t.ticketId, t.stage, t.seq),
+  ],
+)
+
 export const rateLimits = pgTable('rate_limits', {
   key: text('key').primaryKey(),
   windowStart: text('window_start').notNull(),
@@ -296,6 +317,7 @@ export const pgSchema = {
   ticketAssignees,
   milestones,
   comments,
+  conversationMessages,
   attachments,
   rateLimits,
   idempotencyKeys,

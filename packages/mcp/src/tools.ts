@@ -8,11 +8,13 @@ import {
 import {
   addAttachmentInput,
   agentStatusSchema,
+  appendMessagesInput,
   assigneeRefInput,
   assignTicketInput,
   changeStatusInput,
   claimNextInput,
   commentInput,
+  conversationStageSchema,
   createInviteInput,
   createMilestoneInput,
   createProjectInput,
@@ -329,8 +331,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       title: 'Get ticket context',
       description:
         'Fetch a ticket together with everything around it — comments, attachments, subtasks, ' +
-        'resolved links and the full assignee set — in ONE call (by id or key). Prefer this over ' +
-        'separate get_ticket + list_comments + list_links + list_subtasks + list_attachments calls.',
+        'resolved links, the full assignee set, and the staged conversation trace (when you hold ' +
+        'conversation:read) — in ONE call (by id or key). Prefer this over separate get_ticket + ' +
+        'list_comments + list_links + list_subtasks + list_attachments + list_messages calls.',
       inputSchema: { id: z.uuid().optional(), key: z.string().optional() },
     },
     async ({ id, key }) => {
@@ -477,6 +480,34 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: commentInput.shape,
     },
     async (args) => runTool(() => services.comments.create(actor, args)),
+  )
+
+  server.registerTool(
+    'append_messages',
+    {
+      title: 'Append conversation messages',
+      description:
+        'Record the human↔agent conversation trace on a ticket, tagged by workflow ' +
+        "`stage` (input | plan | execution | review). Flush a stage's turns in ONE " +
+        'call as a batch (1–50). SUMMARISE — persist the curated trace (decisions, the ' +
+        "human ask, the plan, key results), not raw tool output. Set each message's " +
+        '`role` (human|agent). Ordering is assigned server-side. Later powers ' +
+        'cross-project recall. Requires the conversation:write scope.',
+      inputSchema: appendMessagesInput.shape,
+    },
+    async (args) => runTool(() => services.conversation.append(actor, args)),
+  )
+
+  server.registerTool(
+    'list_messages',
+    {
+      title: 'List conversation messages',
+      description:
+        "A ticket's conversation trace (chronological), optionally filtered to one " +
+        'stage. Requires the conversation:read scope.',
+      inputSchema: { ticketId: z.uuid(), stage: conversationStageSchema.optional() },
+    },
+    async (args) => runTool(() => services.conversation.list(actor, args)),
   )
 
   server.registerTool(

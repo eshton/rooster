@@ -98,6 +98,28 @@ export const TICKET_LINK_TYPES = ['blocks', 'relates', 'duplicates'] as const
 export const ticketLinkTypeSchema = z.enum(TICKET_LINK_TYPES)
 export type TicketLinkType = z.infer<typeof ticketLinkTypeSchema>
 
+/**
+ * Stages of the human↔agent workflow a conversation message belongs to. Fixed
+ * for v1 (per-project configurable stages are a post-v1 item, like ticket
+ * statuses). **Orthogonal to `ticketStatus`**: stage describes which part of the
+ * collaboration produced a message; status is the ticket's workflow position.
+ */
+export const CONVERSATION_STAGES = ['input', 'plan', 'execution', 'review'] as const
+export const conversationStageSchema = z.enum(CONVERSATION_STAGES)
+export type ConversationStage = z.infer<typeof conversationStageSchema>
+
+/** Who authored a conversation message. Stored for fast filtering; the trusted
+ * attribution is always `authorId` (a principal), never `role`. */
+export const MESSAGE_ROLES = ['human', 'agent'] as const
+export const messageRoleSchema = z.enum(MESSAGE_ROLES)
+export type MessageRole = z.infer<typeof messageRoleSchema>
+
+/** The kind of a conversation message (lets tool calls be modelled without a
+ * separate table; only `text` is embedded for recall later). */
+export const MESSAGE_KINDS = ['text', 'tool_call', 'tool_result', 'system'] as const
+export const messageKindSchema = z.enum(MESSAGE_KINDS)
+export type MessageKind = z.infer<typeof messageKindSchema>
+
 /** Policy governing how new agents are admitted to an org. */
 export const ENROLLMENT_POLICIES = ['token', 'approval', 'open'] as const
 export const enrollmentPolicySchema = z.enum(ENROLLMENT_POLICIES)
