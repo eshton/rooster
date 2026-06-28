@@ -13,10 +13,13 @@ cp .env.example .env
 
 Required:
 
-- `DATABASE_URL` — selects the DB driver by scheme:
-  - `postgres://…` / `postgresql://…` → PostgreSQL
-  - `file:…` → local SQLite (e.g. `file:./local.db`)
-  - `libsql://…` → libSQL / Turso (set `DATABASE_AUTH_TOKEN` for remote)
+- `DATABASE_URL` — selects the DB driver by scheme. **SQLite / libSQL (Turso) is
+  the first-class, CI-tested target and the one that powers semantic search
+  (libSQL native vectors); Postgres is community-maintained — it still works but
+  is not CI-tested and has no native vector search.**
+  - `file:…` → local SQLite (e.g. `file:./local.db`) — first-class
+  - `libsql://…` → libSQL / Turso (set `DATABASE_AUTH_TOKEN` for remote) — first-class; production
+  - `postgres://…` / `postgresql://…` → PostgreSQL — community-maintained
 - `ROOSTER_AUTH_SECRET` — ≥ 16 chars; `openssl rand -base64 32`.
 - `ROOSTER_BASE_URL` — public URL, no trailing slash.
 
@@ -158,8 +161,8 @@ config is in `apps/server/wrangler.toml` (note
 ### Continuous deploy (GitHub Actions → Cloudflare)
 
 `ci.yml` auto-deploys on push to `main`, gated on the full verify matrix passing
-(`needs:` the lint/build/test, Postgres, migration-drift, and Worker-bundle
-jobs). The `deploy-server` job migrates Turso (`db:migrate` then `auth:migrate`)
+(`needs:` the lint/build/test, SQLite migration-drift, and Worker-bundle jobs).
+The `deploy-server` job migrates Turso (`db:migrate` then `auth:migrate`)
 and `wrangler deploy`s the Worker, then post-deploy smoke-tests
 `/healthz`, `/.well-known/rooster` (asserting the base URL),
 `/llms.txt`, and the OAuth discovery aliases. `deploy-sites` builds + deploys the

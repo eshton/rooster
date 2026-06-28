@@ -64,9 +64,12 @@ jobs:
       - name: Build the server image
         run: docker build -f apps/server/Dockerfile -t rooster-server:ci .
 
-  # Schema is hand-edited in two dialects; fail if the committed migrations
-  # don't match what drizzle-kit would regenerate (i.e. someone edited a schema
-  # without regenerating both migrations).
+  # SQLite/libSQL is the first-class, CI-tested dialect (the test suite runs on
+  # in-memory libSQL, and production is Turso). Fail if the committed SQLite
+  # migrations don't match what drizzle-kit would regenerate from sqlite.ts.
+  # The Postgres dialect is frozen/community-maintained and intentionally NOT
+  # checked here — pg.ts may drift; regenerate db:generate:pg yourself if you
+  # care about that path. (pg.ts still typechecks via the `verify` build step.)
   migrations-in-sync:
     runs-on: ubuntu-latest
     steps:
@@ -84,68 +87,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Regenerate both dialects
-        run: |
-          pnpm --filter @rooster/db db:generate:sqlite
-          pnpm --filter @rooster/db db:generate:pg
+      - name: Regenerate the SQLite dialect
+        run: pnpm --filter @rooster/db db:generate:sqlite
 
-      - name: Fail on uncommitted migration drift
-        run: git diff --exit-code packages/db/migrations
-
-  # The test suite runs against in-memory SQLite; this exercises the OTHER
-  # dialect — applying the committed Postgres migrations against a real server.
-  postgres:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: rooster
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/rooster
-      # loadConfig requires an auth secret (>=16 chars); CI-only, not a real key.
-      ROOSTER_AUTH_SECRET: ci-postgres-migration-smoke-secret
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Apply Postgres migrations
-        run: pnpm --filter @rooster/db db:migrate
-
-      - name: Verify schema was created
-        run: |
-          psql "$DATABASE_URL" -c "\dt" | tee /tmp/tables.txt
-          grep -q ' tickets ' /tmp/tables.txt
-          grep -q ' rate_limits ' /tmp/tables.txt
-
-      - name: Core-flow smoke against real Postgres
-        # Exercises the dialect-sensitive repository SQL (per-project numbering,
-        # self-healing nextNumber, search, re-key) that the in-memory SQLite
-        # suite can't cover.
-        run: node apps/server/dist/smoke.js
+      - name: Fail on uncommitted SQLite migration drift
+        run: git diff --exit-code packages/db/migrations/sqlite
 
   # The Cloudflare Worker bundle must stay free of `pg` (Node-only) so it runs
   # on the edge. Build the bundle via a dry-run deploy and assert no pg slipped
@@ -200,7 +146,7 @@ jobs:
   # tables — its drizzle libSQL adapter is durable on Turso). Both are
   # non-interactive and idempotent.
   deploy-server:
-    needs: [verify, postgres, migrations-in-sync, worker-bundle]
+    needs: [verify, migrations-in-sync, worker-bundle]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production

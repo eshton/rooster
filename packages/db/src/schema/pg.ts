@@ -1,9 +1,18 @@
 import { boolean, index, integer, pgTable, real, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
 /**
- * PostgreSQL dialect schema. Kept structurally identical to the SQLite schema
- * (same column names + JS-level types) so a single repository implementation
- * works across both dialects. See `./sqlite.ts` for the portability rationale.
+ * PostgreSQL dialect schema.
+ *
+ * ⚠️ FROZEN / community-maintained. SQLite/libSQL (Turso) is Rooster's single
+ * first-class, CI-tested dialect (see `./sqlite.ts`); this Postgres mirror is
+ * preserved so the `postgres` driver keeps compiling, but it is NOT exercised in
+ * CI and MAY drift from `sqlite.ts`. New schema work lands in `sqlite.ts` only.
+ * If you depend on the Postgres path, mirror the change here and regenerate with
+ * `pnpm --filter @rooster/db db:generate:pg` yourself. Native-vector columns
+ * (libSQL `F32_BLOB`) live only on the SQLite schema and have no equivalent here.
+ *
+ * Kept structurally identical to the SQLite schema (same column names + JS-level
+ * types) so the single repository implementation works across both dialects.
  */
 
 const id = () => text('id').primaryKey()
