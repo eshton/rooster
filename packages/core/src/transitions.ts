@@ -17,6 +17,12 @@ export const TICKET_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> =
 /** The status assigned to a freshly created ticket. */
 export const INITIAL_TICKET_STATUS: TicketStatus = 'backlog'
 
+/**
+ * Statuses a ticket may be in to be picked up by `claim_next` — actionable but
+ * not yet started. (An in-progress/in-review ticket is already being worked.)
+ */
+export const CLAIMABLE_STATUSES: readonly TicketStatus[] = ['backlog', 'todo']
+
 export function canTransition(from: TicketStatus, to: TicketStatus): boolean {
   return TICKET_TRANSITIONS[from].includes(to)
 }

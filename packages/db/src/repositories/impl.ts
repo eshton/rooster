@@ -349,6 +349,59 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         if (!row) throw new Error(`Ticket ${id} not found in org ${orgId}`)
         return toTicket(row)
       },
+      async claimNext(orgId, projectId, principalId, claimableStatuses) {
+        if (claimableStatuses.length === 0) return null
+        const statuses = sql.join(
+          claimableStatuses.map((st) => sql`${st}`),
+          sql`, `,
+        )
+        // Pick the best candidate and claim it in ONE atomic statement (mirrors
+        // the nextNumber pattern): highest priority, then oldest, among
+        // unassigned + actionable + unblocked tickets. A `blocks` link counts as
+        // blocking only while its blocker is unresolved (not done/canceled). The
+        // outer `assignee_id IS NULL` guard makes a lost race a no-op (returns
+        // null) so two callers never claim the same ticket; under serialized
+        // writes the in-statement subselect re-evaluates, so the loser simply
+        // picks the next candidate. Raw column names (snake_case) are identical
+        // across both dialects; `CASE` keeps the priority ranking dialect-neutral.
+        const candidate = sql`(
+          SELECT cand.id FROM ${s.tickets} cand
+          WHERE cand.org_id = ${orgId}
+            AND cand.project_id = ${projectId}
+            AND cand.assignee_id IS NULL
+            AND cand.status IN (${statuses})
+            AND NOT EXISTS (
+              SELECT 1 FROM ${s.ticketLinks} bl
+              JOIN ${s.tickets} blk ON blk.id = bl.from_ticket_id AND blk.org_id = cand.org_id
+              WHERE bl.org_id = cand.org_id
+                AND bl.type = 'blocks'
+                AND bl.to_ticket_id = cand.id
+                AND blk.status NOT IN ('done', 'canceled')
+            )
+          ORDER BY
+            CASE cand.priority
+              WHEN 'urgent' THEN 5
+              WHEN 'high' THEN 4
+              WHEN 'medium' THEN 3
+              WHEN 'low' THEN 2
+              ELSE 1
+            END DESC,
+            cand.created_at ASC
+          LIMIT 1
+        )`
+        const [row] = await db
+          .update(s.tickets)
+          .set({ assigneeId: principalId, updatedAt: now() })
+          .where(
+            and(
+              eq(s.tickets.orgId, orgId),
+              isNull(s.tickets.assigneeId),
+              sql`${s.tickets.id} = ${candidate}`,
+            ),
+          )
+          .returning()
+        return row ? toTicket(row) : null
+      },
       async reKeyForProject(orgId, projectId, oldPrefix, newPrefix) {
         // Rewrite "<old>-<n>" → "<new>-<n>" keeping the numeric suffix. `substr`
         // + `||` are dialect-neutral; the cut point is the old prefix length + 2
@@ -660,6 +713,29 @@ export function createRepositories(db: DB, s: Schema): Repositories {
               .limit(1)
           ).map(toPrincipal),
         )
+      },
+      async getWithMemberships(orgId, id) {
+        // One round-trip: principal LEFT JOIN its memberships in this org. The
+        // principal repeats per membership row (null membership when it has
+        // none — which the actor resolver treats as "no membership").
+        const rows = await db
+          .select({ principal: s.principals, membership: s.memberships })
+          .from(s.principals)
+          .leftJoin(
+            s.memberships,
+            and(
+              eq(s.memberships.orgId, s.principals.orgId),
+              eq(s.memberships.principalId, s.principals.id),
+            ),
+          )
+          .where(and(eq(s.principals.orgId, orgId), eq(s.principals.id, id)))
+        if (rows.length === 0) return null
+        const principal = toPrincipal(rows[0]!.principal)
+        const memberships = rows
+          .map((r) => r.membership)
+          .filter((m): m is NonNullable<typeof m> => m != null)
+          .map(toMembership)
+        return { principal, memberships }
       },
       async findById(id) {
         return first(

@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { loadConfig } from '@rooster/config'
+import { InMemoryActorCache } from '@rooster/core'
 import { createApp } from './app.js'
 import { bootstrapAdmin } from './bootstrap-admin.js'
 import { createServerContext } from './context.js'
@@ -9,7 +10,9 @@ async function main() {
   const config = loadConfig()
   const ctx = await createServerContext(config, { migrate: true })
   await bootstrapAdmin(ctx)
-  const app = createApp(ctx)
+  // In-memory actor cache: this is a single long-running process, so it persists
+  // across requests and short-circuits the /mcp identity-resolution chain.
+  const app = createApp({ ...ctx, actorCache: new InMemoryActorCache() })
 
   serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`🐓 Rooster listening on http://localhost:${info.port} (${config.baseUrl})`)

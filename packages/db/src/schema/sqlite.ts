@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 /**
  * SQLite / libSQL dialect schema.
@@ -134,7 +134,13 @@ export const tickets = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('tickets_org_key_uq').on(t.orgId, t.key)],
+  (t) => [
+    uniqueIndex('tickets_org_key_uq').on(t.orgId, t.key),
+    // Hot read paths (board reads, filters, my_tickets, claim_next, milestone board).
+    index('tickets_org_project_status_idx').on(t.orgId, t.projectId, t.status),
+    index('tickets_org_assignee_idx').on(t.orgId, t.assigneeId),
+    index('tickets_org_milestone_idx').on(t.orgId, t.milestoneId),
+  ],
 )
 
 export const ticketLinks = sqliteTable(
@@ -164,15 +170,20 @@ export const invites = sqliteTable('invites', {
   updatedAt: updatedAt(),
 })
 
-export const comments = sqliteTable('comments', {
-  id: id(),
-  orgId: text('org_id').notNull(),
-  ticketId: text('ticket_id').notNull(),
-  authorId: text('author_id').notNull(),
-  body: text('body').notNull(),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-})
+export const comments = sqliteTable(
+  'comments',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    ticketId: text('ticket_id').notNull(),
+    authorId: text('author_id').notNull(),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  // Backs list_comments / get_ticket_context per-ticket reads.
+  (t) => [index('comments_org_ticket_idx').on(t.orgId, t.ticketId)],
+)
 
 export const ticketAssignees = sqliteTable(
   'ticket_assignees',
@@ -184,7 +195,11 @@ export const ticketAssignees = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('ticket_assignees_uq').on(t.orgId, t.ticketId, t.principalId)],
+  (t) => [
+    uniqueIndex('ticket_assignees_uq').on(t.orgId, t.ticketId, t.principalId),
+    // Backs my_tickets (co-assignee union) and claim-by-assignee lookups.
+    index('ticket_assignees_org_principal_idx').on(t.orgId, t.principalId),
+  ],
 )
 
 export const milestones = sqliteTable('milestones', {
@@ -229,18 +244,23 @@ export const rateLimits = sqliteTable('rate_limits', {
   count: integer('count').notNull(),
 })
 
-export const auditLog = sqliteTable('audit_log', {
-  id: id(),
-  orgId: text('org_id').notNull(),
-  principalId: text('principal_id').notNull(),
-  action: text('action').notNull(),
-  targetType: text('target_type').notNull(),
-  targetId: text('target_id'),
-  before: text('before'),
-  after: text('after'),
-  clientInfo: text('client_info'),
-  createdAt: createdAt(),
-})
+export const auditLog = sqliteTable(
+  'audit_log',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    principalId: text('principal_id').notNull(),
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id'),
+    before: text('before'),
+    after: text('after'),
+    clientInfo: text('client_info'),
+    createdAt: createdAt(),
+  },
+  // Backs the audit viewer's reverse-chronological per-org list.
+  (t) => [index('audit_log_org_created_idx').on(t.orgId, t.createdAt)],
+)
 
 export const sqliteSchema = {
   orgs,

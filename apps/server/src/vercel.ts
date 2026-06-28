@@ -1,4 +1,5 @@
 import { loadConfig } from '@rooster/config'
+import { InMemoryActorCache } from '@rooster/core'
 import { handle } from 'hono/vercel'
 import { createApp } from './app.js'
 import { createServerContext } from './context.js'
@@ -20,7 +21,8 @@ async function getHandler() {
     // schema is applied out of band before deploy (`db:migrate` + `auth:migrate`,
     // see docs/SELF_HOSTING.md).
     const ctx = await createServerContext(loadConfig(), { migrate: false })
-    handler = handle(createApp(ctx))
+    // In-memory actor cache, reused across requests on a warm instance.
+    handler = handle(createApp({ ...ctx, actorCache: new InMemoryActorCache() }))
   }
   return handler
 }

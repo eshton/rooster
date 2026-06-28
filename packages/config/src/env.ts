@@ -49,6 +49,13 @@ const envSchema = z.object({
 
   ROOSTER_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 
+  /**
+   * TTL (seconds) for the per-request resolved-actor cache on the `/mcp` hot
+   * path. A short window skips the identity-resolution chain on repeat calls;
+   * role/scope/membership changes self-heal within it. `0` disables the cache.
+   */
+  ROOSTER_MCP_ACTOR_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(30),
+
   /** Optional outbound webhook for `crow` (assignee wake) notifications. */
   ROOSTER_CROW_WEBHOOK_URL: z.url().optional(),
 
@@ -114,6 +121,8 @@ export interface RoosterConfig {
   }
   mcp: {
     rateLimitPerMinute: number
+    /** TTL (seconds) for the resolved-actor cache; 0 disables it. */
+    actorCacheTtlSeconds: number
   }
   /** Outbound notifications. `crowWebhookUrl` unset = crow is audit-only. */
   notifications: {
@@ -191,6 +200,7 @@ export function loadConfig(
     admin,
     mcp: {
       rateLimitPerMinute: env.ROOSTER_MCP_RATE_LIMIT_PER_MINUTE,
+      actorCacheTtlSeconds: env.ROOSTER_MCP_ACTOR_CACHE_TTL_SECONDS,
     },
     notifications: {
       crowWebhookUrl: env.ROOSTER_CROW_WEBHOOK_URL,

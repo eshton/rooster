@@ -1,6 +1,6 @@
 import { createAuth, memoryAdapter, type RoosterAuth } from '@rooster/auth'
 import type { RoosterConfig } from '@rooster/config'
-import { createServices, type Services } from '@rooster/core'
+import { type ActorCache, createServices, type Services } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
 import pg from 'pg'
 import { webhookCrowNotifier } from './crow-webhook.js'
@@ -38,6 +38,12 @@ export interface ServerContext {
   db: Database
   services: Services
   auth: RoosterAuth
+  /**
+   * Optional resolved-actor cache for the `/mcp` hot path. Wired at the server
+   * entries (Node: in-memory; edge: KV-backed); absent in tests/dev → the
+   * endpoint resolves every request fresh.
+   */
+  actorCache?: ActorCache
 }
 
 export interface CreateContextOptions {

@@ -73,6 +73,21 @@ export interface TicketRepository {
   listChildren(orgId: Id, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(orgId: Id, id: Id, patch: Partial<Ticket>): Promise<Ticket>
   /**
+   * Atomically claim the next actionable ticket in a project for a principal:
+   * the highest-priority, then oldest, **unblocked**, **unassigned** ticket
+   * whose status is one of `claimableStatuses`. Assigns it to `principalId` and
+   * returns it, or `null` when nothing is claimable. A single conditional
+   * `UPDATE … RETURNING` (no transaction) so racing callers never claim the same
+   * ticket. "Unblocked" = not the target of a `blocks` link whose blocker is
+   * still unresolved.
+   */
+  claimNext(
+    orgId: Id,
+    projectId: Id,
+    principalId: Id,
+    claimableStatuses: readonly string[],
+  ): Promise<Ticket | null>
+  /**
    * Rewrite the key prefix of every ticket in a project (`<oldPrefix>-<n>` →
    * `<newPrefix>-<n>`), leaving numbers untouched. Returns the count updated.
    */
@@ -136,6 +151,15 @@ export interface PrincipalRepository {
     input: Omit<Principal, keyof TimestampedId | 'orgId' | 'userId'> & { userId?: Id | null },
   ): Promise<Principal>
   getById(orgId: Id, id: Id): Promise<Principal | null>
+  /**
+   * Resolve a principal together with all of its memberships in the org in a
+   * SINGLE round-trip (a left join). Backs the per-request actor resolution hot
+   * path; returns `null` when the principal is not in the org.
+   */
+  getWithMemberships(
+    orgId: Id,
+    id: Id,
+  ): Promise<{ principal: Principal; memberships: Membership[] } | null>
   /**
    * Look up a principal by id WITHOUT an org filter. For resolving a caller's
    * own principal (and thus their org) from a session; never use it to bypass

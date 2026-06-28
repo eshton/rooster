@@ -1,8 +1,9 @@
 import { createAuth, drizzleAdapter } from '@rooster/auth'
 import { loadConfig } from '@rooster/config'
-import { createServices } from '@rooster/core'
+import { createServices, InMemoryActorCache } from '@rooster/core'
 import { createLibsqlWebDrizzle, createRepositories, sqliteSchema } from '@rooster/db/web'
 import type { Hono } from 'hono'
+import { KvActorCache, type KvNamespace } from './actor-cache-kv.js'
 import { createApp } from './app.js'
 import * as authSchema from './auth-schema.js'
 import type { ServerContext } from './context.js'
@@ -40,11 +41,19 @@ function buildApp(env: WorkerEnv): Hono {
     sendEmail: emailSenderFor(config),
   })
 
+  // Prefer a shared KV-backed actor cache when a `ROOSTER_ACTOR_CACHE` KV
+  // namespace is bound (see wrangler.toml); otherwise fall back to a per-isolate
+  // in-memory cache (still a valid short-TTL cache, just not shared across
+  // isolates/regions).
+  const kv = (env as Record<string, unknown>).ROOSTER_ACTOR_CACHE as KvNamespace | undefined
+  const actorCache = kv ? new KvActorCache(kv) : new InMemoryActorCache()
+
   const ctx: ServerContext = {
     config,
     db: { kind: 'libsql', repositories, close: async () => {} },
     services,
     auth,
+    actorCache,
   }
   return createApp(ctx)
 }

@@ -1,8 +1,9 @@
 import { loadConfig } from '@rooster/config'
 import { createDatabase, type Database } from '@rooster/db'
 import type { Role } from '@rooster/schema'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Actor } from './actor.js'
+import { InMemoryActorCache } from './cache.js'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from './errors.js'
 import type { CrowEvent, NotificationEvent } from './notify.js'
 import { provisionTenant } from './onboarding.js'
@@ -106,6 +107,53 @@ describe('permissions', () => {
     expect(can(agentActor('member', ['*']), 'ticket:write')).toBe(true)
     // scope present but role too low
     expect(can(agentActor('viewer', ['ticket:write']), 'ticket:write')).toBe(false)
+  })
+})
+
+describe('InMemoryActorCache', () => {
+  const actor = (principalId: string): Actor => ({
+    orgId: 'o',
+    principalId,
+    type: 'agent',
+    role: 'member',
+    scopes: ['ticket:write'],
+  })
+
+  it('caches and returns an actor; misses unknown keys', async () => {
+    const cache = new InMemoryActorCache()
+    expect(await cache.get('k')).toBeUndefined()
+    await cache.set('k', actor('p1'), 1000)
+    expect((await cache.get('k'))?.principalId).toBe('p1')
+  })
+
+  it('expires entries once the TTL elapses', async () => {
+    vi.useFakeTimers()
+    try {
+      const cache = new InMemoryActorCache()
+      await cache.set('k', actor('p1'), 1000)
+      vi.advanceTimersByTime(1001)
+      expect(await cache.get('k')).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('treats a non-positive TTL as a no-op', async () => {
+    const cache = new InMemoryActorCache()
+    await cache.set('k', actor('p1'), 0)
+    expect(await cache.get('k')).toBeUndefined()
+  })
+
+  it('evicts least-recently-used entries beyond the max size', async () => {
+    const cache = new InMemoryActorCache(2)
+    await cache.set('a', actor('a'), 1000)
+    await cache.set('b', actor('b'), 1000)
+    // Touch 'a' so 'b' becomes the least-recently-used, then overflow.
+    await cache.get('a')
+    await cache.set('c', actor('c'), 1000)
+    expect(await cache.get('b')).toBeUndefined()
+    expect((await cache.get('a'))?.principalId).toBe('a')
+    expect((await cache.get('c'))?.principalId).toBe('c')
   })
 })
 
@@ -1051,5 +1099,126 @@ describe('tenant isolation at the service layer', () => {
       principalId: other.founder.id,
     })
     await expect(services.tickets.get(otherOwner, ticket.id)).rejects.toBeInstanceOf(NotFoundError)
+  })
+})
+
+// --- claim_next (atomic work dispatch) --------------------------------------
+
+describe('claim_next', () => {
+  it('claims actionable tickets highest-priority first, then returns null when drained', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const low = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'low',
+      priority: 'low',
+    })
+    const highA = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'high a',
+      priority: 'high',
+    })
+    const highB = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'high b',
+      priority: 'high',
+    })
+
+    // Both high-priority tickets come before the low one (createdAt breaks ties).
+    const first = await services.tickets.claimNext(owner, { projectId: project.id })
+    expect(first?.assigneeId).toBe(owner.principalId)
+    expect([highA.id, highB.id]).toContain(first?.id)
+
+    const second = await services.tickets.claimNext(owner, { projectId: project.id })
+    expect([highA.id, highB.id]).toContain(second?.id)
+    expect(second?.id).not.toBe(first?.id)
+
+    const third = await services.tickets.claimNext(owner, { projectId: project.id })
+    expect(third?.id).toBe(low.id)
+
+    expect(await services.tickets.claimNext(owner, { projectId: project.id })).toBeNull()
+  })
+
+  it('skips a ticket with an unresolved blocker, then frees it once resolved', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const blocker = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'blocker',
+      priority: 'low',
+    })
+    const blocked = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'blocked',
+      priority: 'urgent',
+    })
+    await services.tickets.link(owner, {
+      fromTicketId: blocker.id,
+      toTicketId: blocked.id,
+      type: 'blocks',
+    })
+
+    // `blocked` is urgent but blocked, so the low-priority blocker is claimed first.
+    const first = await services.tickets.claimNext(owner, { projectId: project.id })
+    expect(first?.id).toBe(blocker.id)
+
+    // Resolving the blocker frees the blocked ticket.
+    await services.tickets.changeStatus(owner, { ticketId: blocker.id, status: 'in_progress' })
+    await services.tickets.changeStatus(owner, { ticketId: blocker.id, status: 'done' })
+    const second = await services.tickets.claimNext(owner, { projectId: project.id })
+    expect(second?.id).toBe(blocked.id)
+  })
+
+  it('only claims unassigned, actionable (backlog/todo) tickets', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const started = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'started',
+      priority: 'high',
+    })
+    await services.tickets.changeStatus(owner, { ticketId: started.id, status: 'in_progress' })
+    expect(await services.tickets.claimNext(owner, { projectId: project.id })).toBeNull()
+  })
+
+  it('makes the claimer a watcher of the ticket', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    await services.tickets.create(owner, { projectId: project.id, title: 't', priority: 'high' })
+    const claimed = await services.tickets.claimNext(owner, { projectId: project.id })
+    const watched = await services.watchers.myWatches(owner)
+    expect(watched.map((t) => t.id)).toContain(claimed?.id)
+  })
+
+  it('never lets two concurrent callers claim the same ticket', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const a = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'a',
+      priority: 'high',
+    })
+    const b = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'b',
+      priority: 'high',
+    })
+    const [r1, r2] = await Promise.all([
+      services.tickets.claimNext(owner, { projectId: project.id }),
+      services.tickets.claimNext(owner, { projectId: project.id }),
+    ])
+    expect([r1?.id, r2?.id].sort()).toEqual([a.id, b.id].sort())
+  })
+
+  it('requires ticket:write and a real project', async () => {
+    const { org, owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const viewer = await makeUser(org.id, owner, 'viewer')
+    await expect(
+      services.tickets.claimNext(viewer, { projectId: project.id }),
+    ).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(
+      services.tickets.claimNext(owner, { projectId: crypto.randomUUID() }),
+    ).rejects.toBeInstanceOf(NotFoundError)
   })
 })
