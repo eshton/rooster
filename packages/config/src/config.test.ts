@@ -132,4 +132,13 @@ describe('loadConfig', () => {
       loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings' }),
     ).toThrow(/ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY/)
   })
+
+  it('defaults embeddingDims to 1536 and coerces an override', () => {
+    // Always present — it sizes the embeddings table even with no embedder.
+    expect(loadConfig(baseEnv).embeddingDims).toBe(1536)
+    expect(loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_DIMS: '1024' }).embeddingDims).toBe(1024)
+    expect(() => loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_DIMS: '0' })).toThrow(
+      /Invalid Rooster environment configuration/,
+    )
+  })
 })

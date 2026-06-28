@@ -128,12 +128,16 @@ authorization.**
 CI-tested dialect.** The test suite runs on in-memory libSQL and production runs
 on Turso, so `schema/sqlite.ts` is the source of truth. Semantic search uses
 **libSQL native vectors** (`F32_BLOB` + `libsql_vector_idx` / `vector_top_k`),
-which run on the edge/Turso path — no Postgres required.
+which run on the edge/Turso path — no Postgres required. The `embeddings` table
+is NOT a Drizzle table: its vector column is sized from `ROOSTER_EMBEDDING_DIMS`
+(default 1536), so it's created at connect time by `ensureEmbeddingsStore`
+(`packages/db/src/vector.ts`, called from the libSQL driver) and accessed only
+through raw SQL in the repository.
 
 **Postgres is frozen / community-maintained.** `schema/pg.ts`, the `postgres`
 driver, and `migrations/pg/` are preserved so the path keeps compiling for
 self-hosters who prefer Postgres, but they are NOT exercised in CI and MAY drift.
-Native-vector columns live only on the SQLite schema.
+Native-vector storage (the runtime `embeddings` table) is libSQL-only.
 
 One repository implementation (`packages/db/src/repositories/impl.ts`) still
 serves **both** dialects (the Postgres driver bridges via `as unknown as` in

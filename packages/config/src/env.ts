@@ -86,14 +86,24 @@ const envSchema = z.object({
 
   /**
    * Embeddings for semantic (vector) search. When the URL + API key are set,
-   * tickets (and later messages/context files) are embedded and become
+   * tickets, conversation messages and context files are embedded and become
    * searchable via libSQL native vectors. OpenAI-compatible API by default.
    * Unset = semantic search is unconfigured (recall tools report so). The model
-   * must emit 1536-dim vectors (the fixed `F32_BLOB(1536)` column).
+   * must emit `ROOSTER_EMBEDDING_DIMS`-dimensional vectors.
    */
   ROOSTER_EMBEDDING_URL: z.url().optional(),
   ROOSTER_EMBEDDING_API_KEY: z.string().optional(),
   ROOSTER_EMBEDDING_MODEL: z.string().optional(),
+
+  /**
+   * Dimensionality of the embedding vectors, matching the configured model
+   * (text-embedding-3-small = 1536; Cloudflare bge-large = 1024). Sizes the
+   * libSQL `F32_BLOB(<dims>)` column, which is created at connect time — so this
+   * is read even when no embedder is configured. Changing it on an existing
+   * database requires dropping the `embeddings` table (it then recreates;
+   * re-embed via `backfill_embeddings`).
+   */
+  ROOSTER_EMBEDDING_DIMS: z.coerce.number().int().min(1).max(65_536).default(1536),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -175,6 +185,12 @@ export interface RoosterConfig {
     /** Embedding model name (default `text-embedding-3-small`). */
     model: string
   }
+  /**
+   * Dimensionality of stored embedding vectors. Always present (default 1536) —
+   * it sizes the runtime-created `embeddings` table even when no embedder is
+   * configured, so it must match whatever model the embedder uses.
+   */
+  embeddingDims: number
 }
 
 function provider(id?: string, secret?: string): OAuthProvider | undefined {
@@ -284,5 +300,6 @@ export function loadConfig(
       emailFrom: env.ROOSTER_EMAIL_FROM,
     },
     embedding,
+    embeddingDims: env.ROOSTER_EMBEDDING_DIMS,
   }
 }

@@ -273,3 +273,42 @@ fast). With neither set, `/roadmap` returns 404 and the landing page omits the
 link. The page always reflects the live board — no rebuild or sync step — and is
 read-only: it bypasses the per-actor permission layer precisely because you've
 designated that single project public, and reads nothing else.
+
+## 7. Semantic search (optional)
+
+Embed tickets, conversation messages and context files so agents can recall them
+by meaning — within a project and **across every project in the workspace**
+(`find_similar_tickets`, `recall_conversations`, `recall_context`). Vectors are
+stored and searched with **libSQL native vectors**, so this needs a
+libSQL/Turso (or local SQLite) `DATABASE_URL` — not the frozen Postgres path; no
+separate vector database.
+
+It's opt-in. Point Rooster at any OpenAI-compatible `/embeddings` endpoint:
+
+```bash
+# OpenAI (text-embedding-3-small → 1536 dims, the defaults)
+ROOSTER_EMBEDDING_URL=https://api.openai.com/v1/embeddings
+ROOSTER_EMBEDDING_API_KEY=sk-...
+ROOSTER_EMBEDDING_MODEL=text-embedding-3-small   # optional (default)
+ROOSTER_EMBEDDING_DIMS=1536                       # optional (default)
+```
+
+Running on Cloudflare Workers + Turso? Cloudflare Workers AI exposes an
+OpenAI-compatible endpoint on the same stack (its BGE models emit **1024** dims):
+
+```bash
+ROOSTER_EMBEDDING_URL=https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1/embeddings
+ROOSTER_EMBEDDING_API_KEY=<Cloudflare API token>
+ROOSTER_EMBEDDING_MODEL=@cf/baai/bge-large-en-v1.5
+ROOSTER_EMBEDDING_DIMS=1024
+```
+
+The URL and key must be set together (set only one and startup fails fast); with
+neither set the recall tools report that semantic search is unconfigured.
+`ROOSTER_EMBEDDING_DIMS` **must match the model's output size** — it sizes the
+`embeddings` table, which Rooster creates at connect time (so set it before the
+first run, or before `db:migrate` provisions Turso). Changing dims later means
+the model changed: `DROP TABLE embeddings` once (it recreates on the next
+connect), then re-embed existing rows with the `backfill_embeddings` tool.
+Embedding happens best-effort after each write and never blocks it; rows written
+while semantic search was off stay searchable only after a backfill.

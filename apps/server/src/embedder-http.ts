@@ -1,9 +1,6 @@
 import type { RoosterConfig } from '@rooster/config'
 import type { Embedder } from '@rooster/core'
 
-/** Expected dimensionality of stored vectors (the fixed `F32_BLOB(1536)` column). */
-const EMBEDDING_DIMS = 1536
-
 interface OpenAiEmbeddingResponse {
   data?: Array<{ embedding: number[]; index: number }>
 }
@@ -22,6 +19,11 @@ export function embedderFor(config: RoosterConfig): Embedder | undefined {
   if (!cfg) return undefined
   // Vector storage is libSQL-native; Postgres is the frozen path with no vectors.
   if (config.database.kind === 'postgres') return undefined
+
+  // The runtime `embeddings` table is sized to this; a model emitting a
+  // different length would fail at insert, so reject it up front with a clear
+  // message instead.
+  const dims = config.embeddingDims
 
   return {
     model: cfg.model,
@@ -47,10 +49,10 @@ export function embedderFor(config: RoosterConfig): Embedder | undefined {
       // Order by `index` so vectors line up with the input texts.
       const sorted = [...data].sort((a, b) => a.index - b.index)
       for (const d of sorted) {
-        if (d.embedding.length !== EMBEDDING_DIMS) {
+        if (d.embedding.length !== dims) {
           throw new Error(
-            `Embedding model returned ${d.embedding.length} dims; expected ${EMBEDDING_DIMS}. ` +
-              'Set ROOSTER_EMBEDDING_MODEL to a 1536-dim model.',
+            `Embedding model returned ${d.embedding.length} dims; expected ${dims}. ` +
+              'Set ROOSTER_EMBEDDING_DIMS to match the model (or pick a model of that size).',
           )
         }
       }

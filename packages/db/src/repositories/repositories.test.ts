@@ -120,6 +120,32 @@ describe('embeddings (libSQL native vectors)', () => {
     expect(await e.delete(org.id, 'ticket', 't1')).toBe(true)
     expect(await e.existingFor(org.id, 'ticket', ['t1', 't2'])).toEqual(['t2'])
   })
+
+  it('honors ROOSTER_EMBEDDING_DIMS when sizing the runtime table', async () => {
+    // The embeddings table is created at connect time from the configured dim,
+    // not from a static migration — a small dim must round-trip end to end.
+    const smallDb = await createDatabase(
+      loadConfig({
+        DATABASE_URL: 'file::memory:',
+        ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
+        ROOSTER_EMBEDDING_DIMS: '4',
+      }),
+      { migrate: true },
+    )
+    try {
+      const repos = smallDb.repositories
+      const org = await repos.orgs.create({ slug: 'dim', name: 'dim', enrollmentPolicy: 'token' })
+      const e = repos.embeddings
+      await e.upsert(org.id, 'ticket', 't-near', [1, 0, 0, 0], 'mock')
+      await e.upsert(org.id, 'ticket', 't-far', [0, 0, 0, 1], 'mock')
+
+      const hits = await e.search(org.id, 'ticket', [1, 0, 0, 0], 10)
+      expect(hits[0]?.sourceId).toBe('t-near')
+      expect(hits[0]?.distance).toBeCloseTo(0, 5)
+    } finally {
+      await smallDb.close()
+    }
+  })
 })
 
 describe('ticket JSON fields + updates', () => {

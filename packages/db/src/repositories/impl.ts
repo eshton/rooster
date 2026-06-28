@@ -20,7 +20,7 @@ import type {
   User,
   Watcher,
 } from '@rooster/schema'
-import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import type { Repositories } from '../repositories.js'
 import type { sqliteSchema } from '../schema/sqlite.js'
@@ -591,18 +591,18 @@ export function createRepositories(db: DB, s: Schema): Repositories {
       },
       async existingFor(orgId, sourceType, sourceIds) {
         if (sourceIds.length === 0) return []
-        return (
-          await db
-            .select({ sourceId: s.embeddings.sourceId })
-            .from(s.embeddings)
-            .where(
-              and(
-                eq(s.embeddings.orgId, orgId),
-                eq(s.embeddings.sourceType, sourceType),
-                inArray(s.embeddings.sourceId, sourceIds),
-              ),
-            )
-        ).map((r) => r.sourceId)
+        // The `embeddings` table is runtime-created (not a Drizzle table), so it
+        // can't be referenced through `s.*` — query it as raw SQL.
+        const ids = sql.join(
+          sourceIds.map((sid) => sql`${sid}`),
+          sql`, `,
+        )
+        const rows = (await db.all(sql`
+          SELECT source_id AS sourceId FROM embeddings
+          WHERE org_id = ${orgId} AND source_type = ${sourceType}
+            AND source_id IN (${ids})
+        `)) as Array<{ sourceId: string }>
+        return rows.map((r) => r.sourceId)
       },
       async searchAny(orgId, queryVector, candidateK) {
         const vec = `[${queryVector.join(',')}]`
@@ -622,16 +622,11 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         }))
       },
       async delete(orgId, sourceType, sourceId) {
-        const rows = await db
-          .delete(s.embeddings)
-          .where(
-            and(
-              eq(s.embeddings.orgId, orgId),
-              eq(s.embeddings.sourceType, sourceType),
-              eq(s.embeddings.sourceId, sourceId),
-            ),
-          )
-          .returning({ id: s.embeddings.id })
+        const rows = (await db.all(sql`
+          DELETE FROM embeddings
+          WHERE org_id = ${orgId} AND source_type = ${sourceType} AND source_id = ${sourceId}
+          RETURNING id
+        `)) as Array<{ id: string }>
         return rows.length > 0
       },
     },

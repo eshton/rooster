@@ -1,12 +1,4 @@
-import {
-  customType,
-  index,
-  integer,
-  real,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core'
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 /**
  * SQLite / libSQL dialect schema.
@@ -21,25 +13,6 @@ import {
 const id = () => text('id').primaryKey()
 const createdAt = () => text('created_at').notNull()
 const updatedAt = () => text('updated_at').notNull()
-
-/**
- * Fixed dimensionality of stored embedding vectors (libSQL `F32_BLOB`). Tied to
- * the default embedding model (text-embedding-3-small = 1536). Changing it is a
- * schema migration. SQLite/libSQL-only — no Postgres equivalent (frozen path).
- */
-export const EMBEDDING_DIMS = 1536
-
-/**
- * libSQL native vector column type (`F32_BLOB(<dims>)`). Values are read/written
- * through raw `vector32()` / `vector_top_k()` SQL in the repository, so the
- * column only needs its DDL type here for migration generation.
- */
-const f32Blob = (dims: number) =>
-  customType<{ data: number[]; driverData: Uint8Array }>({
-    dataType() {
-      return `F32_BLOB(${dims})`
-    },
-  })
 
 export const orgs = sqliteTable('orgs', {
   id: id(),
@@ -290,28 +263,15 @@ export const attachments = sqliteTable('attachments', {
 })
 
 /**
- * Polymorphic embedding store for semantic search (libSQL-native vectors).
- * One row per embedded source (`ticket` now; `message`/`context_file` later),
- * so a single ANN index serves all recall. The functional vector index
- * (`libsql_vector_idx(embedding)`) is created idempotently at connect time in
- * the driver (drizzle-kit can't express a function index without breaking the
- * migration-drift check) — only the table is generated from this schema.
+ * Polymorphic embedding store for semantic search (libSQL-native vectors) is
+ * NOT a Drizzle table: its `embedding F32_BLOB(<dims>)` column is sized from
+ * `ROOSTER_EMBEDDING_DIMS` at runtime, which a static committed migration can't
+ * express. The table (plus its unique index and the `libsql_vector_idx`
+ * functional ANN index) is created idempotently at connect time — see
+ * `ensureEmbeddingsStore` in `vector.ts`, called from the libSQL driver. All
+ * access goes through raw `vector32()`/`vector_top_k()` SQL in the repository.
  * libSQL/Turso-only; the frozen Postgres schema has no equivalent.
  */
-export const embeddings = sqliteTable(
-  'embeddings',
-  {
-    id: id(),
-    orgId: text('org_id').notNull(),
-    sourceType: text('source_type').notNull(),
-    sourceId: text('source_id').notNull(),
-    model: text('model').notNull(),
-    embedding: f32Blob(EMBEDDING_DIMS)('embedding').notNull(),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (t) => [uniqueIndex('embeddings_source_uq').on(t.orgId, t.sourceType, t.sourceId)],
-)
 
 export const contextFiles = sqliteTable(
   'context_files',
@@ -387,7 +347,6 @@ export const sqliteSchema = {
   conversationMessages,
   attachments,
   contextFiles,
-  embeddings,
   rateLimits,
   idempotencyKeys,
   auditLog,
