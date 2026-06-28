@@ -15,7 +15,7 @@ Rooster is a pnpm monorepo of `@rooster/*` packages with one deployable app.
 | `core` | Domain services, permissions, status transitions, audit, onboarding |
 | `auth` | better-auth config, the identity bridge, enrollment gating, scopes |
 | `mcp` | MCP server: tools + resources + the stateless Streamable-HTTP transport |
-| `server` (app) | The Hono deployable: auth + `/mcp` + discovery + `/onboard` |
+| `server` (app) | The Hono deployable: auth + `/mcp` + discovery + `/onboard` + the SSR human dashboard |
 
 **Dependency direction** (never cycles): `config` ← `db` ← `core` ←
 {`auth`, `mcp`} ← `server`. `schema` is depended on by everyone. Core is
