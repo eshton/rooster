@@ -1,4 +1,12 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import {
+  customType,
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 
 /**
  * SQLite / libSQL dialect schema.
@@ -13,6 +21,25 @@ import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-or
 const id = () => text('id').primaryKey()
 const createdAt = () => text('created_at').notNull()
 const updatedAt = () => text('updated_at').notNull()
+
+/**
+ * Fixed dimensionality of stored embedding vectors (libSQL `F32_BLOB`). Tied to
+ * the default embedding model (text-embedding-3-small = 1536). Changing it is a
+ * schema migration. SQLite/libSQL-only — no Postgres equivalent (frozen path).
+ */
+export const EMBEDDING_DIMS = 1536
+
+/**
+ * libSQL native vector column type (`F32_BLOB(<dims>)`). Values are read/written
+ * through raw `vector32()` / `vector_top_k()` SQL in the repository, so the
+ * column only needs its DDL type here for migration generation.
+ */
+const f32Blob = (dims: number) =>
+  customType<{ data: number[]; driverData: Uint8Array }>({
+    dataType() {
+      return `F32_BLOB(${dims})`
+    },
+  })
 
 export const orgs = sqliteTable('orgs', {
   id: id(),
@@ -262,6 +289,30 @@ export const attachments = sqliteTable('attachments', {
   updatedAt: updatedAt(),
 })
 
+/**
+ * Polymorphic embedding store for semantic search (libSQL-native vectors).
+ * One row per embedded source (`ticket` now; `message`/`context_file` later),
+ * so a single ANN index serves all recall. The functional vector index
+ * (`libsql_vector_idx(embedding)`) is created idempotently at connect time in
+ * the driver (drizzle-kit can't express a function index without breaking the
+ * migration-drift check) — only the table is generated from this schema.
+ * libSQL/Turso-only; the frozen Postgres schema has no equivalent.
+ */
+export const embeddings = sqliteTable(
+  'embeddings',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    sourceType: text('source_type').notNull(),
+    sourceId: text('source_id').notNull(),
+    model: text('model').notNull(),
+    embedding: f32Blob(EMBEDDING_DIMS)('embedding').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('embeddings_source_uq').on(t.orgId, t.sourceType, t.sourceId)],
+)
+
 export const rateLimits = sqliteTable('rate_limits', {
   key: text('key').primaryKey(),
   windowStart: text('window_start').notNull(),
@@ -317,6 +368,7 @@ export const sqliteSchema = {
   comments,
   conversationMessages,
   attachments,
+  embeddings,
   rateLimits,
   idempotencyKeys,
   auditLog,

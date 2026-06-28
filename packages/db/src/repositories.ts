@@ -146,6 +146,46 @@ export interface ConversationRepository {
   deleteForTicket(orgId: Id, ticketId: Id): Promise<number>
 }
 
+/** A nearest-neighbour hit from a vector search. */
+export interface EmbeddingHit {
+  sourceId: Id
+  /** Cosine distance (0 = identical); lower is closer. */
+  distance: number
+}
+
+/**
+ * Polymorphic embedding store backing semantic search (libSQL-native vectors).
+ * `sourceType` discriminates `ticket` / `message` / `context_file` so one ANN
+ * index serves all recall. libSQL/Turso only — methods rely on `vector32()` /
+ * `vector_top_k()` SQL and the runtime-created vector index.
+ */
+export interface EmbeddingRepository {
+  /** Insert or replace the embedding for a source row (keyed org+type+id). */
+  upsert(
+    orgId: Id,
+    sourceType: string,
+    sourceId: Id,
+    vector: number[],
+    model: string,
+  ): Promise<void>
+  /**
+   * Nearest sources to `queryVector` within an org + sourceType, ordered by
+   * cosine distance. `candidateK` is the GLOBAL ANN pool size (libSQL has no
+   * metadata pre-filter); the org/type filter is applied after, so pass a
+   * `candidateK` larger than the result count you want.
+   */
+  search(
+    orgId: Id,
+    sourceType: string,
+    queryVector: number[],
+    candidateK: number,
+  ): Promise<EmbeddingHit[]>
+  /** Of the given source ids, those that already have an embedding (for backfill). */
+  existingFor(orgId: Id, sourceType: string, sourceIds: Id[]): Promise<Id[]>
+  /** Remove a source's embedding (e.g. on redaction/delete); true if removed. */
+  delete(orgId: Id, sourceType: string, sourceId: Id): Promise<boolean>
+}
+
 export interface AttachmentRepository {
   create(orgId: Id, input: Omit<Attachment, keyof TimestampedId | 'orgId'>): Promise<Attachment>
   listForTicket(orgId: Id, ticketId: Id, opts?: ListOptions): Promise<Attachment[]>
@@ -313,6 +353,7 @@ export interface Repositories {
   comments: CommentRepository
   conversation: ConversationRepository
   attachments: AttachmentRepository
+  embeddings: EmbeddingRepository
   principals: PrincipalRepository
   users: UserRepository
   agents: AgentRepository

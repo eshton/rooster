@@ -570,6 +570,40 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'find_similar_tickets',
+    {
+      title: 'Find similar tickets',
+      description:
+        'Semantic search: tickets across your workspace most similar in MEANING to a query ' +
+        '(vector embeddings), not just keyword matches — spans all projects in the org. Use it ' +
+        'to recall related prior work/decisions. Requires embeddings to be configured; otherwise ' +
+        'returns an error. Set `compact: true` for the trimmed shape.',
+      inputSchema: {
+        query: z.string().min(1).max(1000),
+        limit: z.number().int().min(1).max(50).optional(),
+        compact: z.boolean().optional(),
+      },
+    },
+    async ({ query, limit, compact }) =>
+      runTool(async () =>
+        maybeCompact(await services.tickets.findSimilar(actor, query, limit), compact),
+      ),
+  )
+
+  server.registerTool(
+    'backfill_embeddings',
+    {
+      title: 'Backfill embeddings',
+      description:
+        'Embed any tickets that lack an embedding (e.g. created before embeddings were ' +
+        'configured) so they become findable by find_similar_tickets. Optionally scope to one ' +
+        'project. Requires embeddings to be configured.',
+      inputSchema: { projectId: z.uuid().optional() },
+    },
+    async ({ projectId }) => runTool(() => services.tickets.backfillEmbeddings(actor, projectId)),
+  )
+
+  server.registerTool(
     'list_subtasks',
     {
       title: 'List subtasks',

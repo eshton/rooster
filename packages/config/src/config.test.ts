@@ -114,4 +114,22 @@ describe('loadConfig', () => {
       /ROOSTER_ROADMAP_ORG_SLUG and ROOSTER_ROADMAP_PROJECT_KEY/,
     )
   })
+
+  it('builds the embedding config all-or-nothing, defaulting the model', () => {
+    expect(loadConfig(baseEnv).embedding).toBeUndefined()
+    const cfg = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings',
+      ROOSTER_EMBEDDING_API_KEY: 'sk-test',
+    })
+    expect(cfg.embedding).toEqual({
+      url: 'https://api.openai.com/v1/embeddings',
+      apiKey: 'sk-test',
+      model: 'text-embedding-3-small',
+    })
+    // Only one of the pair set → readable error.
+    expect(() =>
+      loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings' }),
+    ).toThrow(/ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY/)
+  })
 })

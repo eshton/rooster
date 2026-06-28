@@ -83,6 +83,17 @@ const envSchema = z.object({
    */
   RESEND_API_KEY: z.string().optional(),
   ROOSTER_EMAIL_FROM: z.string().optional(),
+
+  /**
+   * Embeddings for semantic (vector) search. When the URL + API key are set,
+   * tickets (and later messages/context files) are embedded and become
+   * searchable via libSQL native vectors. OpenAI-compatible API by default.
+   * Unset = semantic search is unconfigured (recall tools report so). The model
+   * must emit 1536-dim vectors (the fixed `F32_BLOB(1536)` column).
+   */
+  ROOSTER_EMBEDDING_URL: z.url().optional(),
+  ROOSTER_EMBEDDING_API_KEY: z.string().optional(),
+  ROOSTER_EMBEDDING_MODEL: z.string().optional(),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -154,6 +165,16 @@ export interface RoosterConfig {
     /** Verified from-address for transactional email (e.g. `Rooster <no-reply@…>`). */
     emailFrom?: string
   }
+  /**
+   * Optional embeddings provider for semantic search. Present only when both the
+   * URL and API key are configured; otherwise semantic search is unconfigured.
+   */
+  embedding?: {
+    url: string
+    apiKey: string
+    /** Embedding model name (default `text-embedding-3-small`). */
+    model: string
+  }
 }
 
 function provider(id?: string, secret?: string): OAuthProvider | undefined {
@@ -198,6 +219,22 @@ export function loadConfig(
           orgSlug: env.ROOSTER_ROADMAP_ORG_SLUG,
           projectKey: env.ROOSTER_ROADMAP_PROJECT_KEY.toUpperCase(),
           title: env.ROOSTER_ROADMAP_TITLE,
+        }
+      : undefined
+
+  // Embeddings need both an endpoint and a key to call out; requiring both
+  // together avoids a half-configured provider that silently no-ops.
+  if (Boolean(env.ROOSTER_EMBEDDING_URL) !== Boolean(env.ROOSTER_EMBEDDING_API_KEY)) {
+    throw new Error(
+      'Invalid Rooster environment configuration:\n  - ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY must be set together',
+    )
+  }
+  const embedding =
+    env.ROOSTER_EMBEDDING_URL && env.ROOSTER_EMBEDDING_API_KEY
+      ? {
+          url: env.ROOSTER_EMBEDDING_URL,
+          apiKey: env.ROOSTER_EMBEDDING_API_KEY,
+          model: env.ROOSTER_EMBEDDING_MODEL ?? 'text-embedding-3-small',
         }
       : undefined
 
@@ -246,5 +283,6 @@ export function loadConfig(
       emailResendApiKey: env.RESEND_API_KEY,
       emailFrom: env.ROOSTER_EMAIL_FROM,
     },
+    embedding,
   }
 }

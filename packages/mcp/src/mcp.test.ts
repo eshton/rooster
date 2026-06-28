@@ -514,4 +514,75 @@ describe('MCP server end-to-end', () => {
     )
     expect(suspended.status).toBe('suspended')
   })
+
+  it('find_similar_tickets errors clearly when embeddings are unconfigured', async () => {
+    // The default harness wires no embedder.
+    const res = (await call('find_similar_tickets', { query: 'anything' })) as {
+      isError?: boolean
+      content: Array<{ text?: string }>
+    }
+    expect(res.isError).toBe(true)
+    expect(res.content[0]?.text ?? '').toMatch(/not configured/i)
+  })
+})
+
+describe('MCP semantic search (embedder wired)', () => {
+  it('finds a semantically similar ticket through find_similar_tickets', async () => {
+    const config = loadConfig({
+      DATABASE_URL: 'file::memory:',
+      ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
+    })
+    const localDb = await createDatabase(config, { migrate: true })
+    const embedder = {
+      model: 'mock',
+      async embed(texts: string[]) {
+        return texts.map((t) => {
+          const v = new Array<number>(1536).fill(0)
+          for (const w of t.toLowerCase().split(/\W+/).filter(Boolean)) {
+            let h = 0
+            for (let i = 0; i < w.length; i++) h = (h * 31 + w.charCodeAt(i)) >>> 0
+            v[h % 1536] += 1
+          }
+          return v
+        })
+      },
+    }
+    const localServices = createServices(localDb.repositories, { embedder })
+    const { org, founder } = await localServices.orgs.bootstrap({
+      org: { slug: 'vec', name: 'Vec', enrollmentPolicy: 'open' },
+      founder: { displayName: 'V', email: 'v@vec.test', name: 'V', avatarUrl: null },
+    })
+    const localOwner = await localServices.resolveActor({ orgId: org.id, principalId: founder.id })
+    const team = await localServices.teams.create(localOwner, { key: 'VEC', name: 'Vec' })
+    const project = await localServices.projects.create(localOwner, {
+      teamId: team.id,
+      key: 'VEC',
+      name: 'Vec',
+    })
+    const target = await localServices.tickets.create(localOwner, {
+      projectId: project.id,
+      title: 'Vector similarity recall',
+      description: 'embed and search by meaning',
+    })
+    await localServices.tickets.create(localOwner, {
+      projectId: project.id,
+      title: 'Unrelated billing export',
+    })
+
+    const server = createRoosterMcpServer({ services: localServices, actor: localOwner })
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    await server.connect(st)
+    const localClient = new Client({ name: 'test', version: '1.0' })
+    await localClient.connect(ct)
+
+    const res = await localClient.callTool({
+      name: 'find_similar_tickets',
+      arguments: { query: 'semantic vector similarity', limit: 3 },
+    })
+    const hits = payload(res as never) as Array<{ id: string }>
+    expect(hits[0]?.id).toBe(target.id)
+
+    await localClient.close()
+    await localDb.close()
+  })
 })

@@ -1593,3 +1593,95 @@ describe('conversation traces', () => {
     )
   })
 })
+
+// --- semantic search (embeddings) -------------------------------------------
+
+/**
+ * Deterministic 1536-dim bag-of-words embedder for tests: texts that share words
+ * land closer in cosine space, so "similar" is meaningful without a real model.
+ */
+function mockEmbedder() {
+  const DIMS = 1536
+  return {
+    model: 'mock',
+    async embed(texts: string[]) {
+      return texts.map((t) => {
+        const v = new Array<number>(DIMS).fill(0)
+        for (const w of t.toLowerCase().split(/\W+/).filter(Boolean)) {
+          let h = 0
+          for (let i = 0; i < w.length; i++) h = (h * 31 + w.charCodeAt(i)) >>> 0
+          v[h % DIMS] += 1
+        }
+        return v
+      })
+    },
+  }
+}
+
+describe('semantic search', () => {
+  it('embeds on create and finds similar tickets across projects in the org', async () => {
+    const { owner } = await bootstrap()
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const team = await svc.teams.create(owner, { key: 'AAA', name: 'A' })
+    const p1 = await svc.projects.create(owner, { teamId: team.id, key: 'AAA', name: 'A' })
+    const p2 = await svc.projects.create(owner, { teamId: team.id, key: 'BBB', name: 'B' })
+
+    const relevant = await svc.tickets.create(owner, {
+      projectId: p1.id,
+      title: 'Vector similarity search for agents',
+      description: 'embed messages and recall by vector similarity',
+    })
+    await svc.tickets.create(owner, {
+      projectId: p2.id,
+      title: 'Billing invoice export',
+      description: 'monthly CSV of charges',
+    })
+
+    const hits = await svc.tickets.findSimilar(owner, 'semantic vector similarity recall', 5)
+    // The vector-heavy ticket (in a different project than the billing one) ranks first.
+    expect(hits[0]?.id).toBe(relevant.id)
+  })
+
+  it('throws a clear error when embeddings are not configured', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    await services.tickets.create(owner, { projectId: project.id, title: 'x' })
+    await expect(services.tickets.findSimilar(owner, 'x')).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('isolates results by org', async () => {
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const a = await bootstrap()
+    const { project } = await (async () => {
+      const team = await svc.teams.create(a.owner, { key: 'ROOST', name: 'R' })
+      return {
+        project: await svc.projects.create(a.owner, { teamId: team.id, key: 'AAA', name: 'A' }),
+      }
+    })()
+    await svc.tickets.create(a.owner, { projectId: project.id, title: 'unique alpha topic widget' })
+
+    const b = await services.orgs.bootstrap({
+      org: { slug: 'beta', name: 'Beta', enrollmentPolicy: 'open' },
+      founder: { displayName: 'B', email: 'b@beta.test', name: 'B', avatarUrl: null },
+    })
+    const ownerB = await services.resolveActor({ orgId: b.org.id, principalId: b.founder.id })
+    expect(await svc.tickets.findSimilar(ownerB, 'unique alpha topic widget', 5)).toEqual([])
+  })
+
+  it('backfills tickets created before embeddings were configured', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    // Created with NO embedder → not embedded.
+    const t = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'searchable later',
+    })
+
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    expect(await svc.tickets.findSimilar(owner, 'searchable later', 5)).toEqual([])
+
+    expect(await svc.tickets.backfillEmbeddings(owner, project.id)).toEqual({ embedded: 1 })
+    const hits = await svc.tickets.findSimilar(owner, 'searchable later', 5)
+    expect(hits.map((h) => h.id)).toContain(t.id)
+  })
+})

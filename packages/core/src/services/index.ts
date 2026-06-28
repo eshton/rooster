@@ -43,7 +43,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     orgs: createOrgService(repos),
     teams: createTeamService(repos),
     projects: createProjectService(repos),
-    tickets: createTicketService(repos, deps.crowNotifier),
+    tickets: createTicketService(repos, deps.crowNotifier, deps.embedder),
     comments: createCommentService(repos, deps.crowNotifier),
     conversation: createConversationService(repos),
     attachments: createAttachmentService(repos),

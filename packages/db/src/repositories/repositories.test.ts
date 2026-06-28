@@ -77,6 +77,51 @@ describe('ticket numbering', () => {
   })
 })
 
+describe('embeddings (libSQL native vectors)', () => {
+  // A 1536-dim vector (matching F32_BLOB(1536)) with a few non-zero components.
+  const vec = (...nz: Array<[number, number]>) => {
+    const v = new Array(1536).fill(0)
+    for (const [i, x] of nz) v[i] = x
+    return v
+  }
+
+  it('upserts and finds nearest, scoped to org + sourceType', async () => {
+    const { org } = await makeOrgWithTeamProject('acme')
+    const other = await makeOrgWithTeamProject('other')
+    const e = db.repositories.embeddings
+
+    await e.upsert(org.id, 'ticket', 't-near', vec([0, 1]), 'mock')
+    await e.upsert(org.id, 'ticket', 't-far', vec([5, 1]), 'mock')
+    await e.upsert(org.id, 'message', 't-near', vec([0, 1]), 'mock') // different sourceType
+    await e.upsert(other.org.id, 'ticket', 't-foreign', vec([0, 1]), 'mock') // different org
+
+    const hits = await e.search(org.id, 'ticket', vec([0, 1]), 10)
+    expect(hits[0]?.sourceId).toBe('t-near')
+    expect(hits[0]?.distance).toBeCloseTo(0, 5)
+    const ids = hits.map((h) => h.sourceId)
+    expect(ids).toContain('t-near')
+    expect(ids).toContain('t-far')
+    // org + sourceType isolation: never the other org or the message row.
+    expect(ids).not.toContain('t-foreign')
+  })
+
+  it('upsert replaces (keyed by org+sourceType+sourceId) and existingFor/delete work', async () => {
+    const { org } = await makeOrgWithTeamProject('acme')
+    const e = db.repositories.embeddings
+    await e.upsert(org.id, 'ticket', 't1', vec([0, 1]), 'mock')
+    await e.upsert(org.id, 'ticket', 't1', vec([1, 1]), 'mock') // replace, not duplicate
+    await e.upsert(org.id, 'ticket', 't2', vec([2, 1]), 'mock')
+
+    expect((await e.existingFor(org.id, 'ticket', ['t1', 't2', 't3'])).sort()).toEqual(['t1', 't2'])
+    // a single row for t1 (replaced, not duplicated)
+    const hits = await e.search(org.id, 'ticket', vec([1, 1]), 10)
+    expect(hits.filter((h) => h.sourceId === 't1')).toHaveLength(1)
+
+    expect(await e.delete(org.id, 'ticket', 't1')).toBe(true)
+    expect(await e.existingFor(org.id, 'ticket', ['t1', 't2'])).toEqual(['t2'])
+  })
+})
+
 describe('ticket JSON fields + updates', () => {
   it('round-trips labels and applies status/label updates', async () => {
     const { org, project } = await makeOrgWithTeamProject('acme')

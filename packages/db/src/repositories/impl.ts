@@ -19,7 +19,7 @@ import type {
   User,
   Watcher,
 } from '@rooster/schema'
-import { and, desc, eq, isNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import type { Repositories } from '../repositories.js'
 import type { sqliteSchema } from '../schema/sqlite.js'
@@ -542,6 +542,65 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           )
           .returning({ id: s.conversationMessages.id })
         return rows.length
+      },
+    },
+
+    embeddings: {
+      async upsert(orgId, sourceType, sourceId, vector, model) {
+        const ts = now()
+        const vec = `[${vector.join(',')}]`
+        // Insert-or-replace keyed by the unique (org, source_type, source_id).
+        // The vector is written through libSQL's native `vector32()`.
+        await db.run(sql`
+          INSERT INTO embeddings (id, org_id, source_type, source_id, model, embedding, created_at, updated_at)
+          VALUES (${newId()}, ${orgId}, ${sourceType}, ${sourceId}, ${model}, vector32(${vec}), ${ts}, ${ts})
+          ON CONFLICT(org_id, source_type, source_id) DO UPDATE SET
+            embedding = vector32(${vec}), model = ${model}, updated_at = ${ts}
+        `)
+      },
+      async search(orgId, sourceType, queryVector, candidateK) {
+        const vec = `[${queryVector.join(',')}]`
+        // ANN top-k is global (no metadata pre-filter), so over-fetch then filter
+        // to the org + type. k is a server-controlled integer → inline as a
+        // literal (vector_top_k's k arg doesn't take a bound param).
+        const k = Math.max(1, Math.floor(candidateK))
+        const rows = (await db.all(sql`
+          SELECT e.source_id AS sourceId,
+                 vector_distance_cos(e.embedding, vector32(${vec})) AS distance
+          FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
+          JOIN embeddings e ON e.rowid = v.id
+          WHERE e.org_id = ${orgId} AND e.source_type = ${sourceType}
+          ORDER BY distance ASC
+        `)) as Array<{ sourceId: string; distance: number }>
+        return rows.map((r) => ({ sourceId: r.sourceId, distance: Number(r.distance) }))
+      },
+      async existingFor(orgId, sourceType, sourceIds) {
+        if (sourceIds.length === 0) return []
+        return (
+          await db
+            .select({ sourceId: s.embeddings.sourceId })
+            .from(s.embeddings)
+            .where(
+              and(
+                eq(s.embeddings.orgId, orgId),
+                eq(s.embeddings.sourceType, sourceType),
+                inArray(s.embeddings.sourceId, sourceIds),
+              ),
+            )
+        ).map((r) => r.sourceId)
+      },
+      async delete(orgId, sourceType, sourceId) {
+        const rows = await db
+          .delete(s.embeddings)
+          .where(
+            and(
+              eq(s.embeddings.orgId, orgId),
+              eq(s.embeddings.sourceType, sourceType),
+              eq(s.embeddings.sourceId, sourceId),
+            ),
+          )
+          .returning({ id: s.embeddings.id })
+        return rows.length > 0
       },
     },
 

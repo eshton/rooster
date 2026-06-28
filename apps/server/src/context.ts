@@ -5,6 +5,7 @@ import { createDatabase, type Database } from '@rooster/db'
 import pg from 'pg'
 import { webhookCrowNotifier } from './crow-webhook.js'
 import { emailSenderFor } from './email.js'
+import { embedderFor } from './embedder-http.js'
 
 type AuthDatabase = Parameters<typeof createAuth>[0]['database']
 
@@ -66,6 +67,7 @@ export async function createServerContext(
   const db = await createDatabase(config, { migrate: opts.migrate ?? false })
   const services = createServices(db.repositories, {
     crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
+    embedder: embedderFor(config),
   })
   const auth = createAuth({
     config,

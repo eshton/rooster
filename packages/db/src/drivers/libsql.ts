@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/libsql/migrator'
 import type { CreateDatabaseOptions, Database } from '../database.js'
 import { createRepositories } from '../repositories/impl.js'
 import { sqliteSchema } from '../schema/sqlite.js'
+import { ensureVectorIndex } from '../vector.js'
 
 const MIGRATIONS_FOLDER = fileURLToPath(new URL('../../migrations/sqlite', import.meta.url))
 
@@ -23,6 +24,10 @@ export async function createLibsqlDatabase(
   if (opts.migrate) {
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER })
   }
+  // Create the native vector ANN index (functional index, kept out of the
+  // generated migrations). Best-effort + idempotent; runs after migrate so the
+  // `db:migrate` CLI provisions it for Turso too.
+  await ensureVectorIndex(db)
 
   return {
     kind: config.database.kind,

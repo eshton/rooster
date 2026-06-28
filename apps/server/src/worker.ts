@@ -9,6 +9,7 @@ import * as authSchema from './auth-schema.js'
 import type { ServerContext } from './context.js'
 import { webhookCrowNotifier } from './crow-webhook.js'
 import { emailSenderFor } from './email.js'
+import { embedderFor } from './embedder-http.js'
 
 /**
  * Cloudflare Workers entry. Backed by libSQL/Turso over HTTP — one drizzle
@@ -34,6 +35,7 @@ function buildApp(env: WorkerEnv): Hono {
   const repositories = createRepositories(drizzleDb, sqliteSchema)
   const services = createServices(repositories, {
     crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
+    embedder: embedderFor(config),
   })
   const auth = createAuth({
     config,

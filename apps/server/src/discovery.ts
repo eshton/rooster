@@ -107,6 +107,9 @@ not the client.
 - my_tickets — list tickets assigned to you (primary OR co-assignee).
   find_by_label — by tag.
   search_tickets — free-text search over titles + descriptions.
+  find_similar_tickets — semantic (vector) search by meaning across all projects
+  in your workspace; use it to recall related prior work before starting. Needs
+  embeddings configured on the instance (else it returns an error).
 - list_subtasks — list a ticket's children.
 - create_milestone / list_milestones — group tickets into a milestone / cycle
   (sprint). Scope a ticket via create_ticket/update_ticket \`milestoneId\`, and
