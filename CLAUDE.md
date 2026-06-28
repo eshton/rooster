@@ -179,7 +179,10 @@ Local smoke (no Postgres needed): set `DATABASE_URL=file:./local.db`,
   `repositories/impl.ts` → thread through the relevant core service.
 - **Add an MCP tool**: add the method to the core service (with `authorize` +
   audit), then register it in `packages/mcp/src/tools.ts` (reuse the DTO `.shape`
-  for `inputSchema`). Add an end-to-end case in `mcp.test.ts`.
+  for `inputSchema`). Add an end-to-end case in `mcp.test.ts`. **Document it** in
+  `apps/docs/src/content/docs/reference/mcp-tools.md` (and, if agent-facing, the
+  `/llms.txt` guide in `apps/server/src/discovery.ts`) — the `docs-sync.test.ts`
+  guard fails CI if the docs table omits a registered tool or lists a removed one.
 - **Add a permission/scope**: extend `Permission` + `PERMISSION_MIN_ROLE` in
   `packages/core/src/permissions.ts`; it automatically becomes a grantable OAuth
   scope (`ROOSTER_SCOPES` derives from it).
