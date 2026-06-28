@@ -509,6 +509,19 @@ export function createRepositories(db: DB, s: Schema): Repositories {
           toConversationMessage,
         )
       },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.conversationMessages)
+              .where(
+                and(eq(s.conversationMessages.orgId, orgId), eq(s.conversationMessages.id, id)),
+              )
+              .limit(1)
+          ).map(toConversationMessage),
+        )
+      },
       async listForTicket(orgId, ticketId, opts) {
         const filters = [
           eq(s.conversationMessages.orgId, orgId),

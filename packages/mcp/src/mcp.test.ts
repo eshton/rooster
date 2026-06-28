@@ -527,32 +527,44 @@ describe('MCP server end-to-end', () => {
 })
 
 describe('MCP semantic search (embedder wired)', () => {
-  it('finds a semantically similar ticket through find_similar_tickets', async () => {
+  const mockEmbedder = {
+    model: 'mock',
+    async embed(texts: string[]) {
+      return texts.map((t) => {
+        const v = new Array<number>(1536).fill(0)
+        for (const w of t.toLowerCase().split(/\W+/).filter(Boolean)) {
+          let h = 0
+          for (let i = 0; i < w.length; i++) h = (h * 31 + w.charCodeAt(i)) >>> 0
+          v[h % 1536] += 1
+        }
+        return v
+      })
+    },
+  }
+
+  /** A fresh in-memory harness with the embedder wired and a client connected. */
+  async function harness() {
     const config = loadConfig({
       DATABASE_URL: 'file::memory:',
       ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
     })
     const localDb = await createDatabase(config, { migrate: true })
-    const embedder = {
-      model: 'mock',
-      async embed(texts: string[]) {
-        return texts.map((t) => {
-          const v = new Array<number>(1536).fill(0)
-          for (const w of t.toLowerCase().split(/\W+/).filter(Boolean)) {
-            let h = 0
-            for (let i = 0; i < w.length; i++) h = (h * 31 + w.charCodeAt(i)) >>> 0
-            v[h % 1536] += 1
-          }
-          return v
-        })
-      },
-    }
-    const localServices = createServices(localDb.repositories, { embedder })
+    const localServices = createServices(localDb.repositories, { embedder: mockEmbedder })
     const { org, founder } = await localServices.orgs.bootstrap({
       org: { slug: 'vec', name: 'Vec', enrollmentPolicy: 'open' },
       founder: { displayName: 'V', email: 'v@vec.test', name: 'V', avatarUrl: null },
     })
     const localOwner = await localServices.resolveActor({ orgId: org.id, principalId: founder.id })
+    const server = createRoosterMcpServer({ services: localServices, actor: localOwner })
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    await server.connect(st)
+    const localClient = new Client({ name: 'test', version: '1.0' })
+    await localClient.connect(ct)
+    return { localDb, localServices, localOwner, localClient }
+  }
+
+  it('finds a semantically similar ticket through find_similar_tickets', async () => {
+    const { localDb, localServices, localOwner, localClient } = await harness()
     const team = await localServices.teams.create(localOwner, { key: 'VEC', name: 'Vec' })
     const project = await localServices.projects.create(localOwner, {
       teamId: team.id,
@@ -569,18 +581,59 @@ describe('MCP semantic search (embedder wired)', () => {
       title: 'Unrelated billing export',
     })
 
-    const server = createRoosterMcpServer({ services: localServices, actor: localOwner })
-    const [ct, st] = InMemoryTransport.createLinkedPair()
-    await server.connect(st)
-    const localClient = new Client({ name: 'test', version: '1.0' })
-    await localClient.connect(ct)
-
     const res = await localClient.callTool({
       name: 'find_similar_tickets',
       arguments: { query: 'semantic vector similarity', limit: 3 },
     })
     const hits = payload(res as never) as Array<{ id: string }>
     expect(hits[0]?.id).toBe(target.id)
+
+    await localClient.close()
+    await localDb.close()
+  })
+
+  it('recalls a conversation message across projects via recall_conversations', async () => {
+    const { localDb, localServices, localOwner, localClient } = await harness()
+    const team = await localServices.teams.create(localOwner, { key: 'VEC', name: 'Vec' })
+    const p1 = await localServices.projects.create(localOwner, {
+      teamId: team.id,
+      key: 'AAA',
+      name: 'A',
+    })
+    const p2 = await localServices.projects.create(localOwner, {
+      teamId: team.id,
+      key: 'BBB',
+      name: 'B',
+    })
+    const t1 = await localServices.tickets.create(localOwner, { projectId: p1.id, title: 'design' })
+    const t2 = await localServices.tickets.create(localOwner, { projectId: p2.id, title: 'ops' })
+    await localServices.conversation.append(localOwner, {
+      ticketId: t1.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'How do we embed messages for vector recall?' }],
+    })
+    await localServices.conversation.append(localOwner, {
+      ticketId: t2.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'Rotate the on-call schedule weekly' }],
+    })
+
+    const res = await localClient.callTool({
+      name: 'recall_conversations',
+      arguments: { query: 'embedding vector recall', limit: 5 },
+    })
+    const hits = payload(res as never) as Array<{ ticketKey: string; snippet: string }>
+    expect(hits[0]?.ticketKey).toBe(t1.key) // the message in a different project
+    expect(hits[0]?.snippet).toMatch(/vector recall/i)
+
+    // The hit's ticket then yields the full staged thread via get_ticket_context.
+    const ctx = payload(
+      (await localClient.callTool({
+        name: 'get_ticket_context',
+        arguments: { key: t1.key },
+      })) as never,
+    ) as { conversation: unknown[] }
+    expect(ctx.conversation).toHaveLength(1)
 
     await localClient.close()
     await localDb.close()

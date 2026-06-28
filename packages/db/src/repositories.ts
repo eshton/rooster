@@ -134,6 +134,8 @@ export interface ConversationRepository {
       Omit<ConversationMessage, keyof TimestampedId | 'orgId' | 'ticketId' | 'stage' | 'seq'>
     >,
   ): Promise<ConversationMessage[]>
+  /** A single message by id (used to resolve semantic-recall hits). */
+  getById(orgId: Id, id: Id): Promise<ConversationMessage | null>
   /** A ticket's messages, chronological (createdAt, then seq); optional stage filter. */
   listForTicket(
     orgId: Id,

@@ -26,6 +26,7 @@ import {
   joinTenantInput,
   linkTicketsInput,
   moveTicketInput,
+  recallConversationsInput,
   registerAgentInput,
   removeAttachmentInput,
   setProjectKeyInput,
@@ -508,6 +509,21 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { ticketId: z.uuid(), stage: conversationStageSchema.optional() },
     },
     async (args) => runTool(() => services.conversation.list(actor, args)),
+  )
+
+  server.registerTool(
+    'recall_conversations',
+    {
+      title: 'Recall conversations',
+      description:
+        'Semantic recall over conversation traces across ALL projects in your workspace — find ' +
+        'a past design discussion/decision by meaning and reuse it. Optionally filter by `stage` ' +
+        '(input|plan|execution|review) or `role` (human|agent). Each hit returns a snippet + the ' +
+        'ticketKey; call get_ticket_context on it to pull the full staged thread. Requires the ' +
+        'conversation:read scope and embeddings configured (else returns an error).',
+      inputSchema: recallConversationsInput.shape,
+    },
+    async (args) => runTool(() => services.conversation.recall(actor, args)),
   )
 
   server.registerTool(

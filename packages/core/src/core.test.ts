@@ -1685,3 +1685,116 @@ describe('semantic search', () => {
     expect(hits.map((h) => h.id)).toContain(t.id)
   })
 })
+
+// --- cross-project conversation recall --------------------------------------
+
+describe('conversation recall', () => {
+  // Make two projects in one org with an embedder-backed service.
+  async function setup() {
+    const { owner } = await bootstrap()
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const team = await svc.teams.create(owner, { key: 'ROOST', name: 'R' })
+    const p1 = await svc.projects.create(owner, { teamId: team.id, key: 'AAA', name: 'A' })
+    const p2 = await svc.projects.create(owner, { teamId: team.id, key: 'BBB', name: 'B' })
+    return { owner, svc, p1, p2 }
+  }
+
+  it('recalls messages by meaning across projects in the org', async () => {
+    const { owner, svc, p1, p2 } = await setup()
+    const t1 = await svc.tickets.create(owner, { projectId: p1.id, title: 'auth design' })
+    const t2 = await svc.tickets.create(owner, { projectId: p2.id, title: 'billing' })
+    await svc.conversation.append(owner, {
+      ticketId: t1.id,
+      stage: 'plan',
+      messages: [
+        { role: 'human', body: 'How should we model vector recall across projects?' },
+        { role: 'agent', body: 'Embed messages and search by cosine similarity per org.' },
+      ],
+    })
+    await svc.conversation.append(owner, {
+      ticketId: t2.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'Export monthly invoices as CSV' }],
+    })
+
+    const hits = await svc.conversation.recall(owner, {
+      query: 'semantic vector similarity recall',
+      limit: 5,
+    })
+    expect(hits.length).toBeGreaterThan(0)
+    // The most similar message lives on the auth-design ticket (a different project
+    // than the billing one) — cross-project recall.
+    expect(hits[0]?.ticketKey).toBe(t1.key)
+    expect(hits[0]?.messageId).toBeTruthy()
+  })
+
+  it('filters by role and stage', async () => {
+    const { owner, svc, p1 } = await setup()
+    const t = await svc.tickets.create(owner, { projectId: p1.id, title: 'x' })
+    await svc.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'design question about caching strategy' }],
+    })
+    await svc.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'execution',
+      messages: [{ role: 'agent', body: 'implemented the caching strategy with an LRU' }],
+    })
+
+    const humanOnly = await svc.conversation.recall(owner, {
+      query: 'caching strategy',
+      role: 'human',
+    })
+    expect(humanOnly.length).toBeGreaterThan(0)
+    expect(humanOnly.every((h) => h.role === 'human')).toBe(true)
+
+    const execOnly = await svc.conversation.recall(owner, {
+      query: 'caching strategy',
+      stage: 'execution',
+    })
+    expect(execOnly.length).toBeGreaterThan(0)
+    expect(execOnly.every((h) => h.stage === 'execution')).toBe(true)
+  })
+
+  it('throws when embeddings are not configured', async () => {
+    const { owner } = await bootstrap()
+    await expect(services.conversation.recall(owner, { query: 'x' })).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+  })
+
+  it('isolates recall by org', async () => {
+    const { owner, svc, p1 } = await setup()
+    const t = await svc.tickets.create(owner, { projectId: p1.id, title: 'x' })
+    await svc.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'unique zeta knowledge marker' }],
+    })
+    const b = await services.orgs.bootstrap({
+      org: { slug: 'beta2', name: 'B', enrollmentPolicy: 'open' },
+      founder: { displayName: 'B', email: 'b@beta2.test', name: 'B', avatarUrl: null },
+    })
+    const ownerB = await services.resolveActor({ orgId: b.org.id, principalId: b.founder.id })
+    expect(
+      await svc.conversation.recall(ownerB, { query: 'unique zeta knowledge marker' }),
+    ).toEqual([])
+  })
+
+  it('drops redacted messages from recall', async () => {
+    const { owner, svc, p1 } = await setup()
+    const t = await svc.tickets.create(owner, { projectId: p1.id, title: 'x' })
+    await svc.conversation.append(owner, {
+      ticketId: t.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'sensitive omega phrase to forget' }],
+    })
+    expect(
+      (await svc.conversation.recall(owner, { query: 'sensitive omega phrase' })).length,
+    ).toBeGreaterThan(0)
+
+    await svc.conversation.redactForTicket(owner, t.id)
+    expect(await svc.conversation.recall(owner, { query: 'sensitive omega phrase' })).toEqual([])
+  })
+})

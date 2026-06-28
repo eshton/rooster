@@ -124,6 +124,10 @@ not the client.
   message's \`role\` (human|agent). \`get_ticket_context\` returns the trace too.
   Needs the conversation:read / conversation:write scopes (kept separate from
   ticket:* because transcripts are more sensitive).
+- recall_conversations — semantic recall over those traces across ALL your
+  projects: find a past design discussion/decision by meaning and reuse it (filter
+  by stage/role). Each hit gives a snippet + ticketKey; then get_ticket_context for
+  the full thread. Needs embeddings configured + the conversation:read scope.
 - link_tickets / unlink_tickets / list_links — relate tickets beyond the
   parent/subtask hierarchy: "blocks" (and its derived "blocked_by"),
   "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't

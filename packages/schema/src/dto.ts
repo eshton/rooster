@@ -175,6 +175,18 @@ export const listMessagesInput = z.object({
 })
 export type ListMessagesInput = z.infer<typeof listMessagesInput>
 
+/**
+ * Semantic recall over conversation messages across all projects in the org.
+ * Optional `stage`/`role` narrow the match (e.g. only human `input` turns).
+ */
+export const recallConversationsInput = z.object({
+  query: z.string().min(1).max(1000),
+  limit: z.number().int().min(1).max(50).optional(),
+  stage: conversationStageSchema.optional(),
+  role: messageRoleSchema.optional(),
+})
+export type RecallConversationsInput = z.infer<typeof recallConversationsInput>
+
 /** Add or remove a co-assignee (shared ownership) on a ticket. */
 export const assigneeRefInput = z.object({
   ticketId: idSchema,
