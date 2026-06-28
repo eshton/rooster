@@ -153,6 +153,15 @@ conventions:
 touch `schema/pg.ts` (+ `db:generate:pg`) if you specifically maintain the
 Postgres path; CI checks SQLite migration drift only.
 
+The **one legitimate place the dialects diverge** is full-text `search` (ROO-12):
+`createRepositories` takes a `dialect` arg and `search()` branches — Postgres
+uses `tsvector`/GIN + `ts_rank`, SQLite/libSQL uses an FTS5 virtual table + bm25.
+Those FTS objects live **outside** the Drizzle schema (so structural identity
+holds) in hand-written custom migrations (`migrations/{sqlite,pg}/0016_fts.sql`,
+created via `drizzle-kit generate --custom` so they're journaled and
+`migrations-in-sync` stays green). The SQLite FTS index is kept current by
+triggers on `tickets`.
+
 ## Commands
 
 ```bash
@@ -186,7 +195,10 @@ Local smoke (no Postgres needed): set `DATABASE_URL=file:./local.db`,
   path; CI checks SQLite drift only.)
 - **Add an MCP tool**: add the method to the core service (with `authorize` +
   audit), then register it in `packages/mcp/src/tools.ts` (reuse the DTO `.shape`
-  for `inputSchema`). Add an end-to-end case in `mcp.test.ts`.
+  for `inputSchema`). Add an end-to-end case in `mcp.test.ts`. **Document it** in
+  `apps/docs/src/content/docs/reference/mcp-tools.md` (and, if agent-facing, the
+  `/llms.txt` guide in `apps/server/src/discovery.ts`) — the `docs-sync.test.ts`
+  guard fails CI if the docs table omits a registered tool or lists a removed one.
 - **Add a permission/scope**: extend `Permission` + `PERMISSION_MIN_ROLE` in
   `packages/core/src/permissions.ts`; it automatically becomes a grantable OAuth
   scope (`ROOSTER_SCOPES` derives from it).

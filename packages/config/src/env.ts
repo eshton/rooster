@@ -22,6 +22,21 @@ const envSchema = z.object({
   GITHUB_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  DISCORD_CLIENT_ID: z.string().optional(),
+  DISCORD_CLIENT_SECRET: z.string().optional(),
+  MICROSOFT_CLIENT_ID: z.string().optional(),
+  MICROSOFT_CLIENT_SECRET: z.string().optional(),
+  APPLE_CLIENT_ID: z.string().optional(),
+  APPLE_CLIENT_SECRET: z.string().optional(),
+  GITLAB_CLIENT_ID: z.string().optional(),
+  GITLAB_CLIENT_SECRET: z.string().optional(),
+
+  /**
+   * Require users to verify their email before signing in. Opt-in and only
+   * honored when a real email sender (Resend / webhook) is configured — without
+   * one, enabling this would lock users out, so it stays off. Accepts `true`/`1`.
+   */
+  ROOSTER_REQUIRE_EMAIL_VERIFICATION: z.string().optional(),
 
   ROOSTER_ENROLLMENT_POLICY: enrollmentPolicySchema.default('token'),
   ROOSTER_ENROLLMENT_TOKEN: z.string().optional(),
@@ -127,7 +142,13 @@ export interface RoosterConfig {
   oauthProviders: {
     github?: OAuthProvider
     google?: OAuthProvider
+    discord?: OAuthProvider
+    microsoft?: OAuthProvider
+    apple?: OAuthProvider
+    gitlab?: OAuthProvider
   }
+  /** When true, email/password users must verify their email before sign-in. */
+  requireEmailVerification: boolean
   enrollment: {
     policy: RawEnv['ROOSTER_ENROLLMENT_POLICY']
     token?: string
@@ -278,7 +299,14 @@ export function loadConfig(
     oauthProviders: {
       github: provider(env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET),
       google: provider(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET),
+      discord: provider(env.DISCORD_CLIENT_ID, env.DISCORD_CLIENT_SECRET),
+      microsoft: provider(env.MICROSOFT_CLIENT_ID, env.MICROSOFT_CLIENT_SECRET),
+      apple: provider(env.APPLE_CLIENT_ID, env.APPLE_CLIENT_SECRET),
+      gitlab: provider(env.GITLAB_CLIENT_ID, env.GITLAB_CLIENT_SECRET),
     },
+    requireEmailVerification:
+      env.ROOSTER_REQUIRE_EMAIL_VERIFICATION === 'true' ||
+      env.ROOSTER_REQUIRE_EMAIL_VERIFICATION === '1',
     enrollment: {
       policy: env.ROOSTER_ENROLLMENT_POLICY,
       token: env.ROOSTER_ENROLLMENT_TOKEN,

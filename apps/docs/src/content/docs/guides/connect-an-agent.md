@@ -45,7 +45,21 @@ Unauthenticated requests get a `401` with a `WWW-Authenticate` header pointing
 back at the protected-resource metadata, so compliant clients can discover how
 to authenticate.
 
-## 4. Use the tools
+## 4. Bootstrap a workspace (first connection)
+
+A brand-new account has no workspace yet, so your token resolves to a
+*provisional* identity that exposes only `whoami` and `create_tenant` (and
+`join_tenant`). Call one of them first:
+
+- `create_tenant` — create your own workspace (org + first project). You become
+  the owner.
+- `join_tenant` — join an existing workspace with an invite code a teammate
+  shared.
+
+After that the full toolset unlocks, and reconnecting later from any MCP client
+lands you back in the same workspace — it's tied to your account, not the client.
+
+## 5. Use the tools
 
 Start with `whoami` to confirm your identity and scopes, then read and write:
 

@@ -93,8 +93,9 @@ const consoleEmailSender: EmailSender = {
 }
 
 /**
- * Build the Rooster auth server: better-auth with GitHub/Google social login
- * (enabled only when credentials are present) and the MCP plugin acting as an
+ * Build the Rooster auth server: better-auth with social login for every
+ * provider whose credentials are present (GitHub, Google, Microsoft, Apple,
+ * Discord, GitLab), opt-in email verification, and the MCP plugin acting as an
  * OAuth 2.1 authorization server — PKCE required, Dynamic Client Registration
  * enabled, scopes restricted to the Rooster permission set.
  */
@@ -102,20 +103,21 @@ export function createAuth({
   config,
   database,
   loginPage = '/login',
-  sendEmail = consoleEmailSender,
+  sendEmail,
 }: CreateAuthOptions): RoosterAuth {
-  const socialProviders: NonNullable<BetterAuthOptions['socialProviders']> = {}
-  if (config.oauthProviders.github) {
-    socialProviders.github = {
-      clientId: config.oauthProviders.github.clientId,
-      clientSecret: config.oauthProviders.github.clientSecret,
-    }
-  }
-  if (config.oauthProviders.google) {
-    socialProviders.google = {
-      clientId: config.oauthProviders.google.clientId,
-      clientSecret: config.oauthProviders.google.clientSecret,
-    }
+  // A real sender (Resend / webhook) is supplied in production; dev/self-host
+  // falls back to the console logger. Email verification is only safe to enforce
+  // when a real sender exists — otherwise users could never receive the link.
+  const sender = sendEmail ?? consoleEmailSender
+  const verificationEnabled = config.requireEmailVerification && sendEmail !== undefined
+
+  // Enable every social provider whose credentials are present. Adding a
+  // provider is just a config entry here + its env vars; the login page renders
+  // a button per configured provider automatically.
+  const socialProviders = {} as Record<string, { clientId: string; clientSecret: string }>
+  for (const [name, creds] of Object.entries(config.oauthProviders)) {
+    if (creds)
+      socialProviders[name] = { clientId: creds.clientId, clientSecret: creds.clientSecret }
   }
 
   const auth = betterAuth({
@@ -123,14 +125,16 @@ export function createAuth({
     secret: config.authSecret,
     database,
     // Email/password lets the dashboard work without external OAuth providers
-    // configured; GitHub/Google are added on top when credentials are present.
+    // configured; social providers are added on top when credentials are present.
     // `sendResetPassword` routes through the host's email seam (webhook in prod,
-    // console logger by default). Email verification is intentionally NOT
-    // required — turning it on without a configured sender would lock users out.
+    // console logger by default). Email verification is opt-in
+    // (ROOSTER_REQUIRE_EMAIL_VERIFICATION) and only enforced when a real sender
+    // is configured, so it can never lock users out by accident.
     emailAndPassword: {
       enabled: true,
+      requireEmailVerification: verificationEnabled,
       sendResetPassword: async ({ user, url }) => {
-        await sendEmail.send({
+        await sender.send({
           to: user.email,
           subject: 'Reset your Rooster password',
           text: `Reset your Rooster password by opening this link:\n\n${url}\n\nIf you didn't request this, you can ignore this email.`,
@@ -139,7 +143,23 @@ export function createAuth({
         })
       },
     },
-    socialProviders,
+    // Only wire verification email when enabled — sendOnSignUp makes better-auth
+    // dispatch the link as part of sign-up.
+    emailVerification: verificationEnabled
+      ? {
+          sendOnSignUp: true,
+          sendVerificationEmail: async ({ user, url }) => {
+            await sender.send({
+              to: user.email,
+              subject: 'Verify your Rooster email',
+              text: `Confirm your Rooster email by opening this link:\n\n${url}\n\nIf you didn't create this account, you can ignore this email.`,
+              kind: 'verify-email',
+              url,
+            })
+          },
+        }
+      : undefined,
+    socialProviders: socialProviders as BetterAuthOptions['socialProviders'],
     plugins: [
       mcp({
         loginPage,

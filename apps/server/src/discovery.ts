@@ -106,7 +106,8 @@ not the client.
   nothing is actionable it returns { claimed: false, ticket: null }.
 - my_tickets — list tickets assigned to you (primary OR co-assignee).
   find_by_label — by tag.
-  search_tickets — free-text search over titles + descriptions.
+  search_tickets — relevance-ranked full-text search over titles + descriptions
+  (stemmed: "deploy" matches "deploying"; title matches rank highest).
   find_similar_tickets — semantic (vector) search by meaning across all projects
   in your workspace; use it to recall related prior work before starting. Needs
   embeddings configured on the instance (else it returns an error).

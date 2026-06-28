@@ -51,6 +51,36 @@ describe('loadConfig', () => {
     expect(cfg.oauthProviders.google).toBeUndefined()
   })
 
+  it('groups the additional OAuth providers the same way', () => {
+    const cfg = loadConfig({
+      ...baseEnv,
+      DISCORD_CLIENT_ID: 'd-id',
+      DISCORD_CLIENT_SECRET: 'd-secret',
+      GITLAB_CLIENT_ID: 'gl-id',
+      GITLAB_CLIENT_SECRET: 'gl-secret',
+    })
+    expect(cfg.oauthProviders.discord).toEqual({ clientId: 'd-id', clientSecret: 'd-secret' })
+    expect(cfg.oauthProviders.gitlab).toEqual({ clientId: 'gl-id', clientSecret: 'gl-secret' })
+    // A provider with only half its credentials is not enabled.
+    expect(cfg.oauthProviders.microsoft).toBeUndefined()
+    expect(loadConfig({ ...baseEnv, APPLE_CLIENT_ID: 'a-id' }).oauthProviders.apple).toBeUndefined()
+  })
+
+  it('parses ROOSTER_REQUIRE_EMAIL_VERIFICATION as a boolean (default false)', () => {
+    expect(loadConfig(baseEnv).requireEmailVerification).toBe(false)
+    expect(
+      loadConfig({ ...baseEnv, ROOSTER_REQUIRE_EMAIL_VERIFICATION: 'true' })
+        .requireEmailVerification,
+    ).toBe(true)
+    expect(
+      loadConfig({ ...baseEnv, ROOSTER_REQUIRE_EMAIL_VERIFICATION: '1' }).requireEmailVerification,
+    ).toBe(true)
+    expect(
+      loadConfig({ ...baseEnv, ROOSTER_REQUIRE_EMAIL_VERIFICATION: 'false' })
+        .requireEmailVerification,
+    ).toBe(false)
+  })
+
   it('rejects a too-short auth secret with a readable error', () => {
     expect(() => loadConfig({ ...baseEnv, ROOSTER_AUTH_SECRET: 'short' })).toThrow(
       /ROOSTER_AUTH_SECRET/,

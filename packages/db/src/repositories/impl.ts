@@ -20,7 +20,7 @@ import type {
   User,
   Watcher,
 } from '@rooster/schema'
-import { and, desc, eq, isNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import type { Repositories } from '../repositories.js'
 import type { sqliteSchema } from '../schema/sqlite.js'
@@ -55,8 +55,8 @@ const ticketUpdateSet = (patch: Record<string, unknown>): Record<string, unknown
   return set
 }
 
-/** Upper bound on rows pulled into memory for relevance ranking in `search`. */
-const SEARCH_CANDIDATE_CAP = 1000
+/** Which SQL dialect the repositories run against — selects the FTS engine. */
+export type Dialect = 'sqlite' | 'pg'
 
 // --- row → domain mappers ---------------------------------------------------
 
@@ -105,7 +105,7 @@ const toAudit = (r: Rows['auditLog']): AuditLog => ({
   clientInfo: dec<ClientInfo | null>(r.clientInfo, null),
 })
 
-export function createRepositories(db: DB, s: Schema): Repositories {
+export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite'): Repositories {
   const first = <T>(rows: T[]): T | null => rows[0] ?? null
 
   return {
@@ -301,48 +301,59 @@ export function createRepositories(db: DB, s: Schema): Repositories {
         return rows.filter((t) => t.labels.includes(label))
       },
       async search(orgId, query, opts) {
-        // Tokenized, relevance-ranked search over title + description. Portable
-        // (plain LIKE + in-memory ranking, identical on both dialects; no FTS5/
-        // tsvector or migration). Recall: any term may match (so multi-word
-        // queries still surface partial hits); ranking rewards term coverage,
-        // title matches over body, and a full-phrase match.
+        // Full-text search over title + description, one signature with a
+        // dialect-specific engine: Postgres tsvector/GIN ranked by ts_rank
+        // (title weighted above body), SQLite/libSQL FTS5 ranked by bm25 (title
+        // weighted 10x body). Both stem (so "running" matches "run"); terms are
+        // sanitized to alphanumerics and OR-combined for recall (any term may
+        // match). This is the one place the two dialects legitimately diverge.
         const terms = query
           .toLowerCase()
           .split(/\s+/)
-          .map((t) => t.trim())
+          .map((t) => t.replace(/[^a-z0-9]/g, ''))
           .filter(Boolean)
           .slice(0, 12)
         if (terms.length === 0) return []
+        const limit = limitOf(opts)
 
-        const escLike = (t: string) => `%${t.replace(/([\\%_])/g, '\\$1')}%`
-        const perTerm = terms.map(
-          (t) =>
-            sql`(lower(${s.tickets.title}) LIKE ${escLike(t)} ESCAPE '\\' OR lower(coalesce(${s.tickets.description}, '')) LIKE ${escLike(t)} ESCAPE '\\')`,
+        if (dialect === 'pg') {
+          const tsquery = terms.join(' | ')
+          const doc = sql`to_tsvector('english', coalesce(${s.tickets.title}, '') || ' ' || coalesce(${s.tickets.description}, ''))`
+          // Ranking weights the title (A) above the description (B).
+          const rank = sql`ts_rank(setweight(to_tsvector('english', coalesce(${s.tickets.title}, '')), 'A') || setweight(to_tsvector('english', coalesce(${s.tickets.description}, '')), 'B'), to_tsquery('english', ${tsquery}))`
+          return (
+            await db
+              .select()
+              .from(s.tickets)
+              .where(
+                and(eq(s.tickets.orgId, orgId), sql`${doc} @@ to_tsquery('english', ${tsquery})`),
+              )
+              .orderBy(sql`${rank} DESC`)
+              .limit(limit)
+          ).map(toTicket)
+        }
+
+        // SQLite / libSQL: match in the FTS5 index (joined to tickets by rowid),
+        // rank with bm25, then load the matched tickets preserving rank order.
+        const matchQuery = terms.join(' OR ')
+        const idRows = await db.all<{ id: string }>(sql`
+          SELECT t.id AS id FROM tickets_fts
+          JOIN ${s.tickets} t ON t.rowid = tickets_fts.rowid
+          WHERE t.org_id = ${orgId} AND tickets_fts MATCH ${matchQuery}
+          ORDER BY bm25(tickets_fts, 10.0, 1.0)
+          LIMIT ${limit}
+        `)
+        const ids = idRows.map((r) => r.id)
+        if (ids.length === 0) return []
+        const byId = new Map(
+          (
+            await db
+              .select()
+              .from(s.tickets)
+              .where(and(eq(s.tickets.orgId, orgId), inArray(s.tickets.id, ids)))
+          ).map((r) => [r.id, toTicket(r)] as const),
         )
-        const candidates = (
-          await db
-            .select()
-            .from(s.tickets)
-            .where(and(eq(s.tickets.orgId, orgId), or(...perTerm)))
-            .orderBy(desc(s.tickets.createdAt))
-            .limit(SEARCH_CANDIDATE_CAP)
-        ).map(toTicket)
-
-        const phrase = query.toLowerCase().trim()
-        const scored = candidates.map((t) => {
-          const title = t.title.toLowerCase()
-          const body = (t.description ?? '').toLowerCase()
-          let score = 0
-          for (const term of terms) {
-            if (title.includes(term)) score += 3
-            else if (body.includes(term)) score += 1
-          }
-          if (terms.length > 1 && title.includes(phrase)) score += 4
-          else if (terms.length > 1 && body.includes(phrase)) score += 2
-          return { t, score }
-        })
-        scored.sort((a, b) => b.score - a.score || b.t.createdAt.localeCompare(a.t.createdAt))
-        return scored.slice(0, limitOf(opts)).map((r) => r.t)
+        return ids.map((id) => byId.get(id)).filter((t): t is Ticket => t != null)
       },
       async listChildren(orgId, parentId, opts) {
         return (

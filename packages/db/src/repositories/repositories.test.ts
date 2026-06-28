@@ -336,6 +336,65 @@ describe('tags + subtask relationships', () => {
     expect(await db.repositories.tickets.search(org.id, 'kubernetes')).toEqual([])
   })
 
+  it('stems terms and stays in sync on edits (FTS upgrade over LIKE)', async () => {
+    const { org, project } = await makeOrgWithTeamProject('stem')
+    const t = await db.repositories.tickets.create(org.id, {
+      projectId: project.id,
+      key: 'STM-1',
+      number: 1,
+      title: 'Deploying the worker',
+      description: 'runs migrations',
+      status: 'todo',
+      priority: 'none',
+      labels: [],
+      assigneeId: null,
+      parentId: null,
+    })
+
+    // Stemming: "deploy" matches "Deploying", "migration" matches "migrations" —
+    // neither would match a naive substring LIKE.
+    expect((await db.repositories.tickets.search(org.id, 'deploy')).map((x) => x.key)).toEqual([
+      'STM-1',
+    ])
+    expect((await db.repositories.tickets.search(org.id, 'migration')).map((x) => x.key)).toEqual([
+      'STM-1',
+    ])
+
+    // The sync triggers keep the index current when a ticket is edited.
+    await db.repositories.tickets.update(org.id, t.id, {
+      title: 'Archived task',
+      description: null,
+    })
+    expect(await db.repositories.tickets.search(org.id, 'deploy')).toEqual([])
+    expect((await db.repositories.tickets.search(org.id, 'archived')).map((x) => x.key)).toEqual([
+      'STM-1',
+    ])
+  })
+
+  it('scopes search results to the org', async () => {
+    const a = await makeOrgWithTeamProject('search-a')
+    const b = await makeOrgWithTeamProject('search-b')
+    const mk = (orgId: string, projectId: string, key: string) =>
+      db.repositories.tickets.create(orgId, {
+        projectId,
+        key,
+        number: 1,
+        title: 'shared keyword widget',
+        description: null,
+        status: 'todo',
+        priority: 'none',
+        labels: [],
+        assigneeId: null,
+        parentId: null,
+      })
+    await mk(a.org.id, a.project.id, 'AAA-1')
+    await mk(b.org.id, b.project.id, 'BBB-1')
+
+    expect((await db.repositories.tickets.search(a.org.id, 'widget')).map((x) => x.key)).toEqual([
+      'AAA-1',
+    ])
+  })
+
   it('lists direct subtasks of a parent', async () => {
     const { org, project } = await makeOrgWithTeamProject('acme')
     const parent = await mkTicket(org.id, project.id, { key: 'ROOST-1', number: 1 })
