@@ -138,12 +138,21 @@ type-bridge** (`as unknown as` in `drivers/postgres.ts`) into the libSQL-typed
 factory. If you change one dialect schema, change the other identically and
 regenerate both migrations.
 
+The **one legitimate place the dialects diverge** is full-text `search` (ROO-12):
+`createRepositories` takes a `dialect` arg and `search()` branches — Postgres
+uses `tsvector`/GIN + `ts_rank`, SQLite/libSQL uses an FTS5 virtual table + bm25.
+Those FTS objects live **outside** the Drizzle schema (so structural identity
+holds) in hand-written custom migrations (`migrations/{sqlite,pg}/0016_fts.sql`,
+created via `drizzle-kit generate --custom` so they're journaled and
+`migrations-in-sync` stays green). The SQLite FTS index is kept current by
+triggers on `tickets`.
+
 ## Commands
 
 ```bash
 pnpm install
 pnpm build            # tsc -b (all packages)
-pnpm test             # vitest run  (192 tests today; in-memory SQLite)
+pnpm test             # vitest run  (204 tests today; in-memory SQLite)
 pnpm lint             # biome check
 pnpm check            # lint + build + test  ← run before every commit
 

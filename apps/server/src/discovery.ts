@@ -106,7 +106,8 @@ not the client.
   nothing is actionable it returns { claimed: false, ticket: null }.
 - my_tickets — list tickets assigned to you (primary OR co-assignee).
   find_by_label — by tag.
-  search_tickets — free-text search over titles + descriptions.
+  search_tickets — relevance-ranked full-text search over titles + descriptions
+  (stemmed: "deploy" matches "deploying"; title matches rank highest).
 - list_subtasks — list a ticket's children.
 - create_milestone / list_milestones — group tickets into a milestone / cycle
   (sprint). Scope a ticket via create_ticket/update_ticket \`milestoneId\`, and
