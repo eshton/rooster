@@ -51,10 +51,10 @@ async function resolveSession(ctx: ServerContext, c: Context): Promise<Resolved>
  * checks and tenant scoping apply as for agents.
  */
 export function mountDashboard(app: Hono, ctx: ServerContext): void {
-  const providers = [
-    ctx.config.oauthProviders.github ? 'github' : null,
-    ctx.config.oauthProviders.google ? 'google' : null,
-  ].filter((p): p is string => p !== null)
+  // One login button per configured OAuth provider (order is stable + sensible).
+  const providers = (
+    ['github', 'google', 'microsoft', 'apple', 'discord', 'gitlab'] as const
+  ).filter((p) => ctx.config.oauthProviders[p])
 
   const allowSignup = !ctx.config.onboarding.disableSignup
   const signupClosed = (c: Context) =>

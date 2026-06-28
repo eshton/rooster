@@ -356,3 +356,76 @@ describe('email seam', () => {
     expect(sent[0]?.url).toContain('callbackURL=')
   })
 })
+
+describe('social providers + email verification', () => {
+  const envBase = {
+    DATABASE_URL: 'file::memory:',
+    ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
+    ROOSTER_BASE_URL: 'http://localhost:3000',
+  }
+  const adapter = () => memoryAdapter({ user: [], session: [], account: [], verification: [] })
+  const optionsOf = (auth: ReturnType<typeof createAuth>) =>
+    auth.options as {
+      socialProviders?: Record<string, unknown>
+      emailAndPassword?: { requireEmailVerification?: boolean }
+    }
+
+  it('enables exactly the social providers whose credentials are present', () => {
+    const config = loadConfig({
+      ...envBase,
+      GITHUB_CLIENT_ID: 'gh',
+      GITHUB_CLIENT_SECRET: 'gh-s',
+      DISCORD_CLIENT_ID: 'dc',
+      DISCORD_CLIENT_SECRET: 'dc-s',
+      GITLAB_CLIENT_ID: 'gl',
+      GITLAB_CLIENT_SECRET: 'gl-s',
+    })
+    const auth = createAuth({ config, database: adapter() })
+    expect(Object.keys(optionsOf(auth).socialProviders ?? {}).sort()).toEqual([
+      'discord',
+      'github',
+      'gitlab',
+    ])
+  })
+
+  it('leaves email verification off unless the flag AND a real sender are set', () => {
+    const sender = { send: async () => {} }
+
+    const flagOnly = createAuth({
+      config: loadConfig({ ...envBase, ROOSTER_REQUIRE_EMAIL_VERIFICATION: 'true' }),
+      database: adapter(),
+    })
+    expect(optionsOf(flagOnly).emailAndPassword?.requireEmailVerification).toBe(false)
+
+    const senderOnly = createAuth({
+      config: loadConfig(envBase),
+      database: adapter(),
+      sendEmail: sender,
+    })
+    expect(optionsOf(senderOnly).emailAndPassword?.requireEmailVerification).toBe(false)
+
+    const both = createAuth({
+      config: loadConfig({ ...envBase, ROOSTER_REQUIRE_EMAIL_VERIFICATION: 'true' }),
+      database: adapter(),
+      sendEmail: sender,
+    })
+    expect(optionsOf(both).emailAndPassword?.requireEmailVerification).toBe(true)
+  })
+
+  it('sends a verification email on sign-up when enabled', async () => {
+    const sent: EmailMessage[] = []
+    const auth = createAuth({
+      config: loadConfig({ ...envBase, ROOSTER_REQUIRE_EMAIL_VERIFICATION: 'true' }),
+      database: adapter(),
+      sendEmail: { send: async (m) => void sent.push(m) },
+    })
+    await auth.handler(
+      new Request(`${envBase.ROOSTER_BASE_URL}/api/auth/sign-up/email`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Bo', email: 'bo@acme.test', password: 'supersecret' }),
+      }),
+    )
+    expect(sent.some((m) => m.kind === 'verify-email' && m.to === 'bo@acme.test')).toBe(true)
+  })
+})
