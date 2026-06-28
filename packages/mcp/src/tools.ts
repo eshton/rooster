@@ -11,6 +11,7 @@ import {
   assigneeRefInput,
   assignTicketInput,
   changeStatusInput,
+  claimNextInput,
   commentInput,
   createInviteInput,
   createMilestoneInput,
@@ -396,6 +397,25 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: changeStatusInput.shape,
     },
     async (args) => runTool(() => services.tickets.changeStatus(actor, args)),
+  )
+
+  server.registerTool(
+    'claim_next',
+    {
+      title: 'Claim next ticket',
+      description:
+        'Ask Rooster for the next thing to work on. Atomically claims the highest-priority, ' +
+        'oldest, UNBLOCKED, unassigned ticket in a project (status backlog/todo) and assigns it ' +
+        'to you — two agents racing never get the same ticket. Returns ' +
+        '{ claimed, ticket }; when the board has nothing actionable, `claimed` is false and ' +
+        '`ticket` is null.',
+      inputSchema: claimNextInput.shape,
+    },
+    async (args) =>
+      runTool(async () => {
+        const ticket = await services.tickets.claimNext(actor, args)
+        return { claimed: ticket !== null, ticket }
+      }),
   )
 
   server.registerTool(

@@ -29,6 +29,25 @@ export async function extractClientInfo(req: Request): Promise<ClientInfo | null
   return ua ? { name: ua.slice(0, 200), version: '' } : null
 }
 
+/** Hex SHA-256 of a string (Web Crypto; available on Node ≥ 20 and the edge). */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * The actor-cache key for a request: a hash of the bearer token (NEVER the raw
+ * token) plus the selected org, so a multi-workspace caller caches one actor per
+ * org. Returns null when there is no Authorization header to key on.
+ */
+export async function actorCacheKey(
+  authorization: string | null,
+  desiredOrgId: string | null,
+): Promise<string | null> {
+  if (!authorization) return null
+  return `${await sha256Hex(authorization)}|${desiredOrgId ?? ''}`
+}
+
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
   forbidden: 403,
@@ -141,6 +160,36 @@ export function createApp(ctx: ServerContext): Hono {
       const clientInfo = await extractClientInfo(req)
       // A multi-workspace human can select which org to act in per request.
       const desiredOrgId = req.headers.get('x-rooster-org')
+
+      // Fast path: a recently-resolved actor cached by token hash (+ selected
+      // org). On a hit we skip the whole identity-resolution chain; rate limiting
+      // and clientInfo (request-specific) still apply per request.
+      const cacheTtlMs = ctx.config.mcp.actorCacheTtlSeconds * 1000
+      const cacheKey =
+        ctx.actorCache && cacheTtlMs > 0
+          ? await actorCacheKey(req.headers.get('authorization'), desiredOrgId)
+          : null
+      if (ctx.actorCache && cacheKey) {
+        const cached = await ctx.actorCache.get(cacheKey)
+        if (cached) {
+          const rl = await mcpRateLimiter.check(cached.principalId, Date.now())
+          if (!rl.allowed) {
+            return new Response(JSON.stringify({ error: 'rate_limited' }), {
+              status: 429,
+              headers: {
+                'content-type': 'application/json',
+                'Retry-After': String(rl.retryAfterSeconds),
+              },
+            })
+          }
+          const server = createRoosterMcpServer({
+            services: ctx.services,
+            actor: { ...cached, clientInfo },
+          })
+          return await handleStatelessMcpRequest(server, req)
+        }
+      }
+
       const identity = await resolveMcpIdentity(
         ctx.auth,
         ctx.db.repositories,
@@ -187,6 +236,11 @@ export function createApp(ctx: ServerContext): Hono {
         })
       }
       const actor = await ctx.services.resolveActor(identity)
+      if (ctx.actorCache && cacheKey) {
+        // Cache without the per-request clientInfo (overlaid fresh on each hit).
+        const { clientInfo: _omit, ...cacheable } = actor
+        await ctx.actorCache.set(cacheKey, cacheable, cacheTtlMs)
+      }
       const server = createRoosterMcpServer({ services: ctx.services, actor })
       return await handleStatelessMcpRequest(server, req)
     } catch (err) {

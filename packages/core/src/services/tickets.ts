@@ -4,7 +4,7 @@ import { recordAudit } from '../audit.js'
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js'
 import type { CrowNotifier } from '../notify.js'
 import { authorize } from '../permissions.js'
-import { canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
+import { CLAIMABLE_STATUSES, canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
 import { parse } from '../validate.js'
 import {
   type AssigneeRefInput,
@@ -13,10 +13,12 @@ import {
   assigneeRefInput,
   assignTicketInput,
   type ChangeStatusInput,
+  type ClaimNextInput,
   type Comment,
   type CreateTicketInput,
   type CreateTicketsInput,
   changeStatusInput,
+  claimNextInput,
   createTicketInput,
   createTicketsInput,
   type Id,
@@ -114,6 +116,12 @@ export interface TicketService {
   move(actor: Actor, input: MoveTicketInput): Promise<Ticket>
   update(actor: Actor, id: Id, input: UpdateTicketInput): Promise<Ticket>
   changeStatus(actor: Actor, input: ChangeStatusInput): Promise<Ticket>
+  /**
+   * Atomically claim the next actionable, unblocked, unassigned ticket in a
+   * project for the calling principal. Returns the claimed ticket, or `null`
+   * when nothing is available.
+   */
+  claimNext(actor: Actor, input: ClaimNextInput): Promise<Ticket | null>
   assign(actor: Actor, input: AssignTicketInput): Promise<Ticket>
   /** Add a co-assignee (shared ownership) alongside the primary assignee. */
   addAssignee(actor: Actor, input: AssigneeRefInput): Promise<{ added: true }>
@@ -504,6 +512,42 @@ export function createTicketService(
         to: after.status,
       })
       return after
+    },
+
+    async claimNext(actor, rawInput) {
+      authorize(actor, 'ticket:write')
+      const { projectId } = parse(claimNextInput, rawInput)
+      const project = await repos.projects.getById(actor.orgId, projectId)
+      if (!project) throw new NotFoundError(`Project ${projectId} not found`)
+
+      // Retry a couple of times: under non-serialized isolation (Postgres) a
+      // race can make a claim a no-op even when other candidates remain, so
+      // re-running picks the next one. Under SQLite's serialized writes the
+      // first attempt already lands. A genuinely empty board just returns null.
+      let claimed: Ticket | null = null
+      for (let attempt = 0; attempt < 3 && !claimed; attempt++) {
+        claimed = await repos.tickets.claimNext(
+          actor.orgId,
+          projectId,
+          actor.principalId,
+          CLAIMABLE_STATUSES,
+        )
+      }
+      if (!claimed) return null
+
+      // The claimer follows their own work, exactly like assign() does.
+      await repos.watchers.add(actor.orgId, claimed.id, actor.principalId)
+      await recordAudit(repos, actor, {
+        action: 'ticket.claim_next',
+        targetType: 'ticket',
+        targetId: claimed.id,
+        after: { assigneeId: claimed.assigneeId },
+      })
+      await emitToWatchers(repos, crowNotifier, actor, claimed, {
+        kind: 'assigned',
+        assigneeId: claimed.assigneeId,
+      })
+      return claimed
     },
 
     async assign(actor, rawInput) {

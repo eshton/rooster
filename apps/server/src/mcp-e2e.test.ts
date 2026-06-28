@@ -1,6 +1,7 @@
 import { loadConfig } from '@rooster/config'
+import { InMemoryActorCache } from '@rooster/core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createApp } from './app.js'
+import { actorCacheKey, createApp } from './app.js'
 import { createServerContext, type ServerContext } from './context.js'
 
 /**
@@ -280,5 +281,100 @@ describe('MCP onboarding e2e (account-anchored)', () => {
     // A used-up single-use code is rejected for the next (still-provisional) person.
     const reuse = await callTool('tok-dave', 'join_tenant', { code: invite.code })
     expect(reuse.error ?? reuse.result?.isError).toBeTruthy()
+  })
+})
+
+// --- actor cache fast path --------------------------------------------------
+
+describe('MCP actor cache (token-hash fast path)', () => {
+  // A self-contained auth stub we can revoke mid-test to prove the cache, not
+  // re-resolution, is answering.
+  const liveAccounts: Record<
+    string,
+    { id: string; email: string; name: string; clientId: string; scopes: string }
+  > = {
+    'live-zoe': {
+      id: 'acct-zoe',
+      email: 'zoe@cache.test',
+      name: 'Zoe',
+      clientId: 'client-zoe',
+      scopes: '*',
+    },
+  }
+  const liveAuth = {
+    handler: async () => new Response(null, { status: 404 }),
+    options: {},
+    api: {
+      getMcpUser: async ({ headers }: { headers: Headers }) => {
+        const token = (headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
+        return liveAccounts[token] ?? null
+      },
+    },
+  }
+
+  let cache: InMemoryActorCache
+  let cachedApp: ReturnType<typeof createApp>
+
+  beforeAll(() => {
+    cache = new InMemoryActorCache()
+    cachedApp = createApp({
+      ...ctx,
+      auth: liveAuth as unknown as ServerContext['auth'],
+      actorCache: cache,
+    })
+  })
+
+  async function rpcCached(token: string | null, method: string, params: unknown) {
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    }
+    if (token) headers.authorization = `Bearer ${token}`
+    return cachedApp.request(`${base}/mcp`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ jsonrpc: '2.0', id: nextId++, method, params }),
+    })
+  }
+
+  it('populates on resolve, then serves from cache even after the token stops resolving', async () => {
+    // Onboard Zoe (orgless → create_tenant), then a full whoami populates the cache.
+    await readSse(
+      await rpcCached('live-zoe', 'tools/call', {
+        name: 'create_tenant',
+        arguments: { workspace: { name: 'Zoe Co' }, project: { name: 'Core', key: 'ZOE' } },
+      }),
+    )
+    const who1 = payload(
+      await readSse(
+        await rpcCached('live-zoe', 'tools/call', {
+          name: 'whoami',
+          arguments: {},
+        }),
+      ),
+    )
+    expect(who1.role).toBe('owner')
+
+    // The resolved actor is now cached under the token's hash.
+    const key = await actorCacheKey('Bearer live-zoe', null)
+    expect(await cache.get(key as string)).toBeTruthy()
+
+    // Revoke the token at the auth layer; only the cache can still answer.
+    delete liveAccounts['live-zoe']
+    const who2 = payload(
+      await readSse(
+        await rpcCached('live-zoe', 'tools/call', {
+          name: 'whoami',
+          arguments: {},
+        }),
+      ),
+    )
+    expect(who2.principalId).toBe(who1.principalId)
+    expect(who2.orgId).toBe(who1.orgId)
+
+    // An unknown, uncached token is still rejected — caching never weakens auth
+    // for tokens it hasn't already vouched for.
+    const res = await rpcCached('never-seen', 'tools/list', {})
+    expect(res.status).toBe(401)
   })
 })

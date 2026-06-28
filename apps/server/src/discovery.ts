@@ -95,6 +95,10 @@ not the client.
   assign_ticket sets the single PRIMARY assignee; for shared work add co-owners
   with add_assignee / remove_assignee / list_assignees (a ticket's effective
   assignees are the primary plus the co-assignees).
+- claim_next — ask for the next thing to do: atomically claims the
+  highest-priority, oldest, unblocked, unassigned ticket (backlog/todo) in a
+  project and assigns it to you. Racing agents never get the same ticket; when
+  nothing is actionable it returns { claimed: false, ticket: null }.
 - my_tickets — list tickets assigned to you (primary OR co-assignee).
   find_by_label — by tag.
   search_tickets — free-text search over titles + descriptions.

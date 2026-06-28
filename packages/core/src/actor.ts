@@ -56,12 +56,13 @@ export function isProvisional(
  * principal with no membership in the org cannot act there.
  */
 export async function resolveActor(repos: Repositories, identity: ActorIdentity): Promise<Actor> {
-  const principal = await repos.principals.getById(identity.orgId, identity.principalId)
-  if (!principal) {
+  // Single round-trip: principal + its memberships in this org (cache misses on
+  // the /mcp hot path pay one query, not two).
+  const resolved = await repos.principals.getWithMemberships(identity.orgId, identity.principalId)
+  if (!resolved) {
     throw new ForbiddenError('Principal is not a member of this org')
   }
-
-  const memberships = await repos.memberships.list(identity.orgId, identity.principalId)
+  const { principal, memberships } = resolved
   if (memberships.length === 0) {
     throw new ForbiddenError('Principal has no membership in this org')
   }

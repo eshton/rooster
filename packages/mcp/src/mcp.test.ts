@@ -159,6 +159,30 @@ describe('MCP server end-to-end', () => {
     expect(bad.content[0]?.text).toContain('validation')
   })
 
+  it('claim_next atomically assigns the next actionable ticket, then reports an empty board', async () => {
+    const team = await services.teams.create(owner, { key: 'CLM', name: 'Claim' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'CLM',
+      name: 'P',
+    })
+    await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'urgent work',
+      priority: 'urgent',
+    })
+
+    const claimed = payload((await call('claim_next', { projectId: project.id })) as never)
+    expect(claimed.claimed).toBe(true)
+    expect(claimed.ticket.assigneeId).toBe(owner.principalId)
+    expect(claimed.ticket.key).toBe('CLM-1')
+
+    // Only ticket is now taken → nothing left to claim.
+    const empty = payload((await call('claim_next', { projectId: project.id })) as never)
+    expect(empty.claimed).toBe(false)
+    expect(empty.ticket).toBeNull()
+  })
+
   it('supports due dates, status filters and my_tickets', async () => {
     const team = await services.teams.create(owner, { key: 'DUE', name: 'Due' })
     const project = await services.projects.create(owner, {

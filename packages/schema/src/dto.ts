@@ -103,6 +103,15 @@ export const changeStatusInput = z.object({
 })
 export type ChangeStatusInput = z.infer<typeof changeStatusInput>
 
+/**
+ * Claim the next actionable ticket in a project. Selects the highest-priority,
+ * oldest, unblocked, unassigned ticket and assigns it to the caller atomically.
+ */
+export const claimNextInput = z.object({
+  projectId: idSchema,
+})
+export type ClaimNextInput = z.infer<typeof claimNextInput>
+
 export const assignTicketInput = z.object({
   ticketId: idSchema,
   assigneeId: idSchema.nullable(),
