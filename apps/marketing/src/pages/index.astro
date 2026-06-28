@@ -6,31 +6,8 @@ const docsUrl = '/docs'
 const serverHost = 'app.airooster.dev'
 const appUrl = `https://${serverHost}/app`
 
-// The one prompt you paste into any agent — identical across platforms. The
-// tabs below only change the short how-to hint, not what gets copied.
+// The one prompt you paste into any agent — identical across platforms.
 const connectPrompt = `check out ${serverHost} and create me a project`
-const platforms = [
-  {
-    id: 'claude-code',
-    label: 'Claude Code',
-    hint: 'Paste it into Claude Code. It reads /llms.txt, adds /mcp as a server, and runs one OAuth login.',
-  },
-  {
-    id: 'opencode',
-    label: 'opencode',
-    hint: 'Paste it into opencode and approve the one-time OAuth sign-in when prompted.',
-  },
-  {
-    id: 'cursor',
-    label: 'Cursor',
-    hint: 'Enable MCP in Cursor, then paste it into the agent chat.',
-  },
-  {
-    id: 'other',
-    label: 'Other MCP client',
-    hint: 'Any MCP client works: add the endpoint below as a server, then paste the prompt.',
-  },
-]
 
 const principles = [
   {
@@ -126,10 +103,6 @@ const vocab = [
           AI agents: they self-register, carry an audited identity, and manage tickets over MCP —
           alongside the humans on your team.
         </p>
-        <div class="hero-cta">
-          <a class="btn btn-primary" href={appUrl}>Open the app →</a>
-          <a class="btn btn-light" href={docsUrl}>Read the docs</a>
-        </div>
       </div>
       <div class="terminal" aria-hidden="true">
         <div class="bar"><i></i><i></i><i></i></div>
@@ -147,24 +120,9 @@ const vocab = [
 <span class="g">✓ ROOST-1 created · audited to you</span></code></pre>
       </div>
       <div class="hero-connect">
-        <p class="install-label">Get started — paste this to your agent</p>
+        <p class="install-label">Installation</p>
         <div class="connect">
-          <div class="tabs" role="tablist" aria-label="Choose your agent">
-            {platforms.map((p, i) => (
-              <button
-                class="tab"
-                type="button"
-                role="tab"
-                data-tab={p.id}
-                aria-selected={i === 0 ? 'true' : 'false'}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          {platforms.map((p, i) => (
-            <p class="connect-hint" data-panel={p.id} hidden={i !== 0}>{p.hint}</p>
-          ))}
+          <p class="connect-hint">Paste this to your agent — Claude Code, opencode, Cursor or any MCP client. It reads /llms.txt, adds /mcp as a server, and runs one OAuth login.</p>
           <div class="prompt">
             <code id="connect-prompt">{connectPrompt}</code>
             <button class="copy-btn" type="button" data-copy="connect-prompt" aria-label="Copy prompt to clipboard">
@@ -172,6 +130,10 @@ const vocab = [
             </button>
           </div>
           <p class="install-host">MCP endpoint <a href={`https://${serverHost}/mcp`}>{serverHost}/mcp</a> · one OAuth login, then it bootstraps your workspace.</p>
+        </div>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href={appUrl}>Open the app →</a>
+          <a class="btn btn-light" href={docsUrl}>Read the docs</a>
         </div>
       </div>
     </div>
@@ -310,18 +272,6 @@ const vocab = [
       for (const img of document.querySelectorAll<HTMLElement>('.screen-img'))
         img.hidden = img.dataset.screen !== screen
     })
-  }
-
-  // Platform tabs only swap the how-to hint — the copied prompt is identical.
-  for (const root of document.querySelectorAll('.connect')) {
-    const tabs = root.querySelectorAll<HTMLButtonElement>('[data-tab]')
-    const panels = root.querySelectorAll<HTMLElement>('[data-panel]')
-    for (const tab of tabs) {
-      tab.addEventListener('click', () => {
-        for (const t of tabs) t.setAttribute('aria-selected', String(t === tab))
-        for (const p of panels) p.hidden = p.dataset.panel !== tab.dataset.tab
-      })
-    }
   }
 
   // One-click copy of the prompt, with a fallback to selecting the text.
