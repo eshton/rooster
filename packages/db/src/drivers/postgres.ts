@@ -29,6 +29,7 @@ export async function createPostgresDatabase(
   const repositories = createRepositories(
     db as unknown as LibSQLDatabase<Record<string, never>>,
     pgSchema as unknown as typeof sqliteSchema,
+    'pg',
   )
 
   return {

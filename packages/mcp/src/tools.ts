@@ -529,9 +529,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     {
       title: 'Search tickets',
       description:
-        'Relevance-ranked, multi-term search across ticket titles and descriptions in your org ' +
-        '(title matches and full-phrase matches rank highest). Set `compact: true` for the ' +
-        'trimmed board-scan shape.',
+        'Relevance-ranked full-text search across ticket titles and descriptions in your org. ' +
+        'Stemmed (e.g. "deploy" matches "deploying") and multi-term (any term may match); title ' +
+        'matches rank above description matches. Set `compact: true` for the trimmed board-scan shape.',
       inputSchema: { query: z.string().min(1).max(200), compact: z.boolean().optional() },
     },
     async ({ query, compact }) =>
