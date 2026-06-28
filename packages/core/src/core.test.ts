@@ -1798,3 +1798,95 @@ describe('conversation recall', () => {
     expect(await svc.conversation.recall(owner, { query: 'sensitive omega phrase' })).toEqual([])
   })
 })
+
+// --- context files + unified recall -----------------------------------------
+
+describe('context files', () => {
+  async function setup() {
+    const { owner } = await bootstrap()
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const team = await svc.teams.create(owner, { key: 'ROOST', name: 'R' })
+    const project = await svc.projects.create(owner, { teamId: team.id, key: 'AAA', name: 'A' })
+    return { owner, svc, project }
+  }
+
+  it('creates, lists, updates and embeds a context file', async () => {
+    const { owner, svc, project } = await setup()
+    const file = await svc.contextFiles.save(owner, {
+      projectId: project.id,
+      name: 'Auth design',
+      body: 'we use OAuth PKCE and scoped tokens',
+    })
+    expect(file.name).toBe('Auth design')
+    expect(
+      (await svc.contextFiles.list(owner, { projectId: project.id })).map((f) => f.id),
+    ).toContain(file.id)
+
+    const updated = await svc.contextFiles.save(owner, {
+      id: file.id,
+      projectId: project.id,
+      name: 'Auth design',
+      body: 'updated: OAuth PKCE, scopes, dynamic client registration',
+    })
+    expect(updated.id).toBe(file.id)
+
+    const hits = await svc.contextFiles.recall(owner, { query: 'oauth pkce scopes', limit: 10 })
+    expect(hits.some((h) => h.source === 'context_file' && h.contextFileId === file.id)).toBe(true)
+  })
+
+  it('unified recall spans tickets, messages and context files', async () => {
+    const { owner, svc, project } = await setup()
+    const ticket = await svc.tickets.create(owner, {
+      projectId: project.id,
+      title: 'caching layer design',
+      description: 'redis caching strategy',
+    })
+    await svc.conversation.append(owner, {
+      ticketId: ticket.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'should the caching layer use redis or in-memory?' }],
+    })
+    await svc.contextFiles.save(owner, {
+      projectId: project.id,
+      name: 'Caching notes',
+      body: 'caching layer conventions: prefer redis with a TTL',
+    })
+
+    const hits = await svc.contextFiles.recall(owner, {
+      query: 'caching layer redis strategy',
+      limit: 20,
+    })
+    const sources = new Set(hits.map((h) => h.source))
+    expect(sources.has('ticket')).toBe(true)
+    expect(sources.has('message')).toBe(true)
+    expect(sources.has('context_file')).toBe(true)
+  })
+
+  it('throws when embeddings are not configured', async () => {
+    const { owner } = await bootstrap()
+    await expect(services.contextFiles.recall(owner, { query: 'x' })).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+  })
+
+  it('removing a context file drops it from recall', async () => {
+    const { owner, svc, project } = await setup()
+    const file = await svc.contextFiles.save(owner, {
+      projectId: project.id,
+      name: 'Secret',
+      body: 'omega secret marker phrase',
+    })
+    expect(
+      (await svc.contextFiles.recall(owner, { query: 'omega secret marker' })).some(
+        (h) => h.source === 'context_file',
+      ),
+    ).toBe(true)
+
+    expect(await svc.contextFiles.remove(owner, file.id)).toEqual({ removed: true })
+    expect(
+      (await svc.contextFiles.recall(owner, { query: 'omega secret marker' })).some(
+        (h) => h.source === 'context_file' && h.contextFileId === file.id,
+      ),
+    ).toBe(false)
+  })
+})

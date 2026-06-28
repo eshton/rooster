@@ -3,6 +3,7 @@ import type {
   Attachment,
   AuditLog,
   Comment,
+  ContextFile,
   ConversationMessage,
   Id,
   Invite,
@@ -184,8 +185,29 @@ export interface EmbeddingRepository {
   ): Promise<EmbeddingHit[]>
   /** Of the given source ids, those that already have an embedding (for backfill). */
   existingFor(orgId: Id, sourceType: string, sourceIds: Id[]): Promise<Id[]>
+  /**
+   * Nearest sources across ALL source types within an org (for unified recall);
+   * each hit carries its `sourceType`. Same over-fetch caveat as `search`.
+   */
+  searchAny(
+    orgId: Id,
+    queryVector: number[],
+    candidateK: number,
+  ): Promise<Array<EmbeddingHit & { sourceType: string }>>
   /** Remove a source's embedding (e.g. on redaction/delete); true if removed. */
   delete(orgId: Id, sourceType: string, sourceId: Id): Promise<boolean>
+}
+
+/**
+ * Project context documents (text stored in-row, embedded for recall). Unlike
+ * `attachments` (URL-only), a context file's content lives in the database.
+ */
+export interface ContextFileRepository {
+  create(orgId: Id, input: Omit<ContextFile, keyof TimestampedId | 'orgId'>): Promise<ContextFile>
+  getById(orgId: Id, id: Id): Promise<ContextFile | null>
+  list(orgId: Id, projectId: Id, opts?: ListOptions & { ticketId?: Id }): Promise<ContextFile[]>
+  update(orgId: Id, id: Id, patch: Partial<ContextFile>): Promise<ContextFile>
+  delete(orgId: Id, id: Id): Promise<boolean>
 }
 
 export interface AttachmentRepository {
@@ -355,6 +377,7 @@ export interface Repositories {
   comments: CommentRepository
   conversation: ConversationRepository
   attachments: AttachmentRepository
+  contextFiles: ContextFileRepository
   embeddings: EmbeddingRepository
   principals: PrincipalRepository
   users: UserRepository

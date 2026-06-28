@@ -187,6 +187,37 @@ export const recallConversationsInput = z.object({
 })
 export type RecallConversationsInput = z.infer<typeof recallConversationsInput>
 
+/**
+ * Create or update a project context document. Omit `id` to create; pass it to
+ * update an existing doc's name/body. `ticketId` pins it to a ticket (else
+ * project-wide). The body is embedded for semantic recall.
+ */
+export const saveContextFileInput = z.object({
+  id: idSchema.optional(),
+  projectId: idSchema,
+  ticketId: idSchema.nullable().optional(),
+  name: z.string().min(1).max(200),
+  body: z.string().min(1).max(100_000),
+})
+export type SaveContextFileInput = z.infer<typeof saveContextFileInput>
+
+/** List a project's context files (optionally only those pinned to a ticket). */
+export const listContextFilesInput = z.object({
+  projectId: idSchema,
+  ticketId: idSchema.optional(),
+})
+export type ListContextFilesInput = z.infer<typeof listContextFilesInput>
+
+/**
+ * Unified semantic recall across tickets, conversation messages and context
+ * files in the org (cross-project). Returns heterogeneous, source-tagged hits.
+ */
+export const recallContextInput = z.object({
+  query: z.string().min(1).max(1000),
+  limit: z.number().int().min(1).max(50).optional(),
+})
+export type RecallContextInput = z.infer<typeof recallContextInput>
+
 /** Add or remove a co-assignee (shared ownership) on a ticket. */
 export const assigneeRefInput = z.object({
   ticketId: idSchema,

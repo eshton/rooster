@@ -4,6 +4,7 @@ import type {
   AuditLog,
   ClientInfo,
   Comment,
+  ContextFile,
   ConversationMessage,
   Id,
   Invite,
@@ -96,6 +97,7 @@ const toWatcher = (r: Rows['ticketWatchers']): Watcher => r as Watcher
 const toMilestone = (r: Rows['milestones']): Milestone => r as Milestone
 const toTicketAssignee = (r: Rows['ticketAssignees']): TicketAssignee => r as TicketAssignee
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
+const toContextFile = (r: Rows['contextFiles']): ContextFile => r as ContextFile
 const toAudit = (r: Rows['auditLog']): AuditLog => ({
   ...r,
   before: dec<unknown>(r.before, null),
@@ -602,6 +604,23 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             )
         ).map((r) => r.sourceId)
       },
+      async searchAny(orgId, queryVector, candidateK) {
+        const vec = `[${queryVector.join(',')}]`
+        const k = Math.max(1, Math.floor(candidateK))
+        const rows = (await db.all(sql`
+          SELECT e.source_id AS sourceId, e.source_type AS sourceType,
+                 vector_distance_cos(e.embedding, vector32(${vec})) AS distance
+          FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
+          JOIN embeddings e ON e.rowid = v.id
+          WHERE e.org_id = ${orgId}
+          ORDER BY distance ASC
+        `)) as Array<{ sourceId: string; sourceType: string; distance: number }>
+        return rows.map((r) => ({
+          sourceId: r.sourceId,
+          sourceType: r.sourceType,
+          distance: Number(r.distance),
+        }))
+      },
       async delete(orgId, sourceType, sourceId) {
         const rows = await db
           .delete(s.embeddings)
@@ -613,6 +632,61 @@ export function createRepositories(db: DB, s: Schema): Repositories {
             ),
           )
           .returning({ id: s.embeddings.id })
+        return rows.length > 0
+      },
+    },
+
+    contextFiles: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.contextFiles)
+          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toContextFile(row!)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.contextFiles)
+              .where(and(eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.id, id)))
+              .limit(1)
+          ).map(toContextFile),
+        )
+      },
+      async list(orgId, projectId, opts) {
+        const filters = [eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.projectId, projectId)]
+        if (opts?.ticketId) filters.push(eq(s.contextFiles.ticketId, opts.ticketId))
+        return (
+          await db
+            .select()
+            .from(s.contextFiles)
+            .where(and(...filters))
+            .orderBy(desc(s.contextFiles.updatedAt))
+            .limit(limitOf(opts))
+        ).map(toContextFile)
+      },
+      async update(orgId, id, patch) {
+        const set: Record<string, unknown> = { updatedAt: now() }
+        for (const [k, v] of Object.entries(patch)) {
+          if (k === 'id' || k === 'orgId' || k === 'createdAt' || k === 'updatedAt') continue
+          set[k] = v
+        }
+        const [row] = await db
+          .update(s.contextFiles)
+          .set(set)
+          .where(and(eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.id, id)))
+          .returning()
+        if (!row) throw new Error(`Context file ${id} not found in org ${orgId}`)
+        return toContextFile(row)
+      },
+      async delete(orgId, id) {
+        const rows = await db
+          .delete(s.contextFiles)
+          .where(and(eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.id, id)))
+          .returning({ id: s.contextFiles.id })
         return rows.length > 0
       },
     },

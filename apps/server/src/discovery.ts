@@ -128,6 +128,13 @@ not the client.
   projects: find a past design discussion/decision by meaning and reuse it (filter
   by stage/role). Each hit gives a snippet + ticketKey; then get_ticket_context for
   the full thread. Needs embeddings configured + the conversation:read scope.
+- save_context_file / list_context_files — store named project context docs
+  (design notes, conventions, glossary) as text (embedded for recall, unlike
+  URL-only attachments); pin to a ticket with \`ticketId\` or leave project-wide.
+- recall_context — the broadest recall: unified semantic search across tickets,
+  conversation traces AND context files (cross-project). Hits are tagged by
+  \`source\`; follow up with get_ticket_context / list_context_files. Needs
+  embeddings configured + the conversation:read scope.
 - link_tickets / unlink_tickets / list_links — relate tickets beyond the
   parent/subtask hierarchy: "blocks" (and its derived "blocked_by"),
   "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't

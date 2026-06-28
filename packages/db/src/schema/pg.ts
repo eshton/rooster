@@ -264,6 +264,22 @@ export const conversationMessages = pgTable(
   ],
 )
 
+export const contextFiles = pgTable(
+  'context_files',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    projectId: text('project_id').notNull(),
+    ticketId: text('ticket_id'),
+    name: text('name').notNull(),
+    body: text('body').notNull(),
+    authorId: text('author_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('context_files_org_project_idx').on(t.orgId, t.projectId)],
+)
+
 export const rateLimits = pgTable('rate_limits', {
   key: text('key').primaryKey(),
   windowStart: text('window_start').notNull(),
@@ -319,6 +335,7 @@ export const pgSchema = {
   comments,
   conversationMessages,
   attachments,
+  contextFiles,
   rateLimits,
   idempotencyKeys,
   auditLog,

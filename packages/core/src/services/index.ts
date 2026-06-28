@@ -5,6 +5,7 @@ import { type AgentService, createAgentService } from './agents.js'
 import { type AttachmentService, createAttachmentService } from './attachments.js'
 import { type AuditLogService, createAuditLogService } from './auditlog.js'
 import { type CommentService, createCommentService } from './comments.js'
+import { type ContextFileService, createContextFileService } from './contextfile.js'
 import { type ConversationService, createConversationService } from './conversation.js'
 import { createInviteService, type InviteService } from './invites.js'
 import { createMemberService, type MemberService } from './members.js'
@@ -22,6 +23,7 @@ export interface Services {
   tickets: TicketService
   comments: CommentService
   conversation: ConversationService
+  contextFiles: ContextFileService
   attachments: AttachmentService
   watchers: WatcherService
   milestones: MilestoneService
@@ -46,6 +48,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     tickets: createTicketService(repos, deps.crowNotifier, deps.embedder),
     comments: createCommentService(repos, deps.crowNotifier),
     conversation: createConversationService(repos, deps.embedder),
+    contextFiles: createContextFileService(repos, deps.embedder),
     attachments: createAttachmentService(repos),
     watchers: createWatcherService(repos),
     milestones: createMilestoneService(repos),
@@ -62,6 +65,7 @@ export type {
   AttachmentService,
   AuditLogService,
   CommentService,
+  ContextFileService,
   ConversationService,
   InviteService,
   MemberService,

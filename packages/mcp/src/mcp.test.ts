@@ -638,4 +638,36 @@ describe('MCP semantic search (embedder wired)', () => {
     await localClient.close()
     await localDb.close()
   })
+
+  it('saves a context file and surfaces it through recall_context', async () => {
+    const { localDb, localServices, localOwner, localClient } = await harness()
+    const team = await localServices.teams.create(localOwner, { key: 'VEC', name: 'Vec' })
+    const project = await localServices.projects.create(localOwner, {
+      teamId: team.id,
+      key: 'VEC',
+      name: 'Vec',
+    })
+
+    const saved = payload(
+      (await localClient.callTool({
+        name: 'save_context_file',
+        arguments: {
+          projectId: project.id,
+          name: 'Glossary',
+          body: 'A crow notifies an assigned agent to wake and work a ticket.',
+        },
+      })) as never,
+    )
+    expect(saved.name).toBe('Glossary')
+
+    const res = await localClient.callTool({
+      name: 'recall_context',
+      arguments: { query: 'crow notify agent wake', limit: 10 },
+    })
+    const hits = payload(res as never) as Array<{ source: string; contextFileId?: string }>
+    expect(hits.some((h) => h.source === 'context_file' && h.contextFileId === saved.id)).toBe(true)
+
+    await localClient.close()
+    await localDb.close()
+  })
 })

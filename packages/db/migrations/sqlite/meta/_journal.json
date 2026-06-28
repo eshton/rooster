@@ -127,6 +127,13 @@
       "when": 1782664880021,
       "tag": "0017_blushing_james_howlett",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1782668949649,
+      "tag": "0018_jazzy_black_tarantula",
+      "breakpoints": true
     }
   ]
 }

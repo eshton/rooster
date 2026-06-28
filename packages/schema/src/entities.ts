@@ -214,6 +214,25 @@ export const conversationMessageSchema = z.object({
 })
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>
 
+/**
+ * A named context document attached to a project (and optionally pinned to a
+ * ticket). Unlike `attachment` (which stores only a URL — Rooster does not host
+ * files), a context file stores its text **in-row**: the whole point is to embed
+ * it for semantic recall, so the content must live in the database.
+ */
+export const contextFileSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  projectId: idSchema,
+  /** Optional ticket this doc is pinned to; null = project-wide. */
+  ticketId: idSchema.nullable(),
+  name: z.string().min(1).max(200),
+  body: z.string().min(1).max(100_000),
+  /** Principal who saved it. */
+  authorId: idSchema,
+})
+export type ContextFile = z.infer<typeof contextFileSchema>
+
 /** A milestone / cycle (sprint): a named, optionally time-boxed grouping of
  * tickets within a project. */
 export const milestoneSchema = z.object({

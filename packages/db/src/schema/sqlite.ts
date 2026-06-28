@@ -313,6 +313,24 @@ export const embeddings = sqliteTable(
   (t) => [uniqueIndex('embeddings_source_uq').on(t.orgId, t.sourceType, t.sourceId)],
 )
 
+export const contextFiles = sqliteTable(
+  'context_files',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    projectId: text('project_id').notNull(),
+    // Optional ticket this doc is pinned to; null = project-wide.
+    ticketId: text('ticket_id'),
+    name: text('name').notNull(),
+    // Stored in-row (unlike attachments) so it can be embedded for recall.
+    body: text('body').notNull(),
+    authorId: text('author_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('context_files_org_project_idx').on(t.orgId, t.projectId)],
+)
+
 export const rateLimits = sqliteTable('rate_limits', {
   key: text('key').primaryKey(),
   windowStart: text('window_start').notNull(),
@@ -368,6 +386,7 @@ export const sqliteSchema = {
   comments,
   conversationMessages,
   attachments,
+  contextFiles,
   embeddings,
   rateLimits,
   idempotencyKeys,

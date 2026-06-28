@@ -25,10 +25,13 @@ import {
   inviteMemberInput,
   joinTenantInput,
   linkTicketsInput,
+  listContextFilesInput,
   moveTicketInput,
+  recallContextInput,
   recallConversationsInput,
   registerAgentInput,
   removeAttachmentInput,
+  saveContextFileInput,
   setProjectKeyInput,
   type Ticket,
   ticketStatusSchema,
@@ -524,6 +527,44 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: recallConversationsInput.shape,
     },
     async (args) => runTool(() => services.conversation.recall(actor, args)),
+  )
+
+  server.registerTool(
+    'save_context_file',
+    {
+      title: 'Save context file',
+      description:
+        'Save a named context document on a project (design notes, conventions, glossary…). ' +
+        'Unlike attachments (URL-only), the text is stored and embedded for semantic recall. ' +
+        'Omit `id` to create, pass it to update. Optionally pin to a ticket with `ticketId`.',
+      inputSchema: saveContextFileInput.shape,
+    },
+    async (args) => runTool(() => services.contextFiles.save(actor, args)),
+  )
+
+  server.registerTool(
+    'list_context_files',
+    {
+      title: 'List context files',
+      description: "List a project's context documents (optionally only those pinned to a ticket).",
+      inputSchema: listContextFilesInput.shape,
+    },
+    async (args) => runTool(() => services.contextFiles.list(actor, args)),
+  )
+
+  server.registerTool(
+    'recall_context',
+    {
+      title: 'Recall context (unified)',
+      description:
+        'Unified semantic recall across tickets, conversation traces AND context files in your ' +
+        'workspace (cross-project) — the broadest "have we figured this out before?" search. Each ' +
+        'hit is tagged by `source` (ticket|message|context_file) with a snippet; follow up via ' +
+        'get_ticket_context or list_context_files. Requires the conversation:read scope and ' +
+        'embeddings configured.',
+      inputSchema: recallContextInput.shape,
+    },
+    async (args) => runTool(() => services.contextFiles.recall(actor, args)),
   )
 
   server.registerTool(
