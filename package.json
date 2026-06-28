@@ -14,9 +14,10 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "check": "biome check . && tsc -b && vitest run",
+    "check": "biome check . && tsc -b && vitest run --coverage",
     "clean": "tsc -b --clean",
     "build:web": "pnpm --filter @rooster/marketing build && pnpm --filter @rooster/docs build && node scripts/build-web.mjs",
     "deploy:web": "pnpm build:web && pnpm dlx wrangler@4 pages deploy dist-web"
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.1",
     "@types/node": "26.0.0",
+    "@vitest/coverage-v8": "4.1.9",
     "typescript": "6.0.3",
     "vitest": "4.1.9"
   },

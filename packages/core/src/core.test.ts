@@ -588,6 +588,96 @@ describe('agents', () => {
   })
 })
 
+// --- service guards (negative paths) ----------------------------------------
+
+const MISSING_ID = '00000000-0000-4000-8000-000000000000'
+
+describe('service guards', () => {
+  it('refuses agent registration by a non-human principal', async () => {
+    const { org, owner } = await bootstrap()
+    // An agent with admin role + agent:write scope clears authorize(), so the
+    // request reaches the "humans only" guard rather than the role/scope floor.
+    const agent = await services.agents.register(owner, {
+      displayName: 'Registrar Bot',
+      kind: 'claude-code',
+      scopes: ['agent:read', 'agent:write'],
+    })
+    await services.members.upsert(owner, {
+      principalId: agent.principalId,
+      teamId: null,
+      role: 'admin',
+    })
+    const agentActor = await services.resolveActor({
+      orgId: org.id,
+      principalId: agent.principalId,
+      scopes: ['agent:read', 'agent:write'],
+    })
+    await expect(
+      services.agents.register(agentActor, {
+        displayName: 'Sub Bot',
+        kind: 'claude-code',
+        scopes: ['ticket:read'],
+      }),
+    ).rejects.toThrow(/human/i)
+  })
+
+  it('404s get/setStatus for a missing agent', async () => {
+    const { owner } = await bootstrap()
+    await expect(services.agents.get(owner, MISSING_ID)).rejects.toBeInstanceOf(NotFoundError)
+    await expect(services.agents.setStatus(owner, MISSING_ID, 'suspended')).rejects.toBeInstanceOf(
+      NotFoundError,
+    )
+  })
+
+  it('rejects a duplicate team key and 404s a missing team', async () => {
+    const { owner } = await bootstrap()
+    await services.teams.create(owner, { key: 'DUP', name: 'First' })
+    await expect(
+      services.teams.create(owner, { key: 'DUP', name: 'Second' }),
+    ).rejects.toBeInstanceOf(ConflictError)
+    await expect(services.teams.get(owner, MISSING_ID)).rejects.toBeInstanceOf(NotFoundError)
+  })
+
+  it('404s commenting on or listing comments for a missing ticket', async () => {
+    const { owner } = await bootstrap()
+    await expect(
+      services.comments.create(owner, { ticketId: MISSING_ID, body: 'hi' }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+    await expect(services.comments.list(owner, MISSING_ID)).rejects.toBeInstanceOf(NotFoundError)
+  })
+
+  it('re-inviting an existing org member updates their role (idempotent)', async () => {
+    const { org, owner } = await bootstrap()
+    const created = await services.members.invite(owner, { email: 'kit@acme.test', role: 'viewer' })
+    expect(created.status).toBe('created')
+
+    const updated = await services.members.invite(owner, { email: 'kit@acme.test', role: 'member' })
+    expect(updated.status).toBe('updated')
+    expect(updated.principalId).toBe(created.principalId)
+    expect(updated.role).toBe('member')
+
+    const inOrg = await services.resolveActor({ orgId: org.id, principalId: created.principalId })
+    expect(inOrg.role).toBe('member')
+  })
+
+  it('refuses to invite an email anchored to another workspace', async () => {
+    // Ada founds org A; Bo (owner of B) tries to invite Ada's email into B.
+    const { org: orgA } = await bootstrap()
+    const { org: orgB } = await services.orgs.bootstrap({
+      org: { slug: 'beta', name: 'Beta', enrollmentPolicy: 'open' },
+      founder: { displayName: 'Bo', email: 'bo@beta.test', name: 'Bo', avatarUrl: null },
+    })
+    const ownerB = await services.resolveActor({
+      orgId: orgB.id,
+      principalId: (await db.repositories.principals.listByOrg(orgB.id))[0]!.id,
+    })
+    await expect(
+      services.members.invite(ownerB, { email: 'ada@acme.test', role: 'member' }),
+    ).rejects.toBeInstanceOf(ConflictError)
+    expect(orgA.id).not.toBe(orgB.id)
+  })
+})
+
 // --- audit ------------------------------------------------------------------
 
 describe('audit logging', () => {
