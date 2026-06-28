@@ -72,6 +72,13 @@ export const createTicketInput = z.object({
   startDate: z.string().max(40).nullable().optional(),
   /** Optional effort estimate as Fibonacci complexity points (see ESTIMATE_RUBRIC). */
   estimate: estimatePointsSchema.nullable().optional(),
+  /**
+   * Optional client-supplied idempotency key. The first create for a given
+   * (org, key) is recorded; a repeat with the same key returns the original
+   * ticket instead of creating a duplicate — so a retried/flaky call is safe.
+   * Keys are scoped per workspace and retained (no expiry).
+   */
+  idempotencyKey: z.string().min(1).max(200).optional(),
 })
 export type CreateTicketInput = z.infer<typeof createTicketInput>
 
@@ -93,6 +100,13 @@ export const updateTicketInput = z
     dueDate: z.string().max(40).nullable(),
     startDate: z.string().max(40).nullable(),
     estimate: estimatePointsSchema.nullable(),
+    /**
+     * Optional optimistic-concurrency guard: the `updatedAt` the caller last saw.
+     * When set, the write applies only if the ticket's current `updatedAt` still
+     * matches; otherwise it fails with a Conflict (re-read and retry). Omit it to
+     * keep last-write-wins. Not a ticket field — never written.
+     */
+    expectedUpdatedAt: z.string().max(40),
   })
   .partial()
 export type UpdateTicketInput = z.infer<typeof updateTicketInput>
@@ -100,6 +114,8 @@ export type UpdateTicketInput = z.infer<typeof updateTicketInput>
 export const changeStatusInput = z.object({
   ticketId: idSchema,
   status: ticketStatusSchema,
+  /** Optional optimistic-concurrency guard (see updateTicketInput). */
+  expectedUpdatedAt: z.string().max(40).optional(),
 })
 export type ChangeStatusInput = z.infer<typeof changeStatusInput>
 
@@ -115,6 +131,8 @@ export type ClaimNextInput = z.infer<typeof claimNextInput>
 export const assignTicketInput = z.object({
   ticketId: idSchema,
   assigneeId: idSchema.nullable(),
+  /** Optional optimistic-concurrency guard (see updateTicketInput). */
+  expectedUpdatedAt: z.string().max(40).optional(),
 })
 export type AssignTicketInput = z.infer<typeof assignTicketInput>
 

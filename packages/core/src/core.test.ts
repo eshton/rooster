@@ -1222,3 +1222,136 @@ describe('claim_next', () => {
     ).rejects.toBeInstanceOf(NotFoundError)
   })
 })
+
+// --- idempotent ticket creation (ROO-26) ------------------------------------
+
+describe('create_ticket idempotency keys', () => {
+  it('returns the original ticket for a repeated key, filing no duplicate', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+
+    const first = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'once',
+      idempotencyKey: 'dedupe-1',
+    })
+    const repeat = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'second title is ignored',
+      idempotencyKey: 'dedupe-1',
+    })
+
+    expect(repeat.id).toBe(first.id)
+    expect(repeat.title).toBe('once')
+    expect((await services.tickets.list(owner, project.id)).length).toBe(1)
+  })
+
+  it('creates distinct tickets for distinct keys, and always for no key', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+
+    const a = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'a',
+      idempotencyKey: 'k-a',
+    })
+    const b = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'b',
+      idempotencyKey: 'k-b',
+    })
+    expect(b.id).not.toBe(a.id)
+
+    const n1 = await services.tickets.create(owner, { projectId: project.id, title: 'n' })
+    const n2 = await services.tickets.create(owner, { projectId: project.id, title: 'n' })
+    expect(n2.id).not.toBe(n1.id)
+  })
+
+  it('scopes keys per workspace', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const mine = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'mine',
+      idempotencyKey: 'shared-key',
+    })
+
+    // Same key in a different org is independent — a separate ticket.
+    const other = await services.orgs.bootstrap({
+      org: { slug: 'idem-other', name: 'Other', enrollmentPolicy: 'open' },
+      founder: { displayName: 'Bo', email: 'bo@idem.test', name: 'Bo', avatarUrl: null },
+    })
+    const otherOwner = await services.resolveActor({
+      orgId: other.org.id,
+      principalId: other.founder.id,
+    })
+    const team = await services.teams.create(otherOwner, { name: 'T' })
+    const otherProject = await services.projects.create(otherOwner, {
+      teamId: team.id,
+      key: 'OTH',
+      name: 'P',
+    })
+    const theirs = await services.tickets.create(otherOwner, {
+      projectId: otherProject.id,
+      title: 'theirs',
+      idempotencyKey: 'shared-key',
+    })
+    expect(theirs.id).not.toBe(mine.id)
+  })
+})
+
+// --- optimistic concurrency on updates (ROO-27) -----------------------------
+
+describe('optimistic concurrency (expectedUpdatedAt)', () => {
+  const STALE = '2000-01-01T00:00:00.000Z'
+
+  it('applies an update when the guard matches the current updatedAt', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 't' })
+
+    const current = await services.tickets.get(owner, t.id)
+    const updated = await services.tickets.update(owner, t.id, {
+      title: 'renamed',
+      expectedUpdatedAt: current.updatedAt,
+    })
+    expect(updated.title).toBe('renamed')
+  })
+
+  it('rejects update / change_status / assign when the guard is stale', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 't' })
+
+    await expect(
+      services.tickets.update(owner, t.id, { title: 'x', expectedUpdatedAt: STALE }),
+    ).rejects.toBeInstanceOf(ConflictError)
+    await expect(
+      services.tickets.changeStatus(owner, {
+        ticketId: t.id,
+        status: 'todo',
+        expectedUpdatedAt: STALE,
+      }),
+    ).rejects.toBeInstanceOf(ConflictError)
+    await expect(
+      services.tickets.assign(owner, {
+        ticketId: t.id,
+        assigneeId: owner.principalId,
+        expectedUpdatedAt: STALE,
+      }),
+    ).rejects.toBeInstanceOf(ConflictError)
+
+    // A rejected guarded write applies nothing.
+    const after = await services.tickets.get(owner, t.id)
+    expect(after.title).toBe('t')
+    expect(after.status).toBe('backlog')
+  })
+
+  it('preserves last-write-wins when the guard is omitted', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const t = await services.tickets.create(owner, { projectId: project.id, title: 't' })
+    const ok = await services.tickets.update(owner, t.id, { title: 'no guard' })
+    expect(ok.title).toBe('no guard')
+  })
+})
