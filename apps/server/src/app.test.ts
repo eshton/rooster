@@ -71,6 +71,78 @@ describe('discovery + docs', () => {
   it('has a health check', async () => {
     expect((await app.request(`${base}/healthz`)).status).toBe(200)
   })
+
+  it('404s the public roadmap when none is configured', async () => {
+    const res = await app.request(`${base}/roadmap`)
+    expect(res.status).toBe(404)
+    expect(await res.text()).toContain('No public roadmap')
+  })
+})
+
+describe('public roadmap (configured)', () => {
+  let roadmapCtx: ServerContext
+  let roadmapApp: ReturnType<typeof createApp>
+
+  beforeAll(async () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'file::memory:',
+      ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
+      ROOSTER_BASE_URL: base,
+      ROOSTER_ROADMAP_ORG_SLUG: 'roadmap-co',
+      ROOSTER_ROADMAP_PROJECT_KEY: 'pub',
+    })
+    roadmapCtx = await createServerContext(cfg, { migrate: true })
+    roadmapApp = createApp(roadmapCtx)
+
+    const repos = roadmapCtx.db.repositories
+    const org = await repos.orgs.create({
+      slug: 'roadmap-co',
+      name: 'Roadmap Co',
+      enrollmentPolicy: 'token',
+    })
+    const team = await repos.teams.create(org.id, { key: 'PUB', name: 'Public' })
+    const project = await repos.projects.create(org.id, {
+      teamId: team.id,
+      key: 'PUB',
+      name: 'Public Project',
+      description: null,
+    })
+    const seed = (number: number, title: string, priority: string, status: string) =>
+      repos.tickets.create(org.id, {
+        projectId: project.id,
+        key: `PUB-${number}`,
+        number,
+        title,
+        description: null,
+        status: status as never,
+        priority: priority as never,
+        labels: [],
+        assigneeId: null,
+        parentId: null,
+      })
+    await seed(1, 'Low priority idea', 'low', 'backlog')
+    await seed(2, 'Urgent fire', 'urgent', 'in_progress')
+    await seed(3, 'Medium thing', 'medium', 'done')
+    await seed(4, 'Dropped work', 'high', 'canceled')
+  })
+
+  afterAll(async () => {
+    await roadmapCtx.db.close()
+  })
+
+  it('renders the configured project sorted by priority, excluding canceled', async () => {
+    const res = await roadmapApp.request(`${base}/roadmap`)
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('Public Project')
+    expect(html).toContain('Urgent fire')
+    expect(html).toContain('Low priority idea')
+    // Canceled tickets are dropped from the public roadmap.
+    expect(html).not.toContain('Dropped work')
+    // Sorted by priority: urgent appears before medium before low.
+    expect(html.indexOf('Urgent fire')).toBeLessThan(html.indexOf('Medium thing'))
+    expect(html.indexOf('Medium thing')).toBeLessThan(html.indexOf('Low priority idea'))
+  })
 })
 
 describe('mounted auth', () => {

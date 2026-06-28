@@ -764,6 +764,53 @@ export function ticketListPage(data: {
   return chrome(data.title, data.actor, `<h1>${esc(data.title)}</h1>${searchBar}${rows}`)
 }
 
+/**
+ * The public, unauthenticated roadmap page (served at `/roadmap`). Renders a
+ * project's tickets sorted by priority, with no auth chrome — anyone can read
+ * it. Tickets are assumed pre-sorted by the caller; statuses drive the badges.
+ */
+export function publicRoadmapPage(data: {
+  title: string
+  orgName: string
+  projectName: string
+  tickets: Ticket[]
+}): string {
+  const count = (pred: (t: Ticket) => boolean) => data.tickets.filter(pred).length
+  const stats = `<div class="stats">
+    <div class="stat"><div class="n">${data.tickets.length}</div><div class="l">Items</div></div>
+    <div class="stat"><div class="n">${count((t) => t.status === 'done')}</div><div class="l">Shipped</div></div>
+    <div class="stat"><div class="n">${count((t) => t.status === 'in_progress' || t.status === 'in_review')}</div><div class="l">In progress</div></div>
+    <div class="stat"><div class="n">${count((t) => t.status === 'backlog' || t.status === 'todo')}</div><div class="l">Planned</div></div>
+  </div>`
+
+  const rows = data.tickets.length
+    ? data.tickets
+        .map(
+          (t) =>
+            `<div class="card"><div class="row">
+              <div><span class="key">${esc(t.key)}</span> ${esc(t.title)}</div>
+              <div>${t.priority !== 'none' ? `<span class="prio ${esc(t.priority)}" title="${esc(t.priority)} priority"></span>` : ''}<span class="badge${t.status === 'done' ? '' : ' amber'}">${esc(STATUS_LABEL[t.status])}</span></div>
+            </div>
+            ${
+              t.priority !== 'none' || t.estimate != null || t.labels.length
+                ? `<div class="row" style="margin-top:.4rem;align-items:center;gap:.4rem">
+                    ${t.priority !== 'none' ? `<span class="badge">${esc(t.priority)} priority</span>` : ''}
+                    ${estimateChip(t.estimate)}
+                    ${t.labels.length ? `<div class="tags">${t.labels.map((l) => `<span class="t">${esc(l)}</span>`).join('')}</div>` : ''}
+                  </div>`
+                : ''
+            }</div>`,
+        )
+        .join('')
+    : '<div class="empty">🪹 Nothing on the roadmap yet.</div>'
+
+  const body = `<h1>${esc(data.title)}</h1>
+    <p class="muted">Live from the <strong>${esc(data.projectName)}</strong> board in ${esc(data.orgName)}, sorted by priority.</p>
+    ${stats}
+    ${rows}`
+  return chrome(data.title, null, body)
+}
+
 const AGENT_STATUS_OPTIONS = ['active', 'suspended', 'revoked'] as const
 
 export function agentsList(data: { agents: Agent[]; actor: Actor; canManage: boolean }): string {

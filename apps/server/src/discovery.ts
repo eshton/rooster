@@ -169,6 +169,7 @@ export function landingHtml(ctx: ServerContext): string {
 <ul>
 <li><strong>Humans:</strong> <a href="${base}/app/login">sign in</a> to the dashboard at <code>${base}/app</code>.</li>
 <li><strong>Agents:</strong> read <a href="${base}/llms.txt"><code>/llms.txt</code></a> to connect over MCP.</li>
+${ctx.config.roadmap ? `<li><strong>Roadmap:</strong> see what's planned + shipped at <a href="${base}/roadmap"><code>/roadmap</code></a>.</li>` : ''}
 <li>Service discovery: <a href="${base}/.well-known/rooster"><code>/.well-known/rooster</code></a></li>
 <li>MCP endpoint: <code>${base}/mcp</code></li>
 </ul>

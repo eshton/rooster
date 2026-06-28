@@ -47,6 +47,16 @@ const envSchema = z.object({
   ROOSTER_ADMIN_WORKSPACE: z.string().optional(),
   ROOSTER_ADMIN_PROJECT_KEY: z.string().optional(),
 
+  /**
+   * Public roadmap page (served at `/roadmap`, unauthenticated). Opt-in: set
+   * both the workspace slug and the project key whose tickets should be exposed
+   * publicly, sorted by priority. Unset = no public roadmap (the route 404s).
+   * An optional heading overrides the default "<Project> roadmap" title.
+   */
+  ROOSTER_ROADMAP_ORG_SLUG: z.string().optional(),
+  ROOSTER_ROADMAP_PROJECT_KEY: z.string().optional(),
+  ROOSTER_ROADMAP_TITLE: z.string().optional(),
+
   ROOSTER_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 
   /**
@@ -124,6 +134,16 @@ export interface RoosterConfig {
     /** TTL (seconds) for the resolved-actor cache; 0 disables it. */
     actorCacheTtlSeconds: number
   }
+  /**
+   * Optional public roadmap. Present only when both the workspace slug and the
+   * project key are configured; the `/roadmap` page then renders that project's
+   * tickets publicly. `title` overrides the default heading.
+   */
+  roadmap?: {
+    orgSlug: string
+    projectKey: string
+    title?: string
+  }
   /** Outbound notifications. `crowWebhookUrl` unset = crow is audit-only. */
   notifications: {
     crowWebhookUrl?: string
@@ -164,6 +184,23 @@ export function loadConfig(
       'Invalid Rooster environment configuration:\n  - ROOSTER_ADMIN_EMAIL and ROOSTER_ADMIN_PASSWORD must be set together',
     )
   }
+  // The public roadmap needs both the workspace and the project to resolve a
+  // target; requiring both together avoids a half-configured, never-rendering
+  // page.
+  if (Boolean(env.ROOSTER_ROADMAP_ORG_SLUG) !== Boolean(env.ROOSTER_ROADMAP_PROJECT_KEY)) {
+    throw new Error(
+      'Invalid Rooster environment configuration:\n  - ROOSTER_ROADMAP_ORG_SLUG and ROOSTER_ROADMAP_PROJECT_KEY must be set together',
+    )
+  }
+  const roadmap =
+    env.ROOSTER_ROADMAP_ORG_SLUG && env.ROOSTER_ROADMAP_PROJECT_KEY
+      ? {
+          orgSlug: env.ROOSTER_ROADMAP_ORG_SLUG,
+          projectKey: env.ROOSTER_ROADMAP_PROJECT_KEY.toUpperCase(),
+          title: env.ROOSTER_ROADMAP_TITLE,
+        }
+      : undefined
+
   const admin =
     env.ROOSTER_ADMIN_EMAIL && env.ROOSTER_ADMIN_PASSWORD
       ? {
@@ -202,6 +239,7 @@ export function loadConfig(
       rateLimitPerMinute: env.ROOSTER_MCP_RATE_LIMIT_PER_MINUTE,
       actorCacheTtlSeconds: env.ROOSTER_MCP_ACTOR_CACHE_TTL_SECONDS,
     },
+    roadmap,
     notifications: {
       crowWebhookUrl: env.ROOSTER_CROW_WEBHOOK_URL,
       emailWebhookUrl: env.ROOSTER_EMAIL_WEBHOOK_URL,

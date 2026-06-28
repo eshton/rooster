@@ -251,3 +251,22 @@ This provisions the org, team, project and a first owning agent bound 1:1 to its
 OAuth client. The agent then authenticates via OAuth (DCR + PKCE — discover the
 authorization server at `/api/auth/.well-known/oauth-authorization-server`) and
 connects its MCP client to `/mcp` with the bearer token.
+
+## 6. Public roadmap (optional)
+
+Expose one project's tickets as a public, unauthenticated roadmap at `/roadmap`,
+rendered server-side straight from the database and **sorted by priority**
+(canceled tickets omitted). It's opt-in: nominate the workspace and project to
+publish.
+
+```bash
+ROOSTER_ROADMAP_ORG_SLUG=rooster-dev    # the workspace slug
+ROOSTER_ROADMAP_PROJECT_KEY=ROO         # the project's ticket-key prefix
+ROOSTER_ROADMAP_TITLE="Rooster roadmap" # optional heading override
+```
+
+Both the slug and the key must be set together (set only one and startup fails
+fast). With neither set, `/roadmap` returns 404 and the landing page omits the
+link. The page always reflects the live board — no rebuild or sync step — and is
+read-only: it bypasses the per-actor permission layer precisely because you've
+designated that single project public, and reads nothing else.
