@@ -185,6 +185,30 @@ export const comments = sqliteTable(
   (t) => [index('comments_org_ticket_idx').on(t.orgId, t.ticketId)],
 )
 
+export const conversationMessages = sqliteTable(
+  'conversation_messages',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    ticketId: text('ticket_id').notNull(),
+    stage: text('stage').notNull(),
+    authorId: text('author_id').notNull(),
+    role: text('role').notNull(),
+    kind: text('kind').notNull().default('text'),
+    // Monotonic order within (org, ticket, stage); server-allocated.
+    seq: integer('seq').notNull(),
+    body: text('body').notNull(),
+    // Optional JSON metadata (model/tool names, tokens…), encoded as TEXT.
+    metadata: text('metadata'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  // Backs the staged per-ticket read (get_ticket_context / list_messages).
+  (t) => [
+    index('conversation_messages_org_ticket_stage_seq_idx').on(t.orgId, t.ticketId, t.stage, t.seq),
+  ],
+)
+
 export const ticketAssignees = sqliteTable(
   'ticket_assignees',
   {
@@ -237,6 +261,35 @@ export const attachments = sqliteTable('attachments', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
+
+/**
+ * Polymorphic embedding store for semantic search (libSQL-native vectors) is
+ * NOT a Drizzle table: its `embedding F32_BLOB(<dims>)` column is sized from
+ * `ROOSTER_EMBEDDING_DIMS` at runtime, which a static committed migration can't
+ * express. The table (plus its unique index and the `libsql_vector_idx`
+ * functional ANN index) is created idempotently at connect time — see
+ * `ensureEmbeddingsStore` in `vector.ts`, called from the libSQL driver. All
+ * access goes through raw `vector32()`/`vector_top_k()` SQL in the repository.
+ * libSQL/Turso-only; the frozen Postgres schema has no equivalent.
+ */
+
+export const contextFiles = sqliteTable(
+  'context_files',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    projectId: text('project_id').notNull(),
+    // Optional ticket this doc is pinned to; null = project-wide.
+    ticketId: text('ticket_id'),
+    name: text('name').notNull(),
+    // Stored in-row (unlike attachments) so it can be embedded for recall.
+    body: text('body').notNull(),
+    authorId: text('author_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('context_files_org_project_idx').on(t.orgId, t.projectId)],
+)
 
 export const rateLimits = sqliteTable('rate_limits', {
   key: text('key').primaryKey(),
@@ -291,7 +344,9 @@ export const sqliteSchema = {
   ticketAssignees,
   milestones,
   comments,
+  conversationMessages,
   attachments,
+  contextFiles,
   rateLimits,
   idempotencyKeys,
   auditLog,

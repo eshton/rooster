@@ -8,11 +8,13 @@ import {
 import {
   addAttachmentInput,
   agentStatusSchema,
+  appendMessagesInput,
   assigneeRefInput,
   assignTicketInput,
   changeStatusInput,
   claimNextInput,
   commentInput,
+  conversationStageSchema,
   createInviteInput,
   createMilestoneInput,
   createProjectInput,
@@ -23,9 +25,13 @@ import {
   inviteMemberInput,
   joinTenantInput,
   linkTicketsInput,
+  listContextFilesInput,
   moveTicketInput,
+  recallContextInput,
+  recallConversationsInput,
   registerAgentInput,
   removeAttachmentInput,
+  saveContextFileInput,
   setProjectKeyInput,
   type Ticket,
   ticketStatusSchema,
@@ -329,8 +335,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       title: 'Get ticket context',
       description:
         'Fetch a ticket together with everything around it — comments, attachments, subtasks, ' +
-        'resolved links and the full assignee set — in ONE call (by id or key). Prefer this over ' +
-        'separate get_ticket + list_comments + list_links + list_subtasks + list_attachments calls.',
+        'resolved links, the full assignee set, and the staged conversation trace (when you hold ' +
+        'conversation:read) — in ONE call (by id or key). Prefer this over separate get_ticket + ' +
+        'list_comments + list_links + list_subtasks + list_attachments + list_messages calls.',
       inputSchema: { id: z.uuid().optional(), key: z.string().optional() },
     },
     async ({ id, key }) => {
@@ -480,6 +487,87 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
   )
 
   server.registerTool(
+    'append_messages',
+    {
+      title: 'Append conversation messages',
+      description:
+        'Record the human↔agent conversation trace on a ticket, tagged by workflow ' +
+        "`stage` (input | plan | execution | review). Flush a stage's turns in ONE " +
+        'call as a batch (1–50). SUMMARISE — persist the curated trace (decisions, the ' +
+        "human ask, the plan, key results), not raw tool output. Set each message's " +
+        '`role` (human|agent). Ordering is assigned server-side. Later powers ' +
+        'cross-project recall. Requires the conversation:write scope.',
+      inputSchema: appendMessagesInput.shape,
+    },
+    async (args) => runTool(() => services.conversation.append(actor, args)),
+  )
+
+  server.registerTool(
+    'list_messages',
+    {
+      title: 'List conversation messages',
+      description:
+        "A ticket's conversation trace (chronological), optionally filtered to one " +
+        'stage. Requires the conversation:read scope.',
+      inputSchema: { ticketId: z.uuid(), stage: conversationStageSchema.optional() },
+    },
+    async (args) => runTool(() => services.conversation.list(actor, args)),
+  )
+
+  server.registerTool(
+    'recall_conversations',
+    {
+      title: 'Recall conversations',
+      description:
+        'Semantic recall over conversation traces across ALL projects in your workspace — find ' +
+        'a past design discussion/decision by meaning and reuse it. Optionally filter by `stage` ' +
+        '(input|plan|execution|review) or `role` (human|agent). Each hit returns a snippet + the ' +
+        'ticketKey; call get_ticket_context on it to pull the full staged thread. Requires the ' +
+        'conversation:read scope and embeddings configured (else returns an error).',
+      inputSchema: recallConversationsInput.shape,
+    },
+    async (args) => runTool(() => services.conversation.recall(actor, args)),
+  )
+
+  server.registerTool(
+    'save_context_file',
+    {
+      title: 'Save context file',
+      description:
+        'Save a named context document on a project (design notes, conventions, glossary…). ' +
+        'Unlike attachments (URL-only), the text is stored and embedded for semantic recall. ' +
+        'Omit `id` to create, pass it to update. Optionally pin to a ticket with `ticketId`.',
+      inputSchema: saveContextFileInput.shape,
+    },
+    async (args) => runTool(() => services.contextFiles.save(actor, args)),
+  )
+
+  server.registerTool(
+    'list_context_files',
+    {
+      title: 'List context files',
+      description: "List a project's context documents (optionally only those pinned to a ticket).",
+      inputSchema: listContextFilesInput.shape,
+    },
+    async (args) => runTool(() => services.contextFiles.list(actor, args)),
+  )
+
+  server.registerTool(
+    'recall_context',
+    {
+      title: 'Recall context (unified)',
+      description:
+        'Unified semantic recall across tickets, conversation traces AND context files in your ' +
+        'workspace (cross-project) — the broadest "have we figured this out before?" search. Each ' +
+        'hit is tagged by `source` (ticket|message|context_file) with a snippet; follow up via ' +
+        'get_ticket_context or list_context_files. Requires the conversation:read scope and ' +
+        'embeddings configured.',
+      inputSchema: recallContextInput.shape,
+    },
+    async (args) => runTool(() => services.contextFiles.recall(actor, args)),
+  )
+
+  server.registerTool(
     'add_attachment',
     {
       title: 'Add attachment',
@@ -536,6 +624,40 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     },
     async ({ query, compact }) =>
       runTool(async () => maybeCompact(await services.tickets.search(actor, query), compact)),
+  )
+
+  server.registerTool(
+    'find_similar_tickets',
+    {
+      title: 'Find similar tickets',
+      description:
+        'Semantic search: tickets across your workspace most similar in MEANING to a query ' +
+        '(vector embeddings), not just keyword matches — spans all projects in the org. Use it ' +
+        'to recall related prior work/decisions. Requires embeddings to be configured; otherwise ' +
+        'returns an error. Set `compact: true` for the trimmed shape.',
+      inputSchema: {
+        query: z.string().min(1).max(1000),
+        limit: z.number().int().min(1).max(50).optional(),
+        compact: z.boolean().optional(),
+      },
+    },
+    async ({ query, limit, compact }) =>
+      runTool(async () =>
+        maybeCompact(await services.tickets.findSimilar(actor, query, limit), compact),
+      ),
+  )
+
+  server.registerTool(
+    'backfill_embeddings',
+    {
+      title: 'Backfill embeddings',
+      description:
+        'Embed any tickets that lack an embedding (e.g. created before embeddings were ' +
+        'configured) so they become findable by find_similar_tickets. Optionally scope to one ' +
+        'project. Requires embeddings to be configured.',
+      inputSchema: { projectId: z.uuid().optional() },
+    },
+    async ({ projectId }) => runTool(() => services.tickets.backfillEmbeddings(actor, projectId)),
   )
 
   server.registerTool(

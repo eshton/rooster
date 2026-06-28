@@ -58,16 +58,34 @@ If your account belongs to several workspaces, send the target `orgId` in the
 | `move_ticket` | `ticket:write` | Move a ticket to another project (fresh key + number) |
 | `change_status` | `ticket:write` | Move status (validated against the workflow) |
 | `claim_next` | `ticket:write` | Atomically claim & assign the next actionable unassigned ticket |
-| `search_tickets` | `ticket:read` | Ranked free-text search over titles + descriptions |
+| `search_tickets` | `ticket:read` | Ranked full-text search over titles + descriptions (stemmed) |
+| `find_similar_tickets` | `ticket:read` | Semantic (vector) search by meaning across all projects; needs embeddings configured |
+| `backfill_embeddings` | `ticket:write` | Embed tickets that lack an embedding (e.g. created before embeddings were configured) |
 | `find_by_label` | `ticket:read` | Find related tickets across the workspace by tag |
 | `list_subtasks` | `ticket:read` | Direct children of a ticket |
 
 Pass `compact: true` to `list_tickets` / `my_tickets` / `find_by_label` /
-`search_tickets` for a trimmed `{id, key, title, status, priority, assigneeId}`
-shape — far fewer tokens when scanning a board. When several principals may edit
-one ticket, pass `expectedUpdatedAt` to `update_ticket` / `change_status` /
-`assign_ticket` for optimistic concurrency (the write applies only if the ticket
-is unchanged).
+`search_tickets` / `find_similar_tickets` for a trimmed
+`{id, key, title, status, priority, assigneeId}` shape — far fewer tokens when
+scanning a board. When several principals may edit one ticket, pass
+`expectedUpdatedAt` to `update_ticket` / `change_status` / `assign_ticket` for
+optimistic concurrency (the write applies only if the ticket is unchanged).
+
+## Conversation traces & context
+
+Persist the human↔agent working record so it survives the session and becomes
+recallable across every project in the workspace. `recall_*` need embeddings
+configured on the instance (`ROOSTER_EMBEDDING_*`); without them they return a
+clear "not configured" error and everything else still works.
+
+| Tool | Scope | Description |
+| --- | --- | --- |
+| `append_messages` | `conversation:write` | Record a batch (1–50) of the conversation trace on a ticket, tagged by `stage` (input \| plan \| execution \| review) and `role` |
+| `list_messages` | `conversation:read` | A ticket's conversation trace, optionally filtered to one stage |
+| `recall_conversations` | `conversation:read` | Semantic recall over conversation traces across all projects; filter by `stage` / `role` |
+| `save_context_file` | `project:write` | Save (or update) a named context document on a project; text is stored and embedded |
+| `list_context_files` | `ticket:read` | A project's context documents (optionally only those pinned to a ticket) |
+| `recall_context` | `conversation:read` | Unified semantic recall across tickets, conversation traces and context files |
 
 ## Assignees, comments & attachments
 
@@ -124,6 +142,8 @@ the agent's membership must also satisfy:
 | `ticket:read` | viewer |
 | `ticket:write` | member |
 | `project:write` | member |
+| `conversation:read` | member |
+| `conversation:write` | member |
 | `team:write` | admin |
 | `agent:read` | viewer |
 | `agent:write` | admin |

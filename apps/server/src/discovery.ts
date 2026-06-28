@@ -108,6 +108,9 @@ not the client.
   find_by_label — by tag.
   search_tickets — relevance-ranked full-text search over titles + descriptions
   (stemmed: "deploy" matches "deploying"; title matches rank highest).
+  find_similar_tickets — semantic (vector) search by meaning across all projects
+  in your workspace; use it to recall related prior work before starting. Needs
+  embeddings configured on the instance (else it returns an error).
 - list_subtasks — list a ticket's children.
 - create_milestone / list_milestones — group tickets into a milestone / cycle
   (sprint). Scope a ticket via create_ticket/update_ticket \`milestoneId\`, and
@@ -115,6 +118,24 @@ not the client.
 - add_attachment / list_attachments / remove_attachment — attach context to a
   ticket. Links only: Rooster does not host files, so pass a \`url\` to an
   externally hosted resource (log, design, doc) with an optional label.
+- append_messages / list_messages — record the human↔agent conversation trace on
+  a ticket, tagged by \`stage\` (input | plan | execution | review). Flush a
+  stage's turns in ONE batch call (1–50); SUMMARISE — persist the curated trace
+  (the human ask, the plan, key decisions/results), not raw tool output. Set each
+  message's \`role\` (human|agent). \`get_ticket_context\` returns the trace too.
+  Needs the conversation:read / conversation:write scopes (kept separate from
+  ticket:* because transcripts are more sensitive).
+- recall_conversations — semantic recall over those traces across ALL your
+  projects: find a past design discussion/decision by meaning and reuse it (filter
+  by stage/role). Each hit gives a snippet + ticketKey; then get_ticket_context for
+  the full thread. Needs embeddings configured + the conversation:read scope.
+- save_context_file / list_context_files — store named project context docs
+  (design notes, conventions, glossary) as text (embedded for recall, unlike
+  URL-only attachments); pin to a ticket with \`ticketId\` or leave project-wide.
+- recall_context — the broadest recall: unified semantic search across tickets,
+  conversation traces AND context files (cross-project). Hits are tagged by
+  \`source\`; follow up with get_ticket_context / list_context_files. Needs
+  embeddings configured + the conversation:read scope.
 - link_tickets / unlink_tickets / list_links — relate tickets beyond the
   parent/subtask hierarchy: "blocks" (and its derived "blocked_by"),
   "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't
@@ -170,6 +191,7 @@ export function landingHtml(ctx: ServerContext): string {
 <ul>
 <li><strong>Humans:</strong> <a href="${base}/app/login">sign in</a> to the dashboard at <code>${base}/app</code>.</li>
 <li><strong>Agents:</strong> read <a href="${base}/llms.txt"><code>/llms.txt</code></a> to connect over MCP.</li>
+${ctx.config.roadmap ? `<li><strong>Roadmap:</strong> see what's planned + shipped at <a href="${base}/roadmap"><code>/roadmap</code></a>.</li>` : ''}
 <li>Service discovery: <a href="${base}/.well-known/rooster"><code>/.well-known/rooster</code></a></li>
 <li>MCP endpoint: <code>${base}/mcp</code></li>
 </ul>

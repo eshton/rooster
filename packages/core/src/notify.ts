@@ -37,7 +37,22 @@ export interface CrowNotifier {
   notify(event: NotificationEvent): Promise<void> | void
 }
 
+/**
+ * Embedding seam: turns text into vectors for semantic (vector) search. Like the
+ * notifier, it is OPTIONAL and best-effort — when absent, embedding is skipped
+ * (rows stay un-embedded until a backfill) and recall tools report that semantic
+ * search is unconfigured. A concrete impl (e.g. an OpenAI-compatible HTTP client)
+ * is wired at the deployable. `embed` is batch-first; it returns one vector per
+ * input text, in order.
+ */
+export interface Embedder {
+  /** Model identifier recorded alongside each stored vector. */
+  readonly model: string
+  embed(texts: string[]): Promise<number[][]>
+}
+
 /** Optional dependencies injected into the service layer. */
 export interface ServiceDeps {
   crowNotifier?: CrowNotifier
+  embedder?: Embedder
 }

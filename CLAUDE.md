@@ -122,21 +122,36 @@ authorization.**
 - `tsc -b` project references; each package has its own `tsconfig.json` and is
   registered in the root `tsconfig.json`.
 
-### Database portability (important)
+### Database: SQLite/libSQL first-class, Postgres frozen (important)
 
-One repository implementation (`packages/db/src/repositories/impl.ts`) serves
-**both** dialects. This works because the two Drizzle schemas
-(`schema/sqlite.ts`, `schema/pg.ts`) are kept **structurally identical**:
+**SQLite / libSQL (Turso) is the single first-class, actively-developed and
+CI-tested dialect.** The test suite runs on in-memory libSQL and production runs
+on Turso, so `schema/sqlite.ts` is the source of truth. Semantic search uses
+**libSQL native vectors** (`F32_BLOB` + `libsql_vector_idx` / `vector_top_k`),
+which run on the edge/Turso path — no Postgres required. The `embeddings` table
+is NOT a Drizzle table: its vector column is sized from `ROOSTER_EMBEDDING_DIMS`
+(default 1536), so it's created at connect time by `ensureEmbeddingsStore`
+(`packages/db/src/vector.ts`, called from the libSQL driver) and accessed only
+through raw SQL in the repository.
+
+**Postgres is frozen / community-maintained.** `schema/pg.ts`, the `postgres`
+driver, and `migrations/pg/` are preserved so the path keeps compiling for
+self-hosters who prefer Postgres, but they are NOT exercised in CI and MAY drift.
+Native-vector storage (the runtime `embeddings` table) is libSQL-only.
+
+One repository implementation (`packages/db/src/repositories/impl.ts`) still
+serves **both** dialects (the Postgres driver bridges via `as unknown as` in
+`drivers/postgres.ts`), which works because the schemas share the same
+conventions:
 - ids and timestamps are **TEXT** (app-generated UUIDs via `crypto.randomUUID()`;
   ISO-8601 strings),
 - arrays / JSON (labels, scopes, audit before/after, clientInfo) are **TEXT**
   (JSON-encoded in the repo),
 - booleans are normalized to JS booleans.
 
-The Postgres driver passes its drizzle instance + pg schema through a **single
-type-bridge** (`as unknown as` in `drivers/postgres.ts`) into the libSQL-typed
-factory. If you change one dialect schema, change the other identically and
-regenerate both migrations.
+**Going forward: edit `schema/sqlite.ts` and run `db:generate:sqlite`.** Only
+touch `schema/pg.ts` (+ `db:generate:pg`) if you specifically maintain the
+Postgres path; CI checks SQLite migration drift only.
 
 The **one legitimate place the dialects diverge** is full-text `search` (ROO-12):
 `createRepositories` takes a `dialect` arg and `search()` branches — Postgres
@@ -152,7 +167,7 @@ triggers on `tickets`.
 ```bash
 pnpm install
 pnpm build            # tsc -b (all packages)
-pnpm test             # vitest run  (204 tests today; in-memory SQLite)
+pnpm test             # vitest run  (in-memory libSQL — the first-class dialect)
 pnpm lint             # biome check
 pnpm check            # lint + build + test  ← run before every commit
 
@@ -164,7 +179,7 @@ pnpm --filter @rooster/db db:seed              # demo data (after build)
 
 # server
 pnpm --filter @rooster/server start            # node, auto-migrates domain tables
-pnpm --filter @rooster/server auth:migrate     # better-auth's own tables (Postgres)
+pnpm --filter @rooster/server auth:migrate     # better-auth's own tables (Turso/libSQL or Postgres)
 ```
 
 Local smoke (no Postgres needed): set `DATABASE_URL=file:./local.db`,
@@ -173,10 +188,11 @@ Local smoke (no Postgres needed): set `DATABASE_URL=file:./local.db`,
 
 ## How to make common changes
 
-- **Add a ticket field**: edit both `schema/{sqlite,pg}.ts` identically →
-  `db:generate:sqlite` + `db:generate:pg` → update the entity in
-  `packages/schema/src/entities.ts` (+ DTO if user-supplied) → map it in
-  `repositories/impl.ts` → thread through the relevant core service.
+- **Add a ticket field**: edit `schema/sqlite.ts` → `db:generate:sqlite` → update
+  the entity in `packages/schema/src/entities.ts` (+ DTO if user-supplied) → map
+  it in `repositories/impl.ts` → thread through the relevant core service. (Mirror
+  into `schema/pg.ts` + `db:generate:pg` only if you maintain the frozen Postgres
+  path; CI checks SQLite drift only.)
 - **Add an MCP tool**: add the method to the core service (with `authorize` +
   audit), then register it in `packages/mcp/src/tools.ts` (reuse the DTO `.shape`
   for `inputSchema`). Add an end-to-end case in `mcp.test.ts`. **Document it** in

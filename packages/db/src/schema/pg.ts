@@ -1,9 +1,18 @@
 import { boolean, index, integer, pgTable, real, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
 /**
- * PostgreSQL dialect schema. Kept structurally identical to the SQLite schema
- * (same column names + JS-level types) so a single repository implementation
- * works across both dialects. See `./sqlite.ts` for the portability rationale.
+ * PostgreSQL dialect schema.
+ *
+ * ⚠️ FROZEN / community-maintained. SQLite/libSQL (Turso) is Rooster's single
+ * first-class, CI-tested dialect (see `./sqlite.ts`); this Postgres mirror is
+ * preserved so the `postgres` driver keeps compiling, but it is NOT exercised in
+ * CI and MAY drift from `sqlite.ts`. New schema work lands in `sqlite.ts` only.
+ * If you depend on the Postgres path, mirror the change here and regenerate with
+ * `pnpm --filter @rooster/db db:generate:pg` yourself. Native-vector columns
+ * (libSQL `F32_BLOB`) live only on the SQLite schema and have no equivalent here.
+ *
+ * Kept structurally identical to the SQLite schema (same column names + JS-level
+ * types) so the single repository implementation works across both dialects.
  */
 
 const id = () => text('id').primaryKey()
@@ -234,6 +243,43 @@ export const comments = pgTable(
   (t) => [index('comments_org_ticket_idx').on(t.orgId, t.ticketId)],
 )
 
+export const conversationMessages = pgTable(
+  'conversation_messages',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    ticketId: text('ticket_id').notNull(),
+    stage: text('stage').notNull(),
+    authorId: text('author_id').notNull(),
+    role: text('role').notNull(),
+    kind: text('kind').notNull().default('text'),
+    seq: integer('seq').notNull(),
+    body: text('body').notNull(),
+    metadata: text('metadata'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('conversation_messages_org_ticket_stage_seq_idx').on(t.orgId, t.ticketId, t.stage, t.seq),
+  ],
+)
+
+export const contextFiles = pgTable(
+  'context_files',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    projectId: text('project_id').notNull(),
+    ticketId: text('ticket_id'),
+    name: text('name').notNull(),
+    body: text('body').notNull(),
+    authorId: text('author_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('context_files_org_project_idx').on(t.orgId, t.projectId)],
+)
+
 export const rateLimits = pgTable('rate_limits', {
   key: text('key').primaryKey(),
   windowStart: text('window_start').notNull(),
@@ -287,7 +333,9 @@ export const pgSchema = {
   ticketAssignees,
   milestones,
   comments,
+  conversationMessages,
   attachments,
+  contextFiles,
   rateLimits,
   idempotencyKeys,
   auditLog,

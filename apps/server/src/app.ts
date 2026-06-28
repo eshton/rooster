@@ -5,9 +5,11 @@ import { type ClientInfo, registerTenantInput } from '@rooster/schema'
 import { Hono } from 'hono'
 import type { ServerContext } from './context.js'
 import { mountDashboard } from './dashboard/routes.js'
+import { messagePage, publicRoadmapPage } from './dashboard/views.js'
 import { discoveryDocument, landingHtml, llmsText } from './discovery.js'
 import { signupAllowed } from './gate.js'
 import { DbRateLimiter } from './rate-limit.js'
+import { loadPublicRoadmap } from './roadmap.js'
 
 /**
  * Best-effort capture of the calling MCP client's identity for the audit log
@@ -87,6 +89,31 @@ export function createApp(ctx: ServerContext): Hono {
   mountDashboard(app, ctx)
   app.get('/llms.txt', (c) => c.text(llmsText(ctx)))
   app.get('/healthz', (c) => c.json({ ok: true }))
+
+  // Public, unauthenticated roadmap (opt-in via ROOSTER_ROADMAP_* config).
+  // Reads one designated project's tickets straight from the DB, sorted by
+  // priority, and renders them with no auth chrome.
+  app.get('/roadmap', async (c) => {
+    const roadmap = await loadPublicRoadmap(ctx)
+    if (!roadmap) {
+      return c.html(
+        messagePage(
+          null,
+          'No public roadmap',
+          'This Rooster instance has no public roadmap configured.',
+        ),
+        404,
+      )
+    }
+    return c.html(
+      publicRoadmapPage({
+        title: roadmap.title,
+        orgName: roadmap.org.name,
+        projectName: roadmap.project.name,
+        tickets: roadmap.tickets,
+      }),
+    )
+  })
 
   // OAuth discovery aliases. better-auth advertises the issuer as the host root
   // but serves its metadata under /api/auth; MCP/OAuth clients (per RFC 8414)

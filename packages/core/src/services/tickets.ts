@@ -2,8 +2,8 @@ import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js'
-import type { CrowNotifier } from '../notify.js'
-import { authorize } from '../permissions.js'
+import type { CrowNotifier, Embedder } from '../notify.js'
+import { authorize, can } from '../permissions.js'
 import { CLAIMABLE_STATUSES, canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
 import { parse } from '../validate.js'
 import {
@@ -15,6 +15,7 @@ import {
   type ChangeStatusInput,
   type ClaimNextInput,
   type Comment,
+  type ConversationMessage,
   type CreateTicketInput,
   type CreateTicketsInput,
   changeStatusInput,
@@ -64,6 +65,12 @@ export interface TicketContext {
   subtasks: Ticket[]
   /** Links resolved from this ticket's perspective. */
   links: RelatedTicket[]
+  /**
+   * The staged human↔agent conversation trace, chronological. Only populated
+   * when the actor holds `conversation:read` (transcripts are gated separately
+   * from `ticket:read`); otherwise an empty array.
+   */
+  conversation: ConversationMessage[]
 }
 
 /** Inverse relation labels for an incoming edge (relates is symmetric). */
@@ -131,12 +138,45 @@ export interface TicketService {
   listAssignees(actor: Actor, ticketId: Id): Promise<Id[]>
   /** Wake/notify the ticket's assignee (records an audited wake intent). */
   crow(actor: Actor, ticketId: Id): Promise<{ ticket: Ticket; assigneeId: Id | null }>
+  /**
+   * Semantic search: tickets across the org most similar in meaning to `query`,
+   * via vector embeddings. Org-scoped = cross-project. Requires a configured
+   * embedder, else throws a clear "not configured" error.
+   */
+  findSimilar(actor: Actor, query: string, limit?: number): Promise<Ticket[]>
+  /**
+   * Embed any tickets that lack an embedding (e.g. created before embeddings were
+   * configured, or whose embedding failed). Scope a single project or the whole
+   * org. Returns how many were embedded.
+   */
+  backfillEmbeddings(actor: Actor, projectId?: Id): Promise<{ embedded: number }>
 }
+
+/** The `sourceType` discriminator for ticket rows in the embeddings store. */
+const EMBED_SOURCE_TICKET = 'ticket'
 
 export function createTicketService(
   repos: Repositories,
   crowNotifier?: CrowNotifier,
+  embedder?: Embedder,
 ): TicketService {
+  /**
+   * Best-effort embed of a ticket's title+description for semantic search. Never
+   * throws — a failure just leaves the row un-embedded (a backfill can fix it),
+   * so embedding never breaks a create/update.
+   */
+  async function embedTicket(orgId: Id, ticket: Ticket): Promise<void> {
+    if (!embedder) return
+    try {
+      const text = `${ticket.title}\n${ticket.description ?? ''}`.trim()
+      const [vec] = await embedder.embed([text])
+      if (vec) {
+        await repos.embeddings.upsert(orgId, EMBED_SOURCE_TICKET, ticket.id, vec, embedder.model)
+      }
+    } catch {
+      // best-effort — see doc comment.
+    }
+  }
   /** Ensure an assignee principal exists in this org (or is being cleared). */
   async function requireAssignee(actor: Actor, assigneeId: Id | null): Promise<void> {
     if (assigneeId == null) return
@@ -302,6 +342,8 @@ export function createTicketService(
         }
       }
     }
+    // Index for semantic search (best-effort; covers create + createMany).
+    await embedTicket(actor.orgId, ticket)
     return ticket
   }
 
@@ -334,13 +376,21 @@ export function createTicketService(
     async getContext(actor, id) {
       authorize(actor, 'ticket:read')
       const ticket = await load(actor, id)
-      const [comments, attachments, subtasks, links, coAssignees] = await Promise.all([
-        repos.comments.listForTicket(actor.orgId, id),
-        repos.attachments.listForTicket(actor.orgId, id),
-        repos.tickets.listChildren(actor.orgId, id),
-        repos.ticketLinks.listForTicket(actor.orgId, id),
-        repos.assignees.listForTicket(actor.orgId, id),
-      ])
+      // Transcripts are gated by conversation:read, not ticket:read — only load
+      // them for a permitted actor; everyone else gets an empty conversation.
+      const includeConversation = can(actor, 'conversation:read')
+      const [comments, attachments, subtasks, links, coAssignees, conversation] = await Promise.all(
+        [
+          repos.comments.listForTicket(actor.orgId, id),
+          repos.attachments.listForTicket(actor.orgId, id),
+          repos.tickets.listChildren(actor.orgId, id),
+          repos.ticketLinks.listForTicket(actor.orgId, id),
+          repos.assignees.listForTicket(actor.orgId, id),
+          includeConversation
+            ? repos.conversation.listForTicket(actor.orgId, id, { limit: 200 })
+            : Promise.resolve([]),
+        ],
+      )
 
       // Resolve links from this ticket's perspective (mirrors listLinks).
       const resolvedLinks: RelatedTicket[] = []
@@ -364,6 +414,7 @@ export function createTicketService(
         attachments,
         subtasks,
         links: resolvedLinks,
+        conversation,
       }
     },
 
@@ -534,6 +585,10 @@ export function createTicketService(
         before,
         after,
       })
+      // Re-embed only when the embedded text (title/description) changed.
+      if (patch.title !== undefined || patch.description !== undefined) {
+        await embedTicket(actor.orgId, after)
+      }
       return after
     },
 
@@ -721,6 +776,57 @@ export function createTicketService(
         }
       }
       return { ticket, assigneeId: ticket.assigneeId }
+    },
+
+    async findSimilar(actor, query, limit) {
+      authorize(actor, 'ticket:read')
+      if (!embedder) {
+        throw new ValidationError(
+          'Semantic search is not configured on this instance (set ROOSTER_EMBEDDING_URL + ROOSTER_EMBEDDING_API_KEY).',
+        )
+      }
+      const q = parse(z.string().min(1).max(1000), query)
+      const n = Math.min(Math.max(limit ?? 10, 1), 50)
+      const [vec] = await embedder.embed([q])
+      if (!vec) return []
+      // Over-fetch the global ANN pool so the org filter still yields ~n results.
+      const hits = await repos.embeddings.search(actor.orgId, EMBED_SOURCE_TICKET, vec, n * 5)
+      const results: Ticket[] = []
+      for (const hit of hits) {
+        const t = await repos.tickets.getById(actor.orgId, hit.sourceId)
+        if (t) results.push(t)
+        if (results.length >= n) break
+      }
+      return results
+    },
+
+    async backfillEmbeddings(actor, projectId) {
+      authorize(actor, 'ticket:write')
+      if (!embedder) {
+        throw new ValidationError(
+          'Semantic search is not configured on this instance (set ROOSTER_EMBEDDING_URL + ROOSTER_EMBEDDING_API_KEY).',
+        )
+      }
+      const projectIds = projectId
+        ? [projectId]
+        : (await repos.projects.list(actor.orgId)).map((p) => p.id)
+      let embedded = 0
+      for (const pid of projectIds) {
+        const tickets = await repos.tickets.list(actor.orgId, pid, { limit: 200 })
+        const have = new Set(
+          await repos.embeddings.existingFor(
+            actor.orgId,
+            EMBED_SOURCE_TICKET,
+            tickets.map((t) => t.id),
+          ),
+        )
+        for (const t of tickets) {
+          if (have.has(t.id)) continue
+          await embedTicket(actor.orgId, t)
+          embedded++
+        }
+      }
+      return { embedded }
     },
   }
 }

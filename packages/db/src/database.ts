@@ -49,8 +49,10 @@ export function createDatabase(
   switch (config.database.kind) {
     case 'sqlite':
     case 'libsql':
+      // First-class, CI-tested path (local SQLite + Turso/libSQL on the edge).
       return createLibsqlDatabase(config, opts)
     case 'postgres':
+      // Frozen / community-maintained path — preserved but not CI-tested.
       return createPostgresDatabase(config, opts)
   }
 }

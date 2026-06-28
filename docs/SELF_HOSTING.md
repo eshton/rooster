@@ -13,10 +13,13 @@ cp .env.example .env
 
 Required:
 
-- `DATABASE_URL` — selects the DB driver by scheme:
-  - `postgres://…` / `postgresql://…` → PostgreSQL
-  - `file:…` → local SQLite (e.g. `file:./local.db`)
-  - `libsql://…` → libSQL / Turso (set `DATABASE_AUTH_TOKEN` for remote)
+- `DATABASE_URL` — selects the DB driver by scheme. **SQLite / libSQL (Turso) is
+  the first-class, CI-tested target and the one that powers semantic search
+  (libSQL native vectors); Postgres is community-maintained — it still works but
+  is not CI-tested and has no native vector search.**
+  - `file:…` → local SQLite (e.g. `file:./local.db`) — first-class
+  - `libsql://…` → libSQL / Turso (set `DATABASE_AUTH_TOKEN` for remote) — first-class; production
+  - `postgres://…` / `postgresql://…` → PostgreSQL — community-maintained
 - `ROOSTER_AUTH_SECRET` — ≥ 16 chars; `openssl rand -base64 32`.
 - `ROOSTER_BASE_URL` — public URL, no trailing slash.
 
@@ -158,8 +161,8 @@ config is in `apps/server/wrangler.toml` (note
 ### Continuous deploy (GitHub Actions → Cloudflare)
 
 `ci.yml` auto-deploys on push to `main`, gated on the full verify matrix passing
-(`needs:` the lint/build/test, Postgres, migration-drift, and Worker-bundle
-jobs). The `deploy-server` job migrates Turso (`db:migrate` then `auth:migrate`)
+(`needs:` the lint/build/test, SQLite migration-drift, and Worker-bundle jobs).
+The `deploy-server` job migrates Turso (`db:migrate` then `auth:migrate`)
 and `wrangler deploy`s the Worker, then post-deploy smoke-tests
 `/healthz`, `/.well-known/rooster` (asserting the base URL),
 `/llms.txt`, and the OAuth discovery aliases. `deploy-sites` builds + deploys the
@@ -251,3 +254,61 @@ This provisions the org, team, project and a first owning agent bound 1:1 to its
 OAuth client. The agent then authenticates via OAuth (DCR + PKCE — discover the
 authorization server at `/api/auth/.well-known/oauth-authorization-server`) and
 connects its MCP client to `/mcp` with the bearer token.
+
+## 6. Public roadmap (optional)
+
+Expose one project's tickets as a public, unauthenticated roadmap at `/roadmap`,
+rendered server-side straight from the database and **sorted by priority**
+(canceled tickets omitted). It's opt-in: nominate the workspace and project to
+publish.
+
+```bash
+ROOSTER_ROADMAP_ORG_SLUG=rooster-dev    # the workspace slug
+ROOSTER_ROADMAP_PROJECT_KEY=ROO         # the project's ticket-key prefix
+ROOSTER_ROADMAP_TITLE="Rooster roadmap" # optional heading override
+```
+
+Both the slug and the key must be set together (set only one and startup fails
+fast). With neither set, `/roadmap` returns 404 and the landing page omits the
+link. The page always reflects the live board — no rebuild or sync step — and is
+read-only: it bypasses the per-actor permission layer precisely because you've
+designated that single project public, and reads nothing else.
+
+## 7. Semantic search (optional)
+
+Embed tickets, conversation messages and context files so agents can recall them
+by meaning — within a project and **across every project in the workspace**
+(`find_similar_tickets`, `recall_conversations`, `recall_context`). Vectors are
+stored and searched with **libSQL native vectors**, so this needs a
+libSQL/Turso (or local SQLite) `DATABASE_URL` — not the frozen Postgres path; no
+separate vector database.
+
+It's opt-in. Point Rooster at any OpenAI-compatible `/embeddings` endpoint:
+
+```bash
+# OpenAI (text-embedding-3-small → 1536 dims, the defaults)
+ROOSTER_EMBEDDING_URL=https://api.openai.com/v1/embeddings
+ROOSTER_EMBEDDING_API_KEY=sk-...
+ROOSTER_EMBEDDING_MODEL=text-embedding-3-small   # optional (default)
+ROOSTER_EMBEDDING_DIMS=1536                       # optional (default)
+```
+
+Running on Cloudflare Workers + Turso? Cloudflare Workers AI exposes an
+OpenAI-compatible endpoint on the same stack (its BGE models emit **1024** dims):
+
+```bash
+ROOSTER_EMBEDDING_URL=https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1/embeddings
+ROOSTER_EMBEDDING_API_KEY=<Cloudflare API token>
+ROOSTER_EMBEDDING_MODEL=@cf/baai/bge-large-en-v1.5
+ROOSTER_EMBEDDING_DIMS=1024
+```
+
+The URL and key must be set together (set only one and startup fails fast); with
+neither set the recall tools report that semantic search is unconfigured.
+`ROOSTER_EMBEDDING_DIMS` **must match the model's output size** — it sizes the
+`embeddings` table, which Rooster creates at connect time (so set it before the
+first run, or before `db:migrate` provisions Turso). Changing dims later means
+the model changed: `DROP TABLE embeddings` once (it recreates on the next
+connect), then re-embed existing rows with the `backfill_embeddings` tool.
+Embedding happens best-effort after each write and never blocks it; rows written
+while semantic search was off stay searchable only after a backfill.

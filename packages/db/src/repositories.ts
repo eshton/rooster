@@ -3,6 +3,8 @@ import type {
   Attachment,
   AuditLog,
   Comment,
+  ContextFile,
+  ConversationMessage,
   Id,
   Invite,
   Membership,
@@ -117,6 +119,95 @@ export interface MilestoneRepository {
 export interface CommentRepository {
   create(orgId: Id, input: Omit<Comment, keyof TimestampedId | 'orgId'>): Promise<Comment>
   listForTicket(orgId: Id, ticketId: Id, opts?: ListOptions): Promise<Comment[]>
+}
+
+export interface ConversationRepository {
+  /**
+   * Append a batch of messages to a (ticket, stage). `seq` is allocated
+   * server-side starting after the current max for that (ticket, stage), so a
+   * chunked flush stays correctly ordered. Returns the inserted rows in order.
+   */
+  appendMany(
+    orgId: Id,
+    ticketId: Id,
+    stage: string,
+    messages: Array<
+      Omit<ConversationMessage, keyof TimestampedId | 'orgId' | 'ticketId' | 'stage' | 'seq'>
+    >,
+  ): Promise<ConversationMessage[]>
+  /** A single message by id (used to resolve semantic-recall hits). */
+  getById(orgId: Id, id: Id): Promise<ConversationMessage | null>
+  /** A ticket's messages, chronological (createdAt, then seq); optional stage filter. */
+  listForTicket(
+    orgId: Id,
+    ticketId: Id,
+    opts?: ListOptions & { stage?: string },
+  ): Promise<ConversationMessage[]>
+  /** Hard-delete one message (redaction); true if a row was removed. */
+  delete(orgId: Id, id: Id): Promise<boolean>
+  /** Hard-delete all of a ticket's messages (redaction); returns the count removed. */
+  deleteForTicket(orgId: Id, ticketId: Id): Promise<number>
+}
+
+/** A nearest-neighbour hit from a vector search. */
+export interface EmbeddingHit {
+  sourceId: Id
+  /** Cosine distance (0 = identical); lower is closer. */
+  distance: number
+}
+
+/**
+ * Polymorphic embedding store backing semantic search (libSQL-native vectors).
+ * `sourceType` discriminates `ticket` / `message` / `context_file` so one ANN
+ * index serves all recall. libSQL/Turso only — methods rely on `vector32()` /
+ * `vector_top_k()` SQL and the runtime-created vector index.
+ */
+export interface EmbeddingRepository {
+  /** Insert or replace the embedding for a source row (keyed org+type+id). */
+  upsert(
+    orgId: Id,
+    sourceType: string,
+    sourceId: Id,
+    vector: number[],
+    model: string,
+  ): Promise<void>
+  /**
+   * Nearest sources to `queryVector` within an org + sourceType, ordered by
+   * cosine distance. `candidateK` is the GLOBAL ANN pool size (libSQL has no
+   * metadata pre-filter); the org/type filter is applied after, so pass a
+   * `candidateK` larger than the result count you want.
+   */
+  search(
+    orgId: Id,
+    sourceType: string,
+    queryVector: number[],
+    candidateK: number,
+  ): Promise<EmbeddingHit[]>
+  /** Of the given source ids, those that already have an embedding (for backfill). */
+  existingFor(orgId: Id, sourceType: string, sourceIds: Id[]): Promise<Id[]>
+  /**
+   * Nearest sources across ALL source types within an org (for unified recall);
+   * each hit carries its `sourceType`. Same over-fetch caveat as `search`.
+   */
+  searchAny(
+    orgId: Id,
+    queryVector: number[],
+    candidateK: number,
+  ): Promise<Array<EmbeddingHit & { sourceType: string }>>
+  /** Remove a source's embedding (e.g. on redaction/delete); true if removed. */
+  delete(orgId: Id, sourceType: string, sourceId: Id): Promise<boolean>
+}
+
+/**
+ * Project context documents (text stored in-row, embedded for recall). Unlike
+ * `attachments` (URL-only), a context file's content lives in the database.
+ */
+export interface ContextFileRepository {
+  create(orgId: Id, input: Omit<ContextFile, keyof TimestampedId | 'orgId'>): Promise<ContextFile>
+  getById(orgId: Id, id: Id): Promise<ContextFile | null>
+  list(orgId: Id, projectId: Id, opts?: ListOptions & { ticketId?: Id }): Promise<ContextFile[]>
+  update(orgId: Id, id: Id, patch: Partial<ContextFile>): Promise<ContextFile>
+  delete(orgId: Id, id: Id): Promise<boolean>
 }
 
 export interface AttachmentRepository {
@@ -284,7 +375,10 @@ export interface Repositories {
   assignees: AssigneeRepository
   milestones: MilestoneRepository
   comments: CommentRepository
+  conversation: ConversationRepository
   attachments: AttachmentRepository
+  contextFiles: ContextFileRepository
+  embeddings: EmbeddingRepository
   principals: PrincipalRepository
   users: UserRepository
   agents: AgentRepository

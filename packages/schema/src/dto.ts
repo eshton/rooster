@@ -1,8 +1,11 @@
 import { z } from 'zod'
 import {
   agentKindSchema,
+  conversationStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
+  messageKindSchema,
+  messageRoleSchema,
   ticketLinkTypeSchema,
   ticketPrioritySchema,
   ticketStatusSchema,
@@ -141,6 +144,79 @@ export const commentInput = z.object({
   body: z.string().min(1).max(50_000),
 })
 export type CommentInput = z.infer<typeof commentInput>
+
+/**
+ * Append conversation messages to a ticket stage in one batch. The agent buffers
+ * a stage's turns and flushes them in a single call (summarise tool output —
+ * persist the curated trace, not raw spew). `seq` is server-allocated. A single
+ * message is just the one-element case.
+ */
+export const appendMessagesInput = z.object({
+  ticketId: idSchema,
+  stage: conversationStageSchema,
+  messages: z
+    .array(
+      z.object({
+        role: messageRoleSchema,
+        kind: messageKindSchema.default('text'),
+        body: z.string().min(1).max(50_000),
+        metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
+})
+export type AppendMessagesInput = z.infer<typeof appendMessagesInput>
+
+/** List a ticket's conversation messages, optionally filtered to one stage. */
+export const listMessagesInput = z.object({
+  ticketId: idSchema,
+  stage: conversationStageSchema.optional(),
+})
+export type ListMessagesInput = z.infer<typeof listMessagesInput>
+
+/**
+ * Semantic recall over conversation messages across all projects in the org.
+ * Optional `stage`/`role` narrow the match (e.g. only human `input` turns).
+ */
+export const recallConversationsInput = z.object({
+  query: z.string().min(1).max(1000),
+  limit: z.number().int().min(1).max(50).optional(),
+  stage: conversationStageSchema.optional(),
+  role: messageRoleSchema.optional(),
+})
+export type RecallConversationsInput = z.infer<typeof recallConversationsInput>
+
+/**
+ * Create or update a project context document. Omit `id` to create; pass it to
+ * update an existing doc's name/body. `ticketId` pins it to a ticket (else
+ * project-wide). The body is embedded for semantic recall.
+ */
+export const saveContextFileInput = z.object({
+  id: idSchema.optional(),
+  projectId: idSchema,
+  ticketId: idSchema.nullable().optional(),
+  name: z.string().min(1).max(200),
+  body: z.string().min(1).max(100_000),
+})
+export type SaveContextFileInput = z.infer<typeof saveContextFileInput>
+
+/** List a project's context files (optionally only those pinned to a ticket). */
+export const listContextFilesInput = z.object({
+  projectId: idSchema,
+  ticketId: idSchema.optional(),
+})
+export type ListContextFilesInput = z.infer<typeof listContextFilesInput>
+
+/**
+ * Unified semantic recall across tickets, conversation messages and context
+ * files in the org (cross-project). Returns heterogeneous, source-tagged hits.
+ */
+export const recallContextInput = z.object({
+  query: z.string().min(1).max(1000),
+  limit: z.number().int().min(1).max(50).optional(),
+})
+export type RecallContextInput = z.infer<typeof recallContextInput>
 
 /** Add or remove a co-assignee (shared ownership) on a ticket. */
 export const assigneeRefInput = z.object({

@@ -4,6 +4,8 @@ import type {
   AuditLog,
   ClientInfo,
   Comment,
+  ContextFile,
+  ConversationMessage,
   Id,
   Invite,
   Membership,
@@ -85,11 +87,17 @@ const toTicket = (r: Rows['tickets']): Ticket =>
     labels: dec<string[]>(r.labels, []),
   }) as Ticket
 const toComment = (r: Rows['comments']): Comment => r as Comment
+const toConversationMessage = (r: Rows['conversationMessages']): ConversationMessage =>
+  ({
+    ...r,
+    metadata: dec<unknown>(r.metadata, null),
+  }) as ConversationMessage
 const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
 const toWatcher = (r: Rows['ticketWatchers']): Watcher => r as Watcher
 const toMilestone = (r: Rows['milestones']): Milestone => r as Milestone
 const toTicketAssignee = (r: Rows['ticketAssignees']): TicketAssignee => r as TicketAssignee
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
+const toContextFile = (r: Rows['contextFiles']): ContextFile => r as ContextFile
 const toAudit = (r: Rows['auditLog']): AuditLog => ({
   ...r,
   before: dec<unknown>(r.before, null),
@@ -475,6 +483,217 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
             .orderBy(s.comments.createdAt)
             .limit(limitOf(opts))
         ).map(toComment)
+      },
+    },
+
+    conversation: {
+      async appendMany(orgId, ticketId, stage, messages) {
+        if (messages.length === 0) return []
+        const ts = now()
+        // Allocate seq after the current max for this (ticket, stage). One read +
+        // one multi-row insert (no transaction — respects the in-memory caveat);
+        // all rows in a batch share createdAt, so (createdAt, seq) orders them.
+        const [maxRow] = await db
+          .select({ max: sql<number>`COALESCE(MAX(${s.conversationMessages.seq}), 0)` })
+          .from(s.conversationMessages)
+          .where(
+            and(
+              eq(s.conversationMessages.orgId, orgId),
+              eq(s.conversationMessages.ticketId, ticketId),
+              eq(s.conversationMessages.stage, stage),
+            ),
+          )
+        const base = Number(maxRow?.max ?? 0)
+        const rows = messages.map((m, i) => ({
+          id: newId(),
+          orgId,
+          ticketId,
+          stage,
+          authorId: m.authorId,
+          role: m.role,
+          kind: m.kind,
+          seq: base + 1 + i,
+          body: m.body,
+          metadata: m.metadata == null ? null : enc(m.metadata),
+          createdAt: ts,
+          updatedAt: ts,
+        }))
+        return (await db.insert(s.conversationMessages).values(rows).returning()).map(
+          toConversationMessage,
+        )
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.conversationMessages)
+              .where(
+                and(eq(s.conversationMessages.orgId, orgId), eq(s.conversationMessages.id, id)),
+              )
+              .limit(1)
+          ).map(toConversationMessage),
+        )
+      },
+      async listForTicket(orgId, ticketId, opts) {
+        const filters = [
+          eq(s.conversationMessages.orgId, orgId),
+          eq(s.conversationMessages.ticketId, ticketId),
+        ]
+        if (opts?.stage) filters.push(eq(s.conversationMessages.stage, opts.stage))
+        return (
+          await db
+            .select()
+            .from(s.conversationMessages)
+            .where(and(...filters))
+            .orderBy(s.conversationMessages.createdAt, s.conversationMessages.seq)
+            .limit(limitOf(opts))
+        ).map(toConversationMessage)
+      },
+      async delete(orgId, id) {
+        const rows = await db
+          .delete(s.conversationMessages)
+          .where(and(eq(s.conversationMessages.orgId, orgId), eq(s.conversationMessages.id, id)))
+          .returning({ id: s.conversationMessages.id })
+        return rows.length > 0
+      },
+      async deleteForTicket(orgId, ticketId) {
+        const rows = await db
+          .delete(s.conversationMessages)
+          .where(
+            and(
+              eq(s.conversationMessages.orgId, orgId),
+              eq(s.conversationMessages.ticketId, ticketId),
+            ),
+          )
+          .returning({ id: s.conversationMessages.id })
+        return rows.length
+      },
+    },
+
+    embeddings: {
+      async upsert(orgId, sourceType, sourceId, vector, model) {
+        const ts = now()
+        const vec = `[${vector.join(',')}]`
+        // Insert-or-replace keyed by the unique (org, source_type, source_id).
+        // The vector is written through libSQL's native `vector32()`.
+        await db.run(sql`
+          INSERT INTO embeddings (id, org_id, source_type, source_id, model, embedding, created_at, updated_at)
+          VALUES (${newId()}, ${orgId}, ${sourceType}, ${sourceId}, ${model}, vector32(${vec}), ${ts}, ${ts})
+          ON CONFLICT(org_id, source_type, source_id) DO UPDATE SET
+            embedding = vector32(${vec}), model = ${model}, updated_at = ${ts}
+        `)
+      },
+      async search(orgId, sourceType, queryVector, candidateK) {
+        const vec = `[${queryVector.join(',')}]`
+        // ANN top-k is global (no metadata pre-filter), so over-fetch then filter
+        // to the org + type. k is a server-controlled integer → inline as a
+        // literal (vector_top_k's k arg doesn't take a bound param).
+        const k = Math.max(1, Math.floor(candidateK))
+        const rows = (await db.all(sql`
+          SELECT e.source_id AS sourceId,
+                 vector_distance_cos(e.embedding, vector32(${vec})) AS distance
+          FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
+          JOIN embeddings e ON e.rowid = v.id
+          WHERE e.org_id = ${orgId} AND e.source_type = ${sourceType}
+          ORDER BY distance ASC
+        `)) as Array<{ sourceId: string; distance: number }>
+        return rows.map((r) => ({ sourceId: r.sourceId, distance: Number(r.distance) }))
+      },
+      async existingFor(orgId, sourceType, sourceIds) {
+        if (sourceIds.length === 0) return []
+        // The `embeddings` table is runtime-created (not a Drizzle table), so it
+        // can't be referenced through `s.*` — query it as raw SQL.
+        const ids = sql.join(
+          sourceIds.map((sid) => sql`${sid}`),
+          sql`, `,
+        )
+        const rows = (await db.all(sql`
+          SELECT source_id AS sourceId FROM embeddings
+          WHERE org_id = ${orgId} AND source_type = ${sourceType}
+            AND source_id IN (${ids})
+        `)) as Array<{ sourceId: string }>
+        return rows.map((r) => r.sourceId)
+      },
+      async searchAny(orgId, queryVector, candidateK) {
+        const vec = `[${queryVector.join(',')}]`
+        const k = Math.max(1, Math.floor(candidateK))
+        const rows = (await db.all(sql`
+          SELECT e.source_id AS sourceId, e.source_type AS sourceType,
+                 vector_distance_cos(e.embedding, vector32(${vec})) AS distance
+          FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
+          JOIN embeddings e ON e.rowid = v.id
+          WHERE e.org_id = ${orgId}
+          ORDER BY distance ASC
+        `)) as Array<{ sourceId: string; sourceType: string; distance: number }>
+        return rows.map((r) => ({
+          sourceId: r.sourceId,
+          sourceType: r.sourceType,
+          distance: Number(r.distance),
+        }))
+      },
+      async delete(orgId, sourceType, sourceId) {
+        const rows = (await db.all(sql`
+          DELETE FROM embeddings
+          WHERE org_id = ${orgId} AND source_type = ${sourceType} AND source_id = ${sourceId}
+          RETURNING id
+        `)) as Array<{ id: string }>
+        return rows.length > 0
+      },
+    },
+
+    contextFiles: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.contextFiles)
+          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toContextFile(row!)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.contextFiles)
+              .where(and(eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.id, id)))
+              .limit(1)
+          ).map(toContextFile),
+        )
+      },
+      async list(orgId, projectId, opts) {
+        const filters = [eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.projectId, projectId)]
+        if (opts?.ticketId) filters.push(eq(s.contextFiles.ticketId, opts.ticketId))
+        return (
+          await db
+            .select()
+            .from(s.contextFiles)
+            .where(and(...filters))
+            .orderBy(desc(s.contextFiles.updatedAt))
+            .limit(limitOf(opts))
+        ).map(toContextFile)
+      },
+      async update(orgId, id, patch) {
+        const set: Record<string, unknown> = { updatedAt: now() }
+        for (const [k, v] of Object.entries(patch)) {
+          if (k === 'id' || k === 'orgId' || k === 'createdAt' || k === 'updatedAt') continue
+          set[k] = v
+        }
+        const [row] = await db
+          .update(s.contextFiles)
+          .set(set)
+          .where(and(eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.id, id)))
+          .returning()
+        if (!row) throw new Error(`Context file ${id} not found in org ${orgId}`)
+        return toContextFile(row)
+      },
+      async delete(orgId, id) {
+        const rows = await db
+          .delete(s.contextFiles)
+          .where(and(eq(s.contextFiles.orgId, orgId), eq(s.contextFiles.id, id)))
+          .returning({ id: s.contextFiles.id })
+        return rows.length > 0
       },
     },
 

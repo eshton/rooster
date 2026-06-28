@@ -16,6 +16,8 @@ export type Permission =
   | 'agent:read'
   | 'agent:write'
   | 'audit:read'
+  | 'conversation:read'
+  | 'conversation:write'
 
 export const PERMISSION_MIN_ROLE: Record<Permission, Role> = {
   'ticket:read': 'viewer',
@@ -25,6 +27,12 @@ export const PERMISSION_MIN_ROLE: Record<Permission, Role> = {
   'agent:read': 'viewer',
   'agent:write': 'admin',
   'audit:read': 'admin',
+  // Conversation transcripts are more sensitive than ticket metadata, so they
+  // are NOT covered by ticket:read/write — they get their own scope. Reading is
+  // member+ (not viewer) so a low-trust principal can browse the board without
+  // seeing raw human↔agent transcripts.
+  'conversation:read': 'member',
+  'conversation:write': 'member',
 }
 
 /** A token scope grants a permission directly, or via the `*` wildcard. */

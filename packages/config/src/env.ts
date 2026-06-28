@@ -62,6 +62,16 @@ const envSchema = z.object({
   ROOSTER_ADMIN_WORKSPACE: z.string().optional(),
   ROOSTER_ADMIN_PROJECT_KEY: z.string().optional(),
 
+  /**
+   * Public roadmap page (served at `/roadmap`, unauthenticated). Opt-in: set
+   * both the workspace slug and the project key whose tickets should be exposed
+   * publicly, sorted by priority. Unset = no public roadmap (the route 404s).
+   * An optional heading overrides the default "<Project> roadmap" title.
+   */
+  ROOSTER_ROADMAP_ORG_SLUG: z.string().optional(),
+  ROOSTER_ROADMAP_PROJECT_KEY: z.string().optional(),
+  ROOSTER_ROADMAP_TITLE: z.string().optional(),
+
   ROOSTER_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 
   /**
@@ -88,6 +98,27 @@ const envSchema = z.object({
    */
   RESEND_API_KEY: z.string().optional(),
   ROOSTER_EMAIL_FROM: z.string().optional(),
+
+  /**
+   * Embeddings for semantic (vector) search. When the URL + API key are set,
+   * tickets, conversation messages and context files are embedded and become
+   * searchable via libSQL native vectors. OpenAI-compatible API by default.
+   * Unset = semantic search is unconfigured (recall tools report so). The model
+   * must emit `ROOSTER_EMBEDDING_DIMS`-dimensional vectors.
+   */
+  ROOSTER_EMBEDDING_URL: z.url().optional(),
+  ROOSTER_EMBEDDING_API_KEY: z.string().optional(),
+  ROOSTER_EMBEDDING_MODEL: z.string().optional(),
+
+  /**
+   * Dimensionality of the embedding vectors, matching the configured model
+   * (text-embedding-3-small = 1536; Cloudflare bge-large = 1024). Sizes the
+   * libSQL `F32_BLOB(<dims>)` column, which is created at connect time — so this
+   * is read even when no embedder is configured. Changing it on an existing
+   * database requires dropping the `embeddings` table (it then recreates;
+   * re-embed via `backfill_embeddings`).
+   */
+  ROOSTER_EMBEDDING_DIMS: z.coerce.number().int().min(1).max(65_536).default(1536),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -145,6 +176,16 @@ export interface RoosterConfig {
     /** TTL (seconds) for the resolved-actor cache; 0 disables it. */
     actorCacheTtlSeconds: number
   }
+  /**
+   * Optional public roadmap. Present only when both the workspace slug and the
+   * project key are configured; the `/roadmap` page then renders that project's
+   * tickets publicly. `title` overrides the default heading.
+   */
+  roadmap?: {
+    orgSlug: string
+    projectKey: string
+    title?: string
+  }
   /** Outbound notifications. `crowWebhookUrl` unset = crow is audit-only. */
   notifications: {
     crowWebhookUrl?: string
@@ -155,6 +196,22 @@ export interface RoosterConfig {
     /** Verified from-address for transactional email (e.g. `Rooster <no-reply@…>`). */
     emailFrom?: string
   }
+  /**
+   * Optional embeddings provider for semantic search. Present only when both the
+   * URL and API key are configured; otherwise semantic search is unconfigured.
+   */
+  embedding?: {
+    url: string
+    apiKey: string
+    /** Embedding model name (default `text-embedding-3-small`). */
+    model: string
+  }
+  /**
+   * Dimensionality of stored embedding vectors. Always present (default 1536) —
+   * it sizes the runtime-created `embeddings` table even when no embedder is
+   * configured, so it must match whatever model the embedder uses.
+   */
+  embeddingDims: number
 }
 
 function provider(id?: string, secret?: string): OAuthProvider | undefined {
@@ -185,6 +242,39 @@ export function loadConfig(
       'Invalid Rooster environment configuration:\n  - ROOSTER_ADMIN_EMAIL and ROOSTER_ADMIN_PASSWORD must be set together',
     )
   }
+  // The public roadmap needs both the workspace and the project to resolve a
+  // target; requiring both together avoids a half-configured, never-rendering
+  // page.
+  if (Boolean(env.ROOSTER_ROADMAP_ORG_SLUG) !== Boolean(env.ROOSTER_ROADMAP_PROJECT_KEY)) {
+    throw new Error(
+      'Invalid Rooster environment configuration:\n  - ROOSTER_ROADMAP_ORG_SLUG and ROOSTER_ROADMAP_PROJECT_KEY must be set together',
+    )
+  }
+  const roadmap =
+    env.ROOSTER_ROADMAP_ORG_SLUG && env.ROOSTER_ROADMAP_PROJECT_KEY
+      ? {
+          orgSlug: env.ROOSTER_ROADMAP_ORG_SLUG,
+          projectKey: env.ROOSTER_ROADMAP_PROJECT_KEY.toUpperCase(),
+          title: env.ROOSTER_ROADMAP_TITLE,
+        }
+      : undefined
+
+  // Embeddings need both an endpoint and a key to call out; requiring both
+  // together avoids a half-configured provider that silently no-ops.
+  if (Boolean(env.ROOSTER_EMBEDDING_URL) !== Boolean(env.ROOSTER_EMBEDDING_API_KEY)) {
+    throw new Error(
+      'Invalid Rooster environment configuration:\n  - ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY must be set together',
+    )
+  }
+  const embedding =
+    env.ROOSTER_EMBEDDING_URL && env.ROOSTER_EMBEDDING_API_KEY
+      ? {
+          url: env.ROOSTER_EMBEDDING_URL,
+          apiKey: env.ROOSTER_EMBEDDING_API_KEY,
+          model: env.ROOSTER_EMBEDDING_MODEL ?? 'text-embedding-3-small',
+        }
+      : undefined
+
   const admin =
     env.ROOSTER_ADMIN_EMAIL && env.ROOSTER_ADMIN_PASSWORD
       ? {
@@ -230,11 +320,14 @@ export function loadConfig(
       rateLimitPerMinute: env.ROOSTER_MCP_RATE_LIMIT_PER_MINUTE,
       actorCacheTtlSeconds: env.ROOSTER_MCP_ACTOR_CACHE_TTL_SECONDS,
     },
+    roadmap,
     notifications: {
       crowWebhookUrl: env.ROOSTER_CROW_WEBHOOK_URL,
       emailWebhookUrl: env.ROOSTER_EMAIL_WEBHOOK_URL,
       emailResendApiKey: env.RESEND_API_KEY,
       emailFrom: env.ROOSTER_EMAIL_FROM,
     },
+    embedding,
+    embeddingDims: env.ROOSTER_EMBEDDING_DIMS,
   }
 }
