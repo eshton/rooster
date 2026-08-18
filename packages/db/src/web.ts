@@ -10,3 +10,4 @@ export { createLibsqlWebDatabase, createLibsqlWebDrizzle } from './drivers/libsq
 export { createRepositories } from './repositories/impl.js'
 export type * from './repositories.js'
 export { sqliteSchema } from './schema/sqlite.js'
+export { ensureEmbeddingsStore } from './vector.js'
