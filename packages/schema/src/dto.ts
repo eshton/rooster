@@ -218,6 +218,28 @@ export const recallContextInput = z.object({
 })
 export type RecallContextInput = z.infer<typeof recallContextInput>
 
+/** The kinds of source `rag_search` can retrieve and cite. */
+export const ragSourceTypeSchema = z.enum(['ticket', 'message', 'context_file'])
+export type RagSourceTypeDto = z.infer<typeof ragSourceTypeSchema>
+
+/**
+ * Grounded retrieval over the org's corpus (tickets, conversation messages,
+ * context files) via hybrid keyword+semantic search. Returns ranked, cited hits
+ * plus a ready-to-ground context block. Optional filters narrow the corpus.
+ */
+export const ragSearchInput = z.object({
+  query: z.string().min(1).max(1000),
+  /** Restrict to a single project. */
+  projectId: idSchema.optional(),
+  /** Restrict to sources tied to one ticket (the ticket, its messages, its docs). */
+  ticketId: idSchema.optional(),
+  /** Restrict to these source kinds (default: all the caller may read). */
+  sourceTypes: z.array(ragSourceTypeSchema).min(1).optional(),
+  /** Max cited results (1–50, default 8). */
+  limit: z.number().int().min(1).max(50).optional(),
+})
+export type RagSearchInput = z.infer<typeof ragSearchInput>
+
 /** Add or remove a co-assignee (shared ownership) on a ticket. */
 export const assigneeRefInput = z.object({
   ticketId: idSchema,

@@ -698,3 +698,33 @@ describe('runTool error handling', () => {
     expect(res.content[0].text).toBe('[not_found] Project 123 not found')
   })
 })
+
+describe('rag_search tool', () => {
+  it('returns cited hits and a context block (keyword-only, no embedder)', async () => {
+    const team = await services.teams.create(owner, { key: 'ROOST', name: 'Roost' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'ROOST',
+      name: 'Henhouse',
+    })
+    const t = payload(
+      (await call('create_ticket', {
+        projectId: project.id,
+        title: 'Fix OAuth token refresh',
+        description: 'sessions dropped by the PKCE server',
+      })) as never,
+    )
+
+    const res = payload(
+      (await call('rag_search', { query: 'OAuth refresh', limit: 5 })) as never,
+    ) as {
+      hits: Array<{ sourceType: string; sourceKey: string }>
+      contextBlock: string
+    }
+
+    expect(res.hits.length).toBeGreaterThan(0)
+    expect(res.hits[0].sourceType).toBe('ticket')
+    expect(res.hits.some((h) => h.sourceKey === t.key)).toBe(true)
+    expect(res.contextBlock).toContain(t.key)
+  })
+})

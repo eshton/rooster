@@ -27,6 +27,7 @@ import {
   linkTicketsInput,
   listContextFilesInput,
   moveTicketInput,
+  ragSearchInput,
   recallContextInput,
   recallConversationsInput,
   registerAgentInput,
@@ -568,6 +569,22 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: recallContextInput.shape,
     },
     async (args) => runTool(() => services.contextFiles.recall(actor, args)),
+  )
+
+  server.registerTool(
+    'rag_search',
+    {
+      title: 'RAG search (grounded retrieval)',
+      description:
+        'Grounded retrieval for RAG: hybrid keyword+semantic search across your workspace corpus ' +
+        '(tickets, conversation traces, context files), returning ranked, cited hits plus a ' +
+        'ready-to-ground `contextBlock` you can paste straight into a prompt. Optionally narrow by ' +
+        '`projectId`, `ticketId`, or `sourceTypes`. Retrieval only — YOU generate the answer from ' +
+        'the returned context. Works without embeddings (keyword-only); message/context_file hits ' +
+        'require the conversation:read scope.',
+      inputSchema: ragSearchInput.shape,
+    },
+    async (args) => runTool(() => services.search.rag(actor, args)),
   )
 
   server.registerTool(

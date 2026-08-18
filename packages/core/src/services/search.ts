@@ -3,7 +3,8 @@ import type { Actor } from '../actor.js'
 import type { Embedder } from '../notify.js'
 import { authorize, can } from '../permissions.js'
 import { reciprocalRankFusion } from '../rag.js'
-import type { Id } from './deps.js'
+import { parse } from '../validate.js'
+import { type Id, type RagSearchInput, ragSearchInput } from './deps.js'
 
 /** Embedding `source_type` discriminators (mirror the per-service constants). */
 export const RAG_SOURCE_TYPES = ['ticket', 'message', 'context_file'] as const
@@ -28,6 +29,27 @@ export interface HybridSearchInput {
   limit?: number
 }
 
+/** A resolved, cited retrieval hit ready to ground an answer. */
+export interface RagHit {
+  sourceType: RagSourceType
+  /** Human locator: ticket key, `TICKET#stage` for a message, or a doc name. */
+  sourceKey: string
+  /** Project key the source belongs to (for the agent to navigate). */
+  projectKey: string
+  /** The ticket this source is tied to, when applicable. */
+  ticketId?: Id
+  /** A short passage from the matched source, for grounding + relevance judging. */
+  snippet: string
+  /** RRF fusion score; higher = more relevant. */
+  score: number
+}
+
+export interface RagSearchResult {
+  hits: RagHit[]
+  /** The hits pre-formatted with citation markers, ready to paste into a prompt. */
+  contextBlock: string
+}
+
 export interface SearchService {
   /**
    * Hybrid retrieval over the org's embedded corpus: fuse the FTS/keyword arm
@@ -37,6 +59,17 @@ export interface SearchService {
    * scoped to what the actor may read.
    */
   hybrid(actor: Actor, input: HybridSearchInput): Promise<HybridHit[]>
+  /**
+   * Grounded RAG retrieval: {@link hybrid} + resolve each hit to a citation
+   * (source key, project, snippet), apply project/ticket filters, and assemble a
+   * ready-to-ground context block. Retrieval only — the caller generates.
+   */
+  rag(actor: Actor, input: RagSearchInput): Promise<RagSearchResult>
+}
+
+/** Collapse whitespace and cap a source's text into a citation snippet. */
+function snippetOf(text: string, max = 240): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 const DEFAULT_OVERFETCH = 5
@@ -94,6 +127,81 @@ export function createSearchService(
       return reciprocalRankFusion([vectorArm, keywordArm])
         .slice(0, limit)
         .map((f) => ({ sourceType: f.item.sourceType, sourceId: f.item.sourceId, score: f.score }))
+    },
+
+    async rag(actor, rawInput) {
+      authorize(actor, 'ticket:read')
+      const input = parse(ragSearchInput, rawInput)
+      const limit = Math.min(Math.max(input.limit ?? 8, 1), 50)
+
+      // Over-fetch fused candidates, then resolve + filter down to `limit`:
+      // project/ticket filters need the resolved source rows.
+      const pool = await this.hybrid(actor, {
+        query: input.query,
+        sourceTypes: input.sourceTypes,
+        limit: limit * Math.max(1, Math.floor(overfetch)),
+      })
+
+      const projectKeyOf = async (projectId: Id): Promise<string> =>
+        (await repos.projects.getById(actor.orgId, projectId))?.key ?? ''
+
+      const resolve = async (h: HybridHit): Promise<RagHit | null> => {
+        if (h.sourceType === 'ticket') {
+          const t = await repos.tickets.getById(actor.orgId, h.sourceId)
+          if (!t) return null
+          if (input.projectId && t.projectId !== input.projectId) return null
+          if (input.ticketId && t.id !== input.ticketId) return null
+          return {
+            sourceType: 'ticket',
+            sourceKey: t.key,
+            projectKey: await projectKeyOf(t.projectId),
+            ticketId: t.id,
+            snippet: snippetOf(`${t.title}\n${t.description ?? ''}`),
+            score: h.score,
+          }
+        }
+        if (h.sourceType === 'message') {
+          const m = await repos.conversation.getById(actor.orgId, h.sourceId)
+          if (!m) return null
+          if (input.ticketId && m.ticketId !== input.ticketId) return null
+          const t = await repos.tickets.getById(actor.orgId, m.ticketId)
+          if (input.projectId && t?.projectId !== input.projectId) return null
+          return {
+            sourceType: 'message',
+            sourceKey: t ? `${t.key}#${m.stage}` : m.id,
+            projectKey: t ? await projectKeyOf(t.projectId) : '',
+            ticketId: m.ticketId,
+            snippet: snippetOf(m.body),
+            score: h.score,
+          }
+        }
+        // context_file
+        const cf = await repos.contextFiles.getById(actor.orgId, h.sourceId)
+        if (!cf) return null
+        if (input.projectId && cf.projectId !== input.projectId) return null
+        if (input.ticketId && cf.ticketId !== input.ticketId) return null
+        return {
+          sourceType: 'context_file',
+          sourceKey: cf.name,
+          projectKey: await projectKeyOf(cf.projectId),
+          ticketId: cf.ticketId ?? undefined,
+          snippet: snippetOf(`${cf.name}\n${cf.body}`),
+          score: h.score,
+        }
+      }
+
+      const hits: RagHit[] = []
+      for (const h of pool) {
+        const r = await resolve(h)
+        if (r) hits.push(r)
+        if (hits.length >= limit) break
+      }
+
+      const contextBlock = hits
+        .map((h, i) => `[${i + 1}] (${h.sourceKey}) ${h.snippet}`)
+        .join('\n\n')
+
+      return { hits, contextBlock }
     },
   }
 }
