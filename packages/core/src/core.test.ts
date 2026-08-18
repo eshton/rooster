@@ -4,7 +4,13 @@ import type { Role } from '@rooster/schema'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Actor } from './actor.js'
 import { InMemoryActorCache } from './cache.js'
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from './errors.js'
+import {
+  ConflictError,
+  ForbiddenError,
+  InternalError,
+  NotFoundError,
+  ValidationError,
+} from './errors.js'
 import type { CrowEvent, NotificationEvent } from './notify.js'
 import { provisionTenant } from './onboarding.js'
 import { authorize, can } from './permissions.js'
@@ -1164,6 +1170,39 @@ describe('createMany', () => {
     expect(created.map((t) => t.title)).toEqual(['resilient'])
     expect(append).toHaveBeenCalledTimes(2) // failed once, retried, succeeded
     append.mockRestore()
+  })
+
+  it('reports a partial commit with a sanitized error when retries are exhausted', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+
+    // A persistent transient-style failure on the audit insert: the ticket row
+    // still lands (no transaction), but every retry of its audit write fails.
+    const append = vi.spyOn(db.repositories.audit, 'append').mockImplementation(() => {
+      throw new Error('Failed query: insert into "audit_log" (...) values (?, ?); params: secret')
+    })
+
+    let caught: unknown
+    try {
+      await services.tickets.createMany(owner, {
+        tickets: [{ projectId: project.id, title: 'lands anyway', priority: 'none', labels: [] }],
+      })
+    } catch (err) {
+      caught = err
+    }
+    append.mockRestore()
+
+    // Surfaced as a sanitized InternalError naming how far the batch got — never
+    // the raw SQL/params.
+    expect(caught).toBeInstanceOf(InternalError)
+    const message = (caught as InternalError).message
+    expect(message).toContain('0 of 1')
+    expect(message).toContain('idempotencyKeys')
+    expect(message).not.toContain('audit_log')
+
+    // Honest report: the ticket itself did persist (no transaction to roll back).
+    const persisted = await services.tickets.list(owner, project.id)
+    expect(persisted.map((t) => t.title)).toEqual(['lands anyway'])
   })
 })
 
