@@ -300,11 +300,14 @@ export function loadConfig(
         }
       : undefined
 
-  // Embeddings need both an endpoint and a key to call out; requiring both
-  // together avoids a half-configured provider that silently no-ops.
+  // Embeddings are an OPTIONAL feature. A half-set pair is a mistake worth
+  // flagging, but must NOT be fatal — a thrown config error here crashes the
+  // whole server (all routes, healthz included), which is far worse than semantic
+  // search being off. So warn and disable, don't throw.
   if (Boolean(env.ROOSTER_EMBEDDING_URL) !== Boolean(env.ROOSTER_EMBEDDING_API_KEY)) {
-    throw new Error(
-      'Invalid Rooster environment configuration:\n  - ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY must be set together',
+    console.warn(
+      '[config] ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY must be set together; ' +
+        'only one is set, so semantic search is DISABLED. Set both to enable it.',
     )
   }
   const embedding =
@@ -316,9 +319,11 @@ export function loadConfig(
         }
       : undefined
 
+  // Same for the optional reranker — warn + disable, never fatal.
   if (Boolean(env.ROOSTER_RERANK_URL) !== Boolean(env.ROOSTER_RERANK_API_KEY)) {
-    throw new Error(
-      'Invalid Rooster environment configuration:\n  - ROOSTER_RERANK_URL and ROOSTER_RERANK_API_KEY must be set together',
+    console.warn(
+      '[config] ROOSTER_RERANK_URL and ROOSTER_RERANK_API_KEY must be set together; ' +
+        'only one is set, so reranking is DISABLED (rag_search keeps its fusion order).',
     )
   }
   const rerank =
