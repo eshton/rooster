@@ -69,6 +69,7 @@ export async function createServerContext(
     crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
     embedder: embedderFor(config),
     chunkConfig: config.chunking,
+    ragOverfetch: config.ragOverfetch,
   })
   const auth = createAuth({
     config,

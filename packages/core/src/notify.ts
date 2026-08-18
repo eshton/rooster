@@ -59,4 +59,6 @@ export interface ServiceDeps {
   embedder?: Embedder
   /** Chunking parameters for embeddings; defaults applied when absent. */
   chunkConfig?: ChunkConfig
+  /** ANN/FTS over-fetch multiplier for hybrid retrieval (default 5). */
+  ragOverfetch?: number
 }

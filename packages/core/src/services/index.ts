@@ -12,6 +12,7 @@ import { createMemberService, type MemberService } from './members.js'
 import { createMilestoneService, type MilestoneService } from './milestones.js'
 import { createOrgService, type OrgService } from './orgs.js'
 import { createProjectService, type ProjectService } from './projects.js'
+import { createSearchService, type SearchService } from './search.js'
 import { createTeamService, type TeamService } from './teams.js'
 import { createTicketService, type TicketService } from './tickets.js'
 import { createWatcherService, type WatcherService } from './watchers.js'
@@ -24,6 +25,7 @@ export interface Services {
   comments: CommentService
   conversation: ConversationService
   contextFiles: ContextFileService
+  search: SearchService
   attachments: AttachmentService
   watchers: WatcherService
   milestones: MilestoneService
@@ -49,6 +51,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     comments: createCommentService(repos, deps.crowNotifier),
     conversation: createConversationService(repos, deps.embedder, deps.chunkConfig),
     contextFiles: createContextFileService(repos, deps.embedder, deps.chunkConfig),
+    search: createSearchService(repos, deps.embedder, deps.ragOverfetch),
     attachments: createAttachmentService(repos),
     watchers: createWatcherService(repos),
     milestones: createMilestoneService(repos),
@@ -72,6 +75,7 @@ export type {
   MilestoneService,
   OrgService,
   ProjectService,
+  SearchService,
   TeamService,
   TicketService,
   WatcherService,

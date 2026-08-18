@@ -127,6 +127,13 @@ const envSchema = z.object({
    */
   ROOSTER_CHUNK_SIZE: z.coerce.number().int().min(1).max(100_000).default(1200),
   ROOSTER_CHUNK_OVERLAP: z.coerce.number().int().min(0).max(100_000).default(200),
+
+  /**
+   * Over-fetch multiplier for hybrid retrieval (ROO-37): each arm (FTS + vector)
+   * pulls `limit × this` candidates before fusion, to offset the libSQL ANN
+   * post-filter recall loss. Higher = better recall, more work.
+   */
+  ROOSTER_RAG_OVERFETCH: z.coerce.number().int().min(1).max(100).default(5),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -225,6 +232,8 @@ export interface RoosterConfig {
     size: number
     overlap: number
   }
+  /** Over-fetch multiplier for hybrid retrieval arms before RRF fusion. */
+  ragOverfetch: number
 }
 
 function provider(id?: string, secret?: string): OAuthProvider | undefined {
@@ -355,5 +364,6 @@ export function loadConfig(
     embedding,
     embeddingDims: env.ROOSTER_EMBEDDING_DIMS,
     chunking,
+    ragOverfetch: env.ROOSTER_RAG_OVERFETCH,
   }
 }
