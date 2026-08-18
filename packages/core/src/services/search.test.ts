@@ -185,4 +185,33 @@ describe('rag_search — grounded retrieval (ROO-38)', () => {
     // sanity: the org actually had a matching ticket in the other project
     expect(org.id).toBeDefined()
   })
+
+  it('quotes the matched passage, not the document head (ROO-40)', async () => {
+    // Small chunks so a modest body splits; "delta" lives only in a later chunk.
+    const svc = createServices(db.repositories, {
+      embedder: fakeEmbedder,
+      ragOverfetch: 5,
+      chunkConfig: { size: 50, overlap: 10 },
+    })
+    const { org, founder } = await svc.orgs.bootstrap({
+      org: { slug: 'psg', name: 'Psg', enrollmentPolicy: 'token' },
+      founder: { displayName: 'Ada', email: 'ada@psg.test', name: 'Ada', avatarUrl: null },
+    })
+    const owner = await svc.resolveActor({ orgId: org.id, principalId: founder.id })
+    const team = await svc.teams.create(owner, { key: 'PSG', name: 'Psg' })
+    const project = await svc.projects.create(owner, { teamId: team.id, key: 'PSG', name: 'P' })
+
+    await svc.contextFiles.save(owner, {
+      projectId: project.id,
+      name: 'notes',
+      body: `${'zzz '.repeat(30)}the delta signal lives here`,
+    })
+
+    const res = await svc.search.rag(owner, { query: 'delta', limit: 5 })
+    const hit = res.hits.find((h) => h.sourceType === 'context_file')
+    expect(hit).toBeDefined()
+    // Passage-accurate: quotes the "delta" region from deep in the doc, not the head.
+    expect(hit?.snippet).toContain('delta')
+    expect(hit?.chunk?.start).toBeGreaterThan(0)
+  })
 })
