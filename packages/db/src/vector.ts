@@ -15,10 +15,15 @@ export const VECTOR_INDEX_NAME = 'embeddings_vec_idx'
  *
  * Best-effort: if the build predates native vectors (no `F32_BLOB` /
  * `libsql_vector_idx`), failures are swallowed and semantic search simply stays
- * unavailable. The `IF NOT EXISTS` guards make it safe to run on every connect.
+ * unavailable. The `IF NOT EXISTS` guards make it safe to run on every connect —
+ * so it runs on BOTH the Node/`db:migrate` path and the Cloudflare Worker cold
+ * start, making the app's `ROOSTER_EMBEDDING_DIMS` the single source of truth for
+ * the table size (ROO-41).
  *
  * Changing `dims` on an existing database has no effect here (the table already
- * exists) — drop the `embeddings` table manually to resize, then re-embed via
+ * exists) — `CREATE TABLE IF NOT EXISTS` won't resize it. Such a mismatch would
+ * otherwise fail every insert silently, so it is detected and logged loudly here;
+ * drop the `embeddings` table to recreate it at the new size, then re-embed via
  * `backfill_embeddings`.
  */
 export async function ensureEmbeddingsStore(
@@ -71,6 +76,26 @@ export async function ensureEmbeddingsStore(
         `CREATE INDEX IF NOT EXISTS ${VECTOR_INDEX_NAME} ON embeddings (libsql_vector_idx(embedding))`,
       ),
     )
+
+    // If the table already existed at a different vector width, the CREATE above
+    // was a no-op (SQLite can't resize a column), so every insert will fail on a
+    // dimension mismatch. Surface it loudly instead of silently — this is the
+    // failure mode that made a misconfigured deploy look like it worked.
+    try {
+      const rows = (await db.all(
+        sql.raw("SELECT sql FROM sqlite_master WHERE type='table' AND name='embeddings'"),
+      )) as Array<{ sql: string | null }>
+      const found = (rows[0]?.sql ?? '').match(/F32_BLOB\((\d+)\)/i)
+      if (found && Number(found[1]) !== n) {
+        console.error(
+          `[embeddings] table is F32_BLOB(${found[1]}) but ROOSTER_EMBEDDING_DIMS=${n}. ` +
+            'Every embedding insert will fail on a dimension mismatch. Drop the "embeddings" ' +
+            'table so it recreates at the configured size, then run backfill_embeddings.',
+        )
+      }
+    } catch {
+      // schema probe is best-effort.
+    }
   } catch {
     // Intentionally ignored — see the doc comment.
   }
