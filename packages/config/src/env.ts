@@ -134,6 +134,15 @@ const envSchema = z.object({
    * post-filter recall loss. Higher = better recall, more work.
    */
   ROOSTER_RAG_OVERFETCH: z.coerce.number().int().min(1).max(100).default(5),
+
+  /**
+   * Optional cross-encoder reranker for rag_search (ROO-39). A Cloudflare Workers
+   * AI bge-reranker run endpoint (…/ai/run/@cf/baai/bge-reranker-base) + API key.
+   * Set both or neither; absent = fusion order stands.
+   */
+  ROOSTER_RERANK_URL: z.url().optional(),
+  ROOSTER_RERANK_API_KEY: z.string().optional(),
+  ROOSTER_RERANK_MODEL: z.string().optional(),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -234,6 +243,16 @@ export interface RoosterConfig {
   }
   /** Over-fetch multiplier for hybrid retrieval arms before RRF fusion. */
   ragOverfetch: number
+  /**
+   * Optional reranker provider for rag_search. Present only when both URL and
+   * key are configured; otherwise rag_search keeps its fusion order.
+   */
+  rerank?: {
+    url: string
+    apiKey: string
+    /** Reranker model name (default `@cf/baai/bge-reranker-base`). */
+    model: string
+  }
 }
 
 function provider(id?: string, secret?: string): OAuthProvider | undefined {
@@ -294,6 +313,20 @@ export function loadConfig(
           url: env.ROOSTER_EMBEDDING_URL,
           apiKey: env.ROOSTER_EMBEDDING_API_KEY,
           model: env.ROOSTER_EMBEDDING_MODEL ?? 'text-embedding-3-small',
+        }
+      : undefined
+
+  if (Boolean(env.ROOSTER_RERANK_URL) !== Boolean(env.ROOSTER_RERANK_API_KEY)) {
+    throw new Error(
+      'Invalid Rooster environment configuration:\n  - ROOSTER_RERANK_URL and ROOSTER_RERANK_API_KEY must be set together',
+    )
+  }
+  const rerank =
+    env.ROOSTER_RERANK_URL && env.ROOSTER_RERANK_API_KEY
+      ? {
+          url: env.ROOSTER_RERANK_URL,
+          apiKey: env.ROOSTER_RERANK_API_KEY,
+          model: env.ROOSTER_RERANK_MODEL ?? '@cf/baai/bge-reranker-base',
         }
       : undefined
 
@@ -365,5 +398,6 @@ export function loadConfig(
     embeddingDims: env.ROOSTER_EMBEDDING_DIMS,
     chunking,
     ragOverfetch: env.ROOSTER_RAG_OVERFETCH,
+    rerank,
   }
 }
