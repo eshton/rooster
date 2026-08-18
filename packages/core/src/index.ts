@@ -17,6 +17,8 @@ export type {
 export type {
   HybridHit,
   HybridSearchInput,
+  RagHit,
+  RagSearchResult,
   RagSourceType,
 } from './services/search.js'
 export { RAG_SOURCE_TYPES } from './services/search.js'

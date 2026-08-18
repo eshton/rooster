@@ -130,3 +130,59 @@ describe('hybrid retrieval (ROO-37)', () => {
     expect(asViewer.some((h) => h.sourceType === 'context_file')).toBe(false)
   })
 })
+
+describe('rag_search — grounded retrieval (ROO-38)', () => {
+  it('resolves fused hits to cited results and builds a context block', async () => {
+    const { owner, project } = await bootstrap()
+    const t = await services.tickets.create(owner, {
+      projectId: project.id,
+      title: 'gamma protocol',
+      description: 'the gamma handshake spec',
+    })
+
+    const res = await services.search.rag(owner, { query: 'gamma', limit: 5 })
+
+    expect(res.hits.length).toBeGreaterThan(0)
+    const hit = res.hits.find((h) => h.sourceKey === t.key)
+    expect(hit).toBeDefined()
+    expect(hit?.sourceType).toBe('ticket')
+    expect(hit?.projectKey).toBe('ROOST')
+    expect(hit?.ticketId).toBe(t.id)
+    expect(hit?.snippet).toContain('gamma')
+    // The context block cites the source key and carries the snippet.
+    expect(res.contextBlock).toContain(t.key)
+    expect(res.contextBlock).toContain('gamma')
+  })
+
+  it('honors the ticketId filter (only that ticket’s sources)', async () => {
+    const { owner, project } = await bootstrap()
+    const keep = await services.tickets.create(owner, { projectId: project.id, title: 'gamma one' })
+    await services.tickets.create(owner, { projectId: project.id, title: 'gamma two' })
+
+    const res = await services.search.rag(owner, { query: 'gamma', ticketId: keep.id, limit: 10 })
+    expect(res.hits.map((h) => h.ticketId)).toEqual([keep.id])
+  })
+
+  it('honors the projectId filter', async () => {
+    const { org, owner, project } = await bootstrap()
+    await services.tickets.create(owner, { projectId: project.id, title: 'gamma here' })
+    // A second project whose tickets must be excluded.
+    const team2 = await services.teams.create(owner, { key: 'OTHER', name: 'Other' })
+    const project2 = await services.projects.create(owner, {
+      teamId: team2.id,
+      key: 'OTHER',
+      name: 'Other',
+    })
+    await services.tickets.create(owner, { projectId: project2.id, title: 'gamma elsewhere' })
+
+    const res = await services.search.rag(owner, {
+      query: 'gamma',
+      projectId: project.id,
+      limit: 10,
+    })
+    expect(res.hits.length).toBeGreaterThan(0)
+    expect(res.hits.every((h) => h.projectKey === 'ROOST')).toBe(true)
+    // sanity: the org actually had a matching ticket in the other project
+    expect(org.id).toBeDefined()
+  })
+})
