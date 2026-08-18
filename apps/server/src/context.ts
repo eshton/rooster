@@ -6,6 +6,7 @@ import pg from 'pg'
 import { webhookCrowNotifier } from './crow-webhook.js'
 import { emailSenderFor } from './email.js'
 import { embedderFor } from './embedder-http.js'
+import { rerankerFor } from './reranker-http.js'
 
 type AuthDatabase = Parameters<typeof createAuth>[0]['database']
 
@@ -70,6 +71,7 @@ export async function createServerContext(
     embedder: embedderFor(config),
     chunkConfig: config.chunking,
     ragOverfetch: config.ragOverfetch,
+    reranker: rerankerFor(config),
   })
   const auth = createAuth({
     config,

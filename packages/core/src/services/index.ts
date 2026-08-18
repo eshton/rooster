@@ -51,7 +51,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     comments: createCommentService(repos, deps.crowNotifier),
     conversation: createConversationService(repos, deps.embedder, deps.chunkConfig),
     contextFiles: createContextFileService(repos, deps.embedder, deps.chunkConfig),
-    search: createSearchService(repos, deps.embedder, deps.ragOverfetch),
+    search: createSearchService(repos, deps.embedder, deps.ragOverfetch, deps.reranker),
     attachments: createAttachmentService(repos),
     watchers: createWatcherService(repos),
     milestones: createMilestoneService(repos),

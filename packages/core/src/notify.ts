@@ -53,6 +53,19 @@ export interface Embedder {
   embed(texts: string[]): Promise<number[][]>
 }
 
+/**
+ * Optional cross-encoder reranker seam. Given a query and candidate documents,
+ * returns a relevance score per document (aligned by input index; higher = more
+ * relevant) so retrieval can re-order fused candidates by direct query↔passage
+ * relevance. Absent by default (no-op — fusion order stands). A concrete impl
+ * (e.g. Cloudflare Workers AI bge-reranker) is wired at the deployable.
+ */
+export interface Reranker {
+  /** Model identifier (for observability). */
+  readonly model: string
+  rerank(query: string, documents: string[]): Promise<number[]>
+}
+
 /** Optional dependencies injected into the service layer. */
 export interface ServiceDeps {
   crowNotifier?: CrowNotifier
@@ -61,4 +74,6 @@ export interface ServiceDeps {
   chunkConfig?: ChunkConfig
   /** ANN/FTS over-fetch multiplier for hybrid retrieval (default 5). */
   ragOverfetch?: number
+  /** Optional reranker for rag_search precision; fusion order stands when absent. */
+  reranker?: Reranker
 }

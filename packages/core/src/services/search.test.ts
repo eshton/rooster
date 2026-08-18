@@ -186,6 +186,76 @@ describe('rag_search — grounded retrieval (ROO-38)', () => {
     expect(org.id).toBeDefined()
   })
 
+  it('applies a reranker to re-order results, and falls back to fusion order without one', async () => {
+    // Reranker promotes any candidate whose snippet carries the marker.
+    const reranker = {
+      model: 'fake-rerank',
+      async rerank(_q: string, docs: string[]) {
+        return docs.map((d) => (d.includes('PRIORITYMARK') ? 1 : 0))
+      },
+    }
+    const svc = createServices(db.repositories, {
+      embedder: fakeEmbedder,
+      ragOverfetch: 5,
+      reranker,
+    })
+    const { org, founder } = await svc.orgs.bootstrap({
+      org: { slug: 'rrk', name: 'Rrk', enrollmentPolicy: 'token' },
+      founder: { displayName: 'Ada', email: 'ada@rrk.test', name: 'Ada', avatarUrl: null },
+    })
+    const owner = await svc.resolveActor({ orgId: org.id, principalId: founder.id })
+    const team = await svc.teams.create(owner, { key: 'RRK', name: 'Rrk' })
+    const project = await svc.projects.create(owner, { teamId: team.id, key: 'RRK', name: 'P' })
+
+    await svc.tickets.create(owner, { projectId: project.id, title: 'gamma alpha' })
+    await svc.tickets.create(owner, { projectId: project.id, title: 'gamma beta' })
+    const marked = await svc.tickets.create(owner, {
+      projectId: project.id,
+      title: 'gamma PRIORITYMARK zed',
+    })
+
+    const reranked = await svc.search.rag(owner, { query: 'gamma', limit: 3 })
+    expect(reranked.hits[0]?.sourceKey).toBe(marked.key) // reranker promoted it
+
+    // Same corpus, no reranker → fusion order (the marked ticket is not first).
+    const noRerank = createServices(db.repositories, { embedder: fakeEmbedder, ragOverfetch: 5 })
+    const ownerNo = await noRerank.resolveActor({ orgId: org.id, principalId: owner.principalId })
+    const fused = await noRerank.search.rag(ownerNo, { query: 'gamma', limit: 3 })
+    expect(fused.hits[0]?.sourceKey).not.toBe(marked.key)
+  })
+
+  it('keeps fusion order when the reranker fails (best-effort)', async () => {
+    const reranker = {
+      model: 'boom',
+      async rerank() {
+        throw new Error('rerank provider down')
+      },
+    }
+    const svc = createServices(db.repositories, {
+      embedder: fakeEmbedder,
+      ragOverfetch: 5,
+      reranker,
+    })
+    const { org, founder } = await svc.orgs.bootstrap({
+      org: { slug: 'brk', name: 'Brk', enrollmentPolicy: 'token' },
+      founder: { displayName: 'Ada', email: 'ada@brk.test', name: 'Ada', avatarUrl: null },
+    })
+    const owner = await svc.resolveActor({ orgId: org.id, principalId: founder.id })
+    const team = await svc.teams.create(owner, { key: 'BRK', name: 'Brk' })
+    const project = await svc.projects.create(owner, { teamId: team.id, key: 'BRK', name: 'P' })
+    await svc.tickets.create(owner, { projectId: project.id, title: 'gamma one' })
+    await svc.tickets.create(owner, { projectId: project.id, title: 'gamma two' })
+
+    const res = await svc.search.rag(owner, { query: 'gamma', limit: 3 })
+    expect(res.hits.length).toBeGreaterThan(0) // did not throw
+
+    // Falls back to exactly the fusion order (same corpus, no reranker).
+    const noRerank = createServices(db.repositories, { embedder: fakeEmbedder, ragOverfetch: 5 })
+    const ownerNo = await noRerank.resolveActor({ orgId: org.id, principalId: owner.principalId })
+    const fused = await noRerank.search.rag(ownerNo, { query: 'gamma', limit: 3 })
+    expect(res.hits.map((h) => h.sourceKey)).toEqual(fused.hits.map((h) => h.sourceKey))
+  })
+
   it('quotes the matched passage, not the document head (ROO-40)', async () => {
     // Small chunks so a modest body splits; "delta" lives only in a later chunk.
     const svc = createServices(db.repositories, {

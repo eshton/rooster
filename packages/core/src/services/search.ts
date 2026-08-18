@@ -1,6 +1,6 @@
 import type { Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
-import type { Embedder } from '../notify.js'
+import type { Embedder, Reranker } from '../notify.js'
 import { authorize, can } from '../permissions.js'
 import { reciprocalRankFusion } from '../rag.js'
 import { parse } from '../validate.js'
@@ -97,11 +97,14 @@ function passageOf(
 }
 
 const DEFAULT_OVERFETCH = 5
+/** How many resolved candidates to rerank per requested result. */
+const RERANK_POOL_FACTOR = 4
 
 export function createSearchService(
   repos: Repositories,
   embedder?: Embedder,
   overfetch: number = DEFAULT_OVERFETCH,
+  reranker?: Reranker,
 ): SearchService {
   const key = (sourceType: string, sourceId: string) => `${sourceType}:${sourceId}`
 
@@ -235,13 +238,33 @@ export function createSearchService(
         }
       }
 
-      const hits: RagHit[] = []
+      // With a reranker, resolve a larger candidate pool to re-order; without,
+      // resolve just enough to fill `limit`.
+      const target = reranker ? Math.min(pool.length, limit * RERANK_POOL_FACTOR) : limit
+      const resolved: RagHit[] = []
       for (const h of pool) {
         const r = await resolve(h)
-        if (r) hits.push(r)
-        if (hits.length >= limit) break
+        if (r) resolved.push(r)
+        if (resolved.length >= target) break
       }
 
+      let ranked = resolved
+      if (reranker && resolved.length > 1) {
+        try {
+          const scores = await reranker.rerank(
+            input.query,
+            resolved.map((h) => h.snippet),
+          )
+          ranked = resolved
+            .map((h, i) => ({ h, score: scores[i] ?? Number.NEGATIVE_INFINITY }))
+            .sort((a, b) => b.score - a.score)
+            .map((x) => x.h)
+        } catch {
+          // best-effort: a rerank failure leaves the fusion order intact.
+        }
+      }
+
+      const hits = ranked.slice(0, limit)
       const contextBlock = hits
         .map((h, i) => `[${i + 1}] (${h.sourceKey}) ${h.snippet}`)
         .join('\n\n')
