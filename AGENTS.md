@@ -1,4 +1,4 @@
-# CLAUDE.md — working on Rooster
+# AGENTS.md — working on Rooster
 
 Orientation for an AI agent (or human) picking up Rooster. Read this first, then
 `README.md` (overview) and `docs/SELF_HOSTING.md` (running it). When you file or
@@ -19,13 +19,13 @@ Vercel / Cloudflare).
 
 **Rooster tracks its own development via its own MCP server** — the live
 instance at `https://app.airooster.dev` is connected as
-an MCP server in this Claude Code project. Workspace: **Rooster Dev**, project:
+an MCP server in this Codex project. Workspace: **Rooster Dev**, project:
 **Rooster** (ticket prefix `ROO-`).
 
 When picking up new work, check the backlog first:
 
 ```
-# Claude Code already has the rooster MCP server connected
+# Codex already has the rooster MCP server connected
 # Just ask: "list open ROOST tickets" or use the MCP tools directly
 ```
 
@@ -66,8 +66,8 @@ Not done yet (good next tasks):
    runs on Cloudflare Workers + Turso, so this is an alternative target, not a
    blocker.)
 2. **Broader deploy validation** — the Vercel + Postgres paths are built
-   production-shaped but not exercised in CI. (The Cloudflare Workers + Turso
-   path is live and **auto-deploys on merge to `main`** — see below.)
+   production-shaped but not exercised in CI; the Cloudflare Workers + Turso
+   path is live (see below).
 
 Audit `clientInfo` is captured at the `/mcp` route (`extractClientInfo`):
 structured MCP `initialize` clientInfo when present, else the HTTP `User-Agent`
@@ -77,15 +77,12 @@ Done since the original plan: marketing + docs sites (`apps/marketing`,
 `apps/docs`; Cloudflare Pages bundle via `pnpm build:web`), Docker
 (`apps/server/Dockerfile` + `docker-compose.yml`), per-agent MCP rate limiting,
 a **Cloudflare Workers** server entry (`apps/server/src/worker.ts` + the
-`@rooster/db/web` libSQL-HTTP driver), the **human SSR dashboard**
+`@rooster/db/web` libSQL-HTTP driver), and the **human SSR dashboard**
 (`apps/server/src/dashboard/`: email/password + OAuth login, org overview,
-project board, ticket detail, agent registry, audit viewer), and **CI/CD
-auto-deploy** — merges to `main` migrate Turso and deploy the Worker + Pages
-sites, with a post-deploy smoke check (`.github/workflows/ci.yml`
-`deploy-server` / `deploy-sites`, gated on the `production` environment).
+project board, ticket detail, agent registry, audit viewer).
 
 **The north-star milestone — achieved:** Rooster is deployed (Cloudflare Workers
-+ Turso, not the originally-planned Vercel + Postgres) and Claude Code's MCP
++ Turso, not the originally-planned Vercel + Postgres) and Codex's MCP
 client is connected to the live `/mcp` at `https://app.airooster.dev`, so Rooster
 now tracks its own development (project **ROO**, e.g. this ticket ROO-33).
 
@@ -248,5 +245,5 @@ verified.
 
 ## Git
 
-Work has been developed on `claude/tender-heisenberg-fp3gh3` and merged to
+Work has been developed on `Codex/tender-heisenberg-fp3gh3` and merged to
 `main`. Branch for new work; run `pnpm check` before committing.
