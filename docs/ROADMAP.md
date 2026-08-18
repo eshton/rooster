@@ -26,7 +26,7 @@ field", "Add an MCP tool").
 | 8 | Custom fields | extensibility | L | backlog |
 | 9 | Per-project configurable workflows | workflow | L | backlog |
 | 10 | Cross-workspace membership | identity | L | ✅ done |
-| 11 | CI auto-deploy on merge (ROO-13 follow-up) | infra | M | backlog |
+| 11 | CI auto-deploy on merge (ROO-13 follow-up) | infra | M | ✅ done |
 | 12 | Agent memory: conversation recall + context files + semantic search | agent-memory | L | ✅ done |
 
 ---
@@ -150,23 +150,24 @@ idempotent re-join) and `auth.test.ts` (multi-org resolution).
 **Not yet:** an MCP-side workspace selector (a token resolves to the home org
 only) and creating a *second* tenant from an already-onboarded account.
 
-## 11. CI auto-deploy on merge — `infra` · M
-**Why:** follow-up to ROO-13. CI now *verifies* every path (lint/build/test,
-Postgres migrations, migration-drift, pg-free Worker bundle), but deploying is
-still manual — which is exactly how the live Worker drifted behind `main`
-(stale base URL, then the markdown renderer not shipped). Verification without
-deployment leaves the "merged but not live" gap open.
-**Scope:** a GitHub Actions deploy workflow that, on push to `main` (after the
-verify jobs pass), (1) deploys the Worker via `wrangler deploy` using a
-`CLOUDFLARE_API_TOKEN` secret, (2) runs `db:migrate` against the production
-Turso DB so schema changes land with the code, (3) deploys the marketing +
-docs Pages bundle (`build:web` → `dist-web/`), and (4) post-deploy smoke-checks
-`/healthz`, `/.well-known/rooster` (asserting the base URL) and the OAuth
-discovery aliases. Gate prod steps on `main` + environment protection; keep
-secrets in GitHub Environments.
-**Deps:** builds on the CI verification jobs (ROO-13). Needs the Cloudflare
-API token + Turso credentials as repo/environment secrets.
-**Suggested:** label `roadmap,infra,ci,deploy`, priority `high`.
+## 11. CI auto-deploy on merge — `infra` · M · ✅ done
+**Why:** follow-up to ROO-13. CI *verified* every path but deploying was manual,
+which is how the live Worker drifted behind `main` (stale base URL, then the
+markdown renderer not shipped) — verification without deployment left a
+"merged but not live" gap.
+**Shipped:** two `.github/workflows/ci.yml` jobs, both `if` push-to-`main` +
+`environment: production` and gated on the verify matrix (`needs: [verify,
+migrations-in-sync, worker-bundle]` / `[verify, sites]`):
+- **`deploy-server`** — applies `db:migrate` then `auth:migrate` to Turso first
+  (schema lands before the new code serves), `wrangler deploy`s the Worker, then
+  post-deploy smoke-checks `/healthz`, `/.well-known/rooster` (asserting
+  `BASE_URL`), `/llms.txt` and both OAuth discovery aliases.
+- **`deploy-sites`** — `wrangler pages deploy`s the marketing + docs bundle.
+
+Secrets/vars live in the repo's `production` GitHub Environment
+(`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL`,
+`DATABASE_AUTH_TOKEN`, `ROOSTER_AUTH_SECRET`, `CLOUDFLARE_PAGES_PROJECT`); if
+unset the deploy jobs fail at their step while the verify matrix stays green.
 
 ## 12. Agent memory — `agent-memory` · L · ✅ done
 **Why:** agents are first-class principals, so they need durable memory across
