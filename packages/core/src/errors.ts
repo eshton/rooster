@@ -2,7 +2,7 @@
  * Typed domain errors. Transports (MCP, HTTP) map `code` to a protocol-level
  * status; the core never throws bare `Error` for expected failure modes.
  */
-export type CoreErrorCode = 'not_found' | 'forbidden' | 'validation' | 'conflict'
+export type CoreErrorCode = 'not_found' | 'forbidden' | 'validation' | 'conflict' | 'internal'
 
 export class CoreError extends Error {
   readonly code: CoreErrorCode
@@ -42,5 +42,16 @@ export class ValidationError extends CoreError {
 export class ConflictError extends CoreError {
   constructor(message: string) {
     super('conflict', message)
+  }
+}
+
+/**
+ * An unexpected infrastructure failure (e.g. a transient DB error) surfaced to
+ * the caller with a clean, sanitized message — never the raw driver error. Use
+ * this to wrap non-domain failures so transports can render a safe message.
+ */
+export class InternalError extends CoreError {
+  constructor(message: string) {
+    super('internal', message)
   }
 }

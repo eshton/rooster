@@ -1128,6 +1128,43 @@ describe('createMany', () => {
     // Nothing was written.
     expect(await services.tickets.list(owner, project.id)).toEqual([])
   })
+
+  it('rejects the whole batch (no writes) when a later entry references a missing project', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const missing = '00000000-0000-4000-8000-000000000000'
+
+    // Parse passes (valid uuid) but the reference check must fail up front,
+    // before the first (valid) entry is written — ROO-33's deterministic case.
+    await expect(
+      services.tickets.createMany(owner, {
+        tickets: [
+          { projectId: project.id, title: 'ok', priority: 'none', labels: [] },
+          { projectId: missing, title: 'orphan', priority: 'none', labels: [] },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+
+    expect(await services.tickets.list(owner, project.id)).toEqual([])
+  })
+
+  it('retries a transient audit-write failure and still commits the ticket', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+
+    // Fail the audit insert once (as in the ROO-33 report), then let it through.
+    const append = vi.spyOn(db.repositories.audit, 'append').mockImplementationOnce(() => {
+      throw new Error('SQLITE_BUSY: database is locked')
+    })
+
+    const created = await services.tickets.createMany(owner, {
+      tickets: [{ projectId: project.id, title: 'resilient', priority: 'none', labels: [] }],
+    })
+
+    expect(created.map((t) => t.title)).toEqual(['resilient'])
+    expect(append).toHaveBeenCalledTimes(2) // failed once, retried, succeeded
+    append.mockRestore()
+  })
 })
 
 describe('getContext', () => {

@@ -1,9 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { loadConfig } from '@rooster/config'
-import { type Actor, createServices, type Services } from '@rooster/core'
+import { type Actor, createServices, NotFoundError, type Services } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { runTool } from './result.js'
 import { createRoosterMcpServer } from './server.js'
 
 let db: Database
@@ -669,5 +670,31 @@ describe('MCP semantic search (embedder wired)', () => {
 
     await localClient.close()
     await localDb.close()
+  })
+})
+
+describe('runTool error handling', () => {
+  it('sanitizes unexpected errors so raw DB internals never reach the client', async () => {
+    const res = (await runTool(async () => {
+      // Shape mirrors the ROO-33 leak: a raw driver error with SQL + params.
+      throw new Error(
+        'Failed query: insert into "audit_log" ("id","org_id") values (?, ?) returning *; params: secret-uuid, 990a-org',
+      )
+    })) as { isError?: boolean; content: Array<{ text: string }> }
+
+    expect(res.isError).toBe(true)
+    const text = res.content[0].text
+    expect(text).toContain('Internal error')
+    expect(text).not.toContain('audit_log')
+    expect(text).not.toContain('params')
+  })
+
+  it('passes a domain error through with its code and message', async () => {
+    const res = (await runTool(async () => {
+      throw new NotFoundError('Project 123 not found')
+    })) as { isError?: boolean; content: Array<{ text: string }> }
+
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toBe('[not_found] Project 123 not found')
   })
 })

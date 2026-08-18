@@ -15,14 +15,17 @@ export function errorResult(message: string, code?: string) {
 
 /**
  * Run a tool body, returning its value as a JSON result. Expected domain
- * failures ({@link CoreError}) become clean `isError` results with the code;
- * anything unexpected propagates (the SDK turns it into a generic error).
+ * failures ({@link CoreError}) become clean `isError` results with the code.
+ * Anything unexpected (e.g. a raw DB driver error carrying SQL text + bound
+ * params — ROO-33) is logged server-side and replaced with a generic, sanitized
+ * message so internals never leak to the MCP client.
  */
 export async function runTool(fn: () => Promise<unknown>) {
   try {
     return jsonResult(await fn())
   } catch (err) {
     if (err instanceof CoreError) return errorResult(err.message, err.code)
-    throw err
+    console.error('[mcp] unexpected tool error:', err)
+    return errorResult('Internal error — the request could not be completed.', 'internal')
   }
 }
