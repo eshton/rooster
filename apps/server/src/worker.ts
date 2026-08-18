@@ -72,8 +72,25 @@ async function buildApp(env: WorkerEnv): Promise<Hono> {
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
-    appPromise ??= buildApp(env)
-    const app = await appPromise
+    // Liveness must never depend on config or the app building — answer /healthz
+    // before buildApp so a misconfig can't take the health check down with it.
+    if (new URL(request.url).pathname === '/healthz') {
+      return Response.json({ ok: true })
+    }
+    let app: Hono
+    try {
+      appPromise ??= buildApp(env)
+      app = await appPromise
+    } catch (err) {
+      // A config error (e.g. a half-set optional provider) must surface as a
+      // clean, handled 500 — not an uncaught exception that crash-loops the
+      // isolate (CF 1101) on every route. Clear the cached rejection so a later
+      // request can retry the build once the environment is fixed.
+      appPromise = undefined
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[worker] failed to build app:', message)
+      return Response.json({ error: 'server_misconfigured', message }, { status: 500 })
+    }
     return app.fetch(request)
   },
 }

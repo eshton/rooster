@@ -19,8 +19,24 @@ main = "dist/worker.js"
 compatibility_date = "2026-06-25"
 compatibility_flags = ["nodejs_compat"]
 
-# ROOSTER_BASE_URL must match the host the Worker is served on (used as the
-# OAuth issuer + MCP resource identifier). This is the custom domain bound to
-# the Worker; a mismatch breaks OAuth/MCP discovery and renders wrong links.
+# Plain-text (NON-SECRET) vars live here, NOT in the dashboard. `wrangler deploy`
+# reconciles plain vars to this file — any dashboard-set var NOT listed here is
+# DELETED on every deploy (secrets are unaffected). Keeping the non-secret config
+# in git makes deploys reproducible and stops the CI auto-deploy from wiping it.
+# Secrets (the API keys, DB token, auth secret) are set once via `wrangler secret
+# put` / the dashboard and persist across deploys — never put a secret here.
 [vars]
+# ROOSTER_BASE_URL must match the host the Worker is served on (used as the OAuth
+# issuer + MCP resource identifier); a mismatch breaks OAuth/MCP discovery.
 ROOSTER_BASE_URL = "https://app.airooster.dev"
+
+# Semantic search (Cloudflare Workers AI, bge-m3 → 1024 dims). Non-secret config;
+# ROOSTER_EMBEDDING_API_KEY is a Secret. DIMS must match the model's output size.
+ROOSTER_EMBEDDING_URL = "https://api.cloudflare.com/client/v4/accounts/d125ee0cc19ada9506786d281ba892be/ai/v1/embeddings"
+ROOSTER_EMBEDDING_MODEL = "@cf/baai/bge-m3"
+ROOSTER_EMBEDDING_DIMS = "1024"
+
+# Optional reranker (Cloudflare Workers AI bge-reranker). ROOSTER_RERANK_API_KEY
+# is a Secret.
+ROOSTER_RERANK_URL = "https://api.cloudflare.com/client/v4/accounts/d125ee0cc19ada9506786d281ba892be/ai/run/@cf/baai/bge-reranker-base"
+ROOSTER_RERANK_MODEL = "@cf/baai/bge-reranker-base"

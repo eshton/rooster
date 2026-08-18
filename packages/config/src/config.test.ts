@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { detectPlatform, loadConfig, resolveDbKind } from './index.js'
 
 const baseEnv = {
@@ -157,10 +157,18 @@ describe('loadConfig', () => {
       apiKey: 'sk-test',
       model: 'text-embedding-3-small',
     })
-    // Only one of the pair set → readable error.
-    expect(() =>
-      loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings' }),
-    ).toThrow(/ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY/)
+    // Only one of the pair set → NOT fatal (an optional feature must never crash
+    // the server): warn + disable, don't throw.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const partial = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings',
+    })
+    expect(partial.embedding).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY'),
+    )
+    warn.mockRestore()
   })
 
   it('defaults embeddingDims to 1536 and coerces an override', () => {
