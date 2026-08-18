@@ -305,10 +305,28 @@ ROOSTER_EMBEDDING_DIMS=1024
 
 The URL and key must be set together (set only one and startup fails fast); with
 neither set the recall tools report that semantic search is unconfigured.
-`ROOSTER_EMBEDDING_DIMS` **must match the model's output size** — it sizes the
-`embeddings` table, which Rooster creates at connect time (so set it before the
-first run, or before `db:migrate` provisions Turso). Changing dims later means
-the model changed: `DROP TABLE embeddings` once (it recreates on the next
-connect), then re-embed existing rows with the `backfill_embeddings` tool.
-Embedding happens best-effort after each write and never blocks it; rows written
-while semantic search was off stay searchable only after a backfill.
+
+**`ROOSTER_EMBEDDING_DIMS` must match your model's output size.** It sizes the
+`embedding F32_BLOB(<dims>)` column of the runtime `embeddings` table. If they
+disagree, every embed insert fails on a dimension mismatch — Rooster logs a loud
+`[embeddings] table is F32_BLOB(x) but ROOSTER_EMBEDDING_DIMS=y …` at startup so
+it's not silent, but no vectors are stored until you fix it.
+
+| Model | `ROOSTER_EMBEDDING_DIMS` |
+| ----- | ----------------------- |
+| OpenAI `text-embedding-3-small` | 1536 |
+| OpenAI `text-embedding-3-large` | 3072 |
+| Cloudflare `@cf/baai/bge-m3` | 1024 |
+| Cloudflare `@cf/baai/bge-large-en-v1.5` | 1024 |
+| Cloudflare `@cf/baai/bge-base-en-v1.5` | 768 |
+| Ollama `nomic-embed-text` / `embeddinggemma` | 768 |
+
+Rooster provisions the `embeddings` table itself at the configured dimension —
+on the Node/`db:migrate` path **and** on the Cloudflare Worker cold start — so
+`ROOSTER_EMBEDDING_DIMS` on the running app is the single source of truth; you
+don't need to also set it in the `db:migrate`/CI environment. To **change model
+(and dims)** on an existing database: update the vars, `DROP TABLE embeddings`
+once (it recreates at the new size on the next request), then re-embed existing
+rows with the `backfill_embeddings` tool. Embedding happens best-effort after
+each write and never blocks it; rows written while semantic search was off stay
+searchable only after a backfill.

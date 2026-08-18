@@ -1,7 +1,12 @@
 import { createAuth, drizzleAdapter } from '@rooster/auth'
 import { loadConfig } from '@rooster/config'
 import { createServices, InMemoryActorCache } from '@rooster/core'
-import { createLibsqlWebDrizzle, createRepositories, sqliteSchema } from '@rooster/db/web'
+import {
+  createLibsqlWebDrizzle,
+  createRepositories,
+  ensureEmbeddingsStore,
+  sqliteSchema,
+} from '@rooster/db/web'
 import type { Hono } from 'hono'
 import { KvActorCache, type KvNamespace } from './actor-cache-kv.js'
 import { createApp } from './app.js'
@@ -24,14 +29,19 @@ import { embedderFor } from './embedder-http.js'
  */
 type WorkerEnv = Record<string, string | undefined>
 
-let app: Hono | undefined
+let appPromise: Promise<Hono> | undefined
 
-function buildApp(env: WorkerEnv): Hono {
+async function buildApp(env: WorkerEnv): Promise<Hono> {
   const config = loadConfig(env)
   if (config.database.kind !== 'libsql') {
     throw new Error('Workers deployment requires a libsql:// (Turso) DATABASE_URL')
   }
   const drizzleDb = createLibsqlWebDrizzle(config.database.url, config.database.authToken)
+  // Provision the runtime embeddings store at the app's configured dimension, so
+  // ROOSTER_EMBEDDING_DIMS is the single source of truth for the table size — no
+  // dependency on the out-of-band db:migrate environment carrying it (ROO-41).
+  // Best-effort + idempotent (IF NOT EXISTS); runs once per isolate cold start.
+  await ensureEmbeddingsStore(drizzleDb, config.embeddingDims)
   const repositories = createRepositories(drizzleDb, sqliteSchema)
   const services = createServices(repositories, {
     crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
@@ -61,8 +71,9 @@ function buildApp(env: WorkerEnv): Hono {
 }
 
 export default {
-  fetch(request: Request, env: WorkerEnv): Response | Promise<Response> {
-    app ??= buildApp(env)
+  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+    appPromise ??= buildApp(env)
+    const app = await appPromise
     return app.fetch(request)
   },
 }
