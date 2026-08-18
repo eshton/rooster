@@ -158,7 +158,10 @@ export interface TicketService {
    * configured, or whose embedding failed). Scope a single project or the whole
    * org. Returns how many were embedded.
    */
-  backfillEmbeddings(actor: Actor, projectId?: Id): Promise<{ embedded: number }>
+  backfillEmbeddings(
+    actor: Actor,
+    projectId?: Id,
+  ): Promise<{ embedded: number; failed: number; failedProjects: Id[] }>
 }
 
 /** The `sourceType` discriminator for ticket rows in the embeddings store. */
@@ -174,17 +177,21 @@ export function createTicketService(
    * Best-effort embed of a ticket's title+description for semantic search. Never
    * throws — a failure just leaves the row un-embedded (a backfill can fix it),
    * so embedding never breaks a create/update. Long descriptions are chunked
-   * (ROO-36) so retrieval can point at the relevant passage.
+   * (ROO-36) so retrieval can point at the relevant passage. Returns whether the
+   * vector was actually stored, so `backfillEmbeddings` can report truth (ROO-42)
+   * rather than counting swallowed failures.
    */
-  async function embedTicket(orgId: Id, ticket: Ticket): Promise<void> {
-    if (!embedder) return
+  async function embedTicket(orgId: Id, ticket: Ticket): Promise<boolean> {
+    if (!embedder) return false
     try {
       const text = `${ticket.title}\n${ticket.description ?? ''}`.trim()
       await embedAndStore(repos, embedder, chunkConfig, orgId, EMBED_SOURCE_TICKET, [
         { id: ticket.id, text },
       ])
+      return true
     } catch {
       // best-effort — see doc comment.
+      return false
     }
   }
   /** Ensure an assignee principal exists in this org (or is being cleared). */
@@ -859,24 +866,40 @@ export function createTicketService(
       }
       const projectIds = projectId
         ? [projectId]
-        : (await repos.projects.list(actor.orgId)).map((p) => p.id)
+        : (await withRetry(() => repos.projects.list(actor.orgId))).map((p) => p.id)
       let embedded = 0
+      let failed = 0
+      const failedProjects: Id[] = []
       for (const pid of projectIds) {
-        const tickets = await repos.tickets.list(actor.orgId, pid, { limit: 200 })
-        const have = new Set(
-          await repos.embeddings.existingFor(
-            actor.orgId,
-            EMBED_SOURCE_TICKET,
-            tickets.map((t) => t.id),
-          ),
-        )
-        for (const t of tickets) {
-          if (have.has(t.id)) continue
-          await embedTicket(actor.orgId, t)
-          embedded++
+        try {
+          // Reads are retried — Turso HTTP has transient blips (ROO-33/43); a
+          // single flaky list must not abort the whole org backfill.
+          const tickets = await withRetry(() =>
+            repos.tickets.list(actor.orgId, pid, { limit: 200 }),
+          )
+          const have = new Set(
+            await withRetry(() =>
+              repos.embeddings.existingFor(
+                actor.orgId,
+                EMBED_SOURCE_TICKET,
+                tickets.map((t) => t.id),
+              ),
+            ),
+          )
+          for (const t of tickets) {
+            if (have.has(t.id)) continue
+            // Count only vectors that actually stored (ROO-42) — embedTicket is
+            // best-effort and returns false on a store failure.
+            if (await embedTicket(actor.orgId, t)) embedded++
+            else failed++
+          }
+        } catch {
+          // Isolate per project: one project's failure (after retries) is
+          // recorded, not fatal — the rest still get backfilled.
+          failedProjects.push(pid)
         }
       }
-      return { embedded }
+      return { embedded, failed, failedProjects }
     },
   }
 }

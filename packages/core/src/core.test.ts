@@ -1795,9 +1795,46 @@ describe('semantic search', () => {
     const svc = createServices(db.repositories, { embedder: mockEmbedder() })
     expect(await svc.tickets.findSimilar(owner, 'searchable later', 5)).toEqual([])
 
-    expect(await svc.tickets.backfillEmbeddings(owner, project.id)).toEqual({ embedded: 1 })
+    expect(await svc.tickets.backfillEmbeddings(owner, project.id)).toEqual({
+      embedded: 1,
+      failed: 0,
+      failedProjects: [],
+    })
     const hits = await svc.tickets.findSimilar(owner, 'searchable later', 5)
     expect(hits.map((h) => h.id)).toContain(t.id)
+  })
+
+  it('reports store failures honestly instead of counting them as embedded (ROO-42)', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    await services.tickets.create(owner, { projectId: project.id, title: 'will fail to embed' })
+
+    // Embedder works, but the vector store rejects every write → nothing stored.
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const upsert = vi
+      .spyOn(db.repositories.embeddings, 'upsertChunks')
+      .mockRejectedValue(new Error('store down'))
+
+    const res = await svc.tickets.backfillEmbeddings(owner, project.id)
+    expect(res).toEqual({ embedded: 0, failed: 1, failedProjects: [] })
+    upsert.mockRestore()
+  })
+
+  it('records a project whose read keeps failing instead of throwing (ROO-43)', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    await services.tickets.create(owner, { projectId: project.id, title: 'good one' })
+
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    // The ticket-list read fails persistently (a transient blip that outlasts the
+    // retries) — the project is reported, not fatal.
+    const list = vi
+      .spyOn(db.repositories.tickets, 'list')
+      .mockRejectedValue(new Error('turso http blip'))
+
+    const res = await svc.tickets.backfillEmbeddings(owner, project.id)
+    expect(res).toEqual({ embedded: 0, failed: 0, failedProjects: [project.id] })
+    list.mockRestore()
   })
 })
 
