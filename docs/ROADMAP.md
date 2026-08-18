@@ -17,16 +17,17 @@ field", "Add an MCP tool").
 | # | Feature | Theme | Effort | Status |
 |---|---------|-------|:------:|--------|
 | 1 | Estimates / story points | fields | S | ✅ done |
-| 2 | Start date | fields | S | backlog |
-| 3 | Milestones / cycles (sprints) | planning | M | backlog |
-| 4 | Multiple assignees | collaboration | M | backlog |
+| 2 | Start date | fields | S | ✅ done |
+| 3 | Milestones / cycles (sprints) | planning | M | ✅ done |
+| 4 | Multiple assignees | collaboration | M | ✅ done |
 | 5 | Ticket relations (blocks / relates / duplicates) | linking | M | ✅ done |
 | 6 | Attachments (links, then files) | content | M | ✅ links done |
-| 7 | Watchers + notifications | collaboration | M | backlog |
+| 7 | Watchers + notifications | collaboration | M | ✅ done |
 | 8 | Custom fields | extensibility | L | backlog |
 | 9 | Per-project configurable workflows | workflow | L | backlog |
 | 10 | Cross-workspace membership | identity | L | ✅ done |
-| 11 | CI auto-deploy on merge (ROOST-13 follow-up) | infra | M | backlog |
+| 11 | CI auto-deploy on merge (ROO-13 follow-up) | infra | M | backlog |
+| 12 | Agent memory: conversation recall + context files + semantic search | agent-memory | L | ✅ done |
 
 ---
 
@@ -46,29 +47,25 @@ agent sizes similar work the same way. Scale + rubric: `ESTIMATE_POINTS` /
 `estimatePointsSchema` (`packages/schema/src/enums.ts`), the `/llms.txt`
 "Estimating work" section, and [`docs/ESTIMATION.md`](ESTIMATION.md).
 
-## 2. Start date — `fields` · S
+## 2. Start date — `fields` · S · ✅ done
 **Why:** model work that has a planned start, not just a deadline; enables
 date-range/Gantt-style views later.
-**Scope:** mirror the existing `dueDate` field end-to-end (`startDate`, nullable
-ISO-8601). Same pattern as the Tier 2 `dueDate` change.
-**Suggested:** label `roadmap,fields`, priority `low`.
+**Shipped:** nullable `startDate` (ISO-8601) mirrored end-to-end alongside
+`dueDate` — both dialect schemas, the ticket entity + create/update DTOs, and
+the repo mapping; surfaced over MCP via the DTO `.shape`.
 
-## 3. Milestones / cycles (sprints) — `planning` · M
+## 3. Milestones / cycles (sprints) — `planning` · M · ✅ done
 **Why:** group tickets into a release or time-boxed cycle and track progress.
-**Scope:** new `milestones` entity (name, dates, projectId) — schema + dialect
-tables + migration + repo + a `MilestoneService`; add nullable
-`ticket.milestoneId`; MCP tools `create_milestone` / `list_milestones` and a
-`milestoneId` filter on `list_tickets`.
-**Deps:** pairs well with #2 (start date).
-**Suggested:** label `roadmap,planning`, priority `medium`.
+**Shipped:** `milestones` entity + `MilestoneService`
+(`packages/core/src/services/milestones.ts`), nullable `ticket.milestoneId`, MCP
+tools `create_milestone` / `list_milestones`, and a `milestoneId` filter on
+`list_tickets`.
 
-## 4. Multiple assignees — `collaboration` · M
+## 4. Multiple assignees — `collaboration` · M · ✅ done
 **Why:** real work is often shared (pair/mob, human + agent).
-**Scope:** introduce a ticket↔principal join (`ticket_assignees`) or an
-`assignees[]` projection; migrate the single `assigneeId` path; update
-`assign_ticket` (add/remove) and `my_tickets` to match any assignee. Keep
-`assigneeId` as a derived "primary" for back-compat, or deprecate.
-**Suggested:** label `roadmap,collaboration`, priority `medium`.
+**Shipped:** ticket↔principal join with an `assignees[]` projection; MCP tools
+`add_assignee` / `remove_assignee` / `list_assignees`; `my_tickets` matches any
+assignee. `assigneeId` is retained as the derived primary for back-compat.
 
 ## 5. Ticket relations — `linking` · M · ✅ done
 **Why:** express *blocks / blocked-by / relates-to / duplicates* beyond the
@@ -111,15 +108,14 @@ not host files — an attachment always references a URL.
 `EmailSender` seams), implement R2 + S3 adapters, add `request_upload`, and keep
 `add_attachment(url)` as the registration step. Until then: links only.
 
-## 7. Watchers + notifications — `collaboration` · M
+## 7. Watchers + notifications — `collaboration` · M · ✅ done
 **Why:** let people/agents follow a ticket and be notified on changes — a
 natural extension of `crow`.
-**Scope:** `ticket_watchers` (ticketId, principalId) + subscribe/unsubscribe
-tools; emit through the existing `CrowNotifier` seam
-(`packages/core/src/notify.ts`) on status/assignee/comment changes, delivered by
-the webhook notifier already wired from `ROOSTER_CROW_WEBHOOK_URL`.
-**Deps:** builds directly on the Tier 3 crow-notifier work.
-**Suggested:** label `roadmap,collaboration`, priority `medium`.
+**Shipped:** `ticket_watchers` + `WatcherService`
+(`packages/core/src/services/watchers.ts`); MCP tools `watch_ticket` /
+`unwatch_ticket` / `my_watches` / `list_watchers`; changes emit through the
+existing `CrowNotifier` seam (`packages/core/src/notify.ts`), delivered by the
+webhook notifier wired from `ROOSTER_CROW_WEBHOOK_URL`.
 
 ## 8. Custom fields — `extensibility` · L
 **Why:** teams want fields Rooster doesn't model (severity, environment, etc.).
@@ -155,7 +151,7 @@ idempotent re-join) and `auth.test.ts` (multi-org resolution).
 only) and creating a *second* tenant from an already-onboarded account.
 
 ## 11. CI auto-deploy on merge — `infra` · M
-**Why:** follow-up to ROOST-13. CI now *verifies* every path (lint/build/test,
+**Why:** follow-up to ROO-13. CI now *verifies* every path (lint/build/test,
 Postgres migrations, migration-drift, pg-free Worker bundle), but deploying is
 still manual — which is exactly how the live Worker drifted behind `main`
 (stale base URL, then the markdown renderer not shipped). Verification without
@@ -168,6 +164,20 @@ docs Pages bundle (`build:web` → `dist-web/`), and (4) post-deploy smoke-check
 `/healthz`, `/.well-known/rooster` (asserting the base URL) and the OAuth
 discovery aliases. Gate prod steps on `main` + environment protection; keep
 secrets in GitHub Environments.
-**Deps:** builds on the CI verification jobs (ROOST-13). Needs the Cloudflare
+**Deps:** builds on the CI verification jobs (ROO-13). Needs the Cloudflare
 API token + Turso credentials as repo/environment secrets.
 **Suggested:** label `roadmap,infra,ci,deploy`, priority `high`.
+
+## 12. Agent memory — `agent-memory` · L · ✅ done
+**Why:** agents are first-class principals, so they need durable memory across
+sessions and projects — not just tickets.
+**Shipped:**
+- **Conversation recall (ROO-31)** — `conversation.ts` service; MCP
+  `append_messages` / `list_messages` / `recall_conversations` (cross-project).
+- **Context files (ROO-32)** — `contextfile.ts` service; MCP `save_context_file`
+  / `list_context_files`, with a unified `recall_context` spanning tickets,
+  conversations, and files.
+- **Semantic search** — libSQL native vectors (`F32_BLOB` + `vector_top_k`) via
+  the non-Drizzle `embeddings` store (`packages/db/src/vector.ts`); MCP
+  `find_similar_tickets` / `backfill_embeddings`; configurable
+  `ROOSTER_EMBEDDING_DIMS`, Cloudflare Workers AI embedder.

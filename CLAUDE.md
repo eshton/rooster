@@ -20,7 +20,7 @@ Vercel / Cloudflare).
 **Rooster tracks its own development via its own MCP server** — the live
 instance at `https://app.airooster.dev` is connected as
 an MCP server in this Claude Code project. Workspace: **Rooster Dev**, project:
-**Rooster** (ticket prefix `ROOST-`).
+**Rooster** (ticket prefix `ROO-`).
 
 When picking up new work, check the backlog first:
 
@@ -30,31 +30,44 @@ When picking up new work, check the backlog first:
 ```
 
 The backlog lives in `docs/ROADMAP.md` (original source) and is mirrored as
-live tickets in Rooster starting from `ROOST-2`.
+live tickets in Rooster starting from `ROO-2`.
 
 ## Status (what exists today)
 
 Working, tested, committed:
 
 - **Domain + persistence** — full schema, dual-dialect migrations, repositories.
-- **Core services** — teams/projects/tickets/agents/comments/members/audit with
-  permission checks, ticket status-transition rules, tags, parent/subtasks,
-  and append-only audit logging on every mutation.
+- **Core services** — teams/projects/tickets/agents/comments/members/audit,
+  plus milestones, watchers (+ crow notifications), attachments (links),
+  invites, orgs/workspaces, multiple assignees, and ticket relations — all with
+  permission checks, ticket status-transition rules, tags, parent/subtasks, and
+  append-only audit logging on every mutation.
+- **Agent memory** — cross-project conversation recall (ROO-31), project
+  context files with a unified `recall_context` (ROO-32), and semantic ticket
+  search over **libSQL native vectors** (`find_similar_tickets` /
+  `backfill_embeddings`; configurable dims, Cloudflare Workers AI embedder).
 - **Auth** — better-auth as human OAuth login + the MCP OAuth 2.1 authorization
   server (Dynamic Client Registration + PKCE), plus the token/session → domain
   identity bridge and enrollment gating.
-- **MCP server** — tools + resources over Streamable HTTP.
+- **MCP server** — the full toolset + resources over Streamable HTTP (tickets,
+  batch create, agent claim-queue, semantic search, conversation/context recall).
+  Registered tools are kept in sync with `apps/docs/.../reference/mcp-tools.md`
+  by the `docs-sync.test.ts` CI guard.
 - **Server app** (`@rooster/server`) — Hono app mounting auth, the MCP endpoint,
   discovery/`llms.txt`, and gated agent-first tenant onboarding (`POST /onboard`).
-- **Postgres** — `db:migrate` CLI; persistent better-auth on Postgres.
+- **Persistence** — Turso/libSQL is the first-class, CI-tested path (`db:migrate`
+  CLI, persistent better-auth on libSQL). Postgres is frozen/community-maintained
+  (see the database section below).
 
 Not done yet (good next tasks):
 
-1. **Vercel adapter** — `vercel.json` + a function entry wrapping the Hono app
-   (Node runtime, because the pg pool needs Node). The app is already Web-
-   standard `fetch`, so this is thin.
-2. **Live deploy validation** — the Vercel + Cloudflare Workers + Postgres/Turso
-   paths are built production-shaped but only exercised on a real deploy.
+1. **Vercel adapter** — `vercel.json` + a function entry wrapping the Hono app.
+   The app is already Web-standard `fetch`, so this is thin. (The live deploy
+   runs on Cloudflare Workers + Turso, so this is an alternative target, not a
+   blocker.)
+2. **Broader deploy validation** — the Vercel + Postgres paths are built
+   production-shaped but not exercised in CI; the Cloudflare Workers + Turso
+   path is live (see below).
 
 Audit `clientInfo` is captured at the `/mcp` route (`extractClientInfo`):
 structured MCP `initialize` clientInfo when present, else the HTTP `User-Agent`
@@ -68,8 +81,10 @@ a **Cloudflare Workers** server entry (`apps/server/src/worker.ts` + the
 (`apps/server/src/dashboard/`: email/password + OAuth login, org overview,
 project board, ticket detail, agent registry, audit viewer).
 
-**The north-star milestone:** deploy to Vercel + Postgres, then connect Claude
-Code's MCP client to the deployed `/mcp` so Rooster tracks its own development.
+**The north-star milestone — achieved:** Rooster is deployed (Cloudflare Workers
++ Turso, not the originally-planned Vercel + Postgres) and Claude Code's MCP
+client is connected to the live `/mcp` at `https://app.airooster.dev`, so Rooster
+now tracks its own development (project **ROO**, e.g. this ticket ROO-33).
 
 ## Monorepo map
 

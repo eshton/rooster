@@ -1,9 +1,16 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
-import { ConflictError, NotFoundError, ValidationError } from '../errors.js'
+import {
+  ConflictError,
+  CoreError,
+  InternalError,
+  NotFoundError,
+  ValidationError,
+} from '../errors.js'
 import type { CrowNotifier, Embedder } from '../notify.js'
 import { authorize, can } from '../permissions.js'
+import { withRetry } from '../retry.js'
 import { CLAIMABLE_STATUSES, canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
 import { parse } from '../validate.js'
 import {
@@ -276,8 +283,33 @@ export function createTicketService(
   }
 
   /**
+   * Resolve and validate everything a create needs *without writing* — project
+   * (must exist and have a ticket key), assignee, milestone and parent. Throws a
+   * {@link CoreError} on the first invalid reference. Returning the project lets
+   * the caller reuse it; running this for a whole batch up front lets
+   * `createMany` reject an invalid entry before any row is written.
+   */
+  async function precheckCreatable(actor: Actor, input: CreateTicketInput) {
+    const project = await withRetry(() => repos.projects.getById(actor.orgId, input.projectId))
+    if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
+    if (!project.key) throw new NotFoundError(`Project ${input.projectId} has no ticket key`)
+
+    await requireAssignee(actor, input.assigneeId ?? null)
+    await requireMilestone(actor, input.milestoneId ?? null)
+    const parentId = input.parentId
+    if (parentId != null) {
+      const parent = await withRetry(() => repos.tickets.getById(actor.orgId, parentId))
+      if (!parent) throw new NotFoundError(`Parent ticket ${parentId} not found`)
+    }
+    return project
+  }
+
+  /**
    * Create a single ticket from already-validated input. The caller is
    * responsible for `authorize`; this is shared by `create` and `createMany`.
+   * Transient-prone DB writes go through {@link withRetry} so a flaky libSQL
+   * connection blip (which used to leave batches partially applied — ROO-33)
+   * is retried in place rather than surfacing as a partial commit.
    */
   async function createOneTicket(actor: Actor, input: CreateTicketInput): Promise<Ticket> {
     // Idempotency: a repeat with a previously-seen key returns the original
@@ -292,42 +324,41 @@ export function createTicketService(
       }
     }
 
-    const project = await repos.projects.getById(actor.orgId, input.projectId)
-    if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
-    if (!project.key) throw new NotFoundError(`Project ${input.projectId} has no ticket key`)
-
-    await requireAssignee(actor, input.assigneeId ?? null)
-    await requireMilestone(actor, input.milestoneId ?? null)
-    if (input.parentId != null) {
-      const parent = await repos.tickets.getById(actor.orgId, input.parentId)
-      if (!parent) throw new NotFoundError(`Parent ticket ${input.parentId} not found`)
-    }
+    const project = await precheckCreatable(actor, input)
 
     // Ticket numbering is per-project, so keys read "<project key>-<n>".
     const number = await repos.tickets.nextNumber(actor.orgId, project.id)
-    const ticket = await repos.tickets.create(actor.orgId, {
-      projectId: input.projectId,
-      key: `${project.key}-${number}`,
-      number,
-      title: input.title,
-      description: input.description ?? null,
-      status: INITIAL_TICKET_STATUS,
-      priority: input.priority,
-      labels: input.labels,
-      assigneeId: input.assigneeId ?? null,
-      parentId: input.parentId ?? null,
-      milestoneId: input.milestoneId ?? null,
-      dueDate: input.dueDate ?? null,
-      startDate: input.startDate ?? null,
-      estimate: input.estimate ?? null,
-    })
+    const ticket = await withRetry(() =>
+      repos.tickets.create(actor.orgId, {
+        projectId: input.projectId,
+        key: `${project.key}-${number}`,
+        number,
+        title: input.title,
+        description: input.description ?? null,
+        status: INITIAL_TICKET_STATUS,
+        priority: input.priority,
+        labels: input.labels,
+        assigneeId: input.assigneeId ?? null,
+        parentId: input.parentId ?? null,
+        milestoneId: input.milestoneId ?? null,
+        dueDate: input.dueDate ?? null,
+        startDate: input.startDate ?? null,
+        estimate: input.estimate ?? null,
+      }),
+    )
 
-    await recordAudit(repos, actor, {
-      action: 'ticket.create',
-      targetType: 'ticket',
-      targetId: ticket.id,
-      after: ticket,
-    })
+    // The ticket row and its audit row are not in one transaction (no portable
+    // cross-connection transaction — see CLAUDE.md's in-memory libSQL caveat),
+    // so retry the audit write: it is the insert that failed *after* the ticket
+    // persisted in the ROO-33 report.
+    await withRetry(() =>
+      recordAudit(repos, actor, {
+        action: 'ticket.create',
+        targetType: 'ticket',
+        targetId: ticket.id,
+        after: ticket,
+      }),
+    )
 
     // Bind the idempotency key to this new ticket. If we lost a concurrent race
     // (another create recorded the same key first), return that winner instead —
@@ -356,14 +387,33 @@ export function createTicketService(
 
     async createMany(actor, rawInput) {
       authorize(actor, 'ticket:write')
-      // Validate the whole batch up front so a malformed entry rejects the call
-      // before any row is written. (No cross-row transaction — see CLAUDE.md's
-      // in-memory libSQL caveat — so a mid-batch DB error can leave earlier
-      // tickets persisted; validation failures cannot.)
       const { tickets } = parse(createTicketsInput, rawInput)
+
+      // Validate the whole batch up front — shape (parse, above) AND every
+      // reference (project/assignee/milestone/parent) — before writing any row,
+      // so an invalid entry rejects the call with nothing persisted. There is no
+      // portable cross-row transaction (CLAUDE.md's in-memory libSQL caveat), so
+      // this pre-check plus per-write retries is how the batch stays atomic in
+      // practice; the residual risk is a transient error striking mid-write.
+      for (const input of tickets) await precheckCreatable(actor, input)
+
       const created: Ticket[] = []
-      for (const input of tickets) {
-        created.push(await createOneTicket(actor, input))
+      try {
+        for (const input of tickets) {
+          created.push(await createOneTicket(actor, input))
+        }
+      } catch (err) {
+        // A domain error here means state changed between pre-check and write
+        // (e.g. the project was deleted) — surface it as-is.
+        if (err instanceof CoreError) throw err
+        // A transient infra error survived the retries. Report how far the batch
+        // got with a sanitized message; re-sending it with the same
+        // idempotencyKeys safely resumes without creating duplicates.
+        throw new InternalError(
+          `Batch partially applied: ${created.length} of ${tickets.length} tickets were created ` +
+            'before a transient error interrupted the rest. Re-send the whole batch with the same ' +
+            'per-entry idempotencyKeys to finish it safely (already-created tickets are not duplicated).',
+        )
       }
       return created
     },

@@ -370,7 +370,10 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       description:
         'Open several tickets in ONE call — e.g. when bootstrapping a project. Pass `tickets` as ' +
         'an array of the same shape create_ticket takes (1–100). Returns the created tickets in ' +
-        'input order. The batch is validated up front, so a malformed entry rejects the whole call.',
+        'input order. The whole batch is validated up front — shape AND every reference ' +
+        '(project/assignee/milestone/parent) — so an invalid entry rejects the call before any ' +
+        'row is written. Set a per-entry `idempotencyKey`: if a transient error interrupts a ' +
+        'batch mid-write, re-send it unchanged to finish safely without creating duplicates.',
       inputSchema: createTicketsInput.shape,
     },
     async (args) => runTool(() => services.tickets.createMany(actor, args)),
