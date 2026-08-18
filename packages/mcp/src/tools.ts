@@ -674,7 +674,10 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       description:
         'Embed any tickets that lack an embedding (e.g. created before embeddings were ' +
         'configured) so they become findable by find_similar_tickets. Optionally scope to one ' +
-        'project. Requires embeddings to be configured.',
+        'project. Requires embeddings to be configured. Returns `{ embedded, failed, ' +
+        'failedProjects }` — `embedded` counts vectors actually stored, `failed` counts store ' +
+        'failures, and `failedProjects` lists projects whose read failed after retries (a ' +
+        'per-project failure is isolated, not fatal). Re-run to finish any that failed.',
       inputSchema: { projectId: z.uuid().optional() },
     },
     async ({ projectId }) => runTool(() => services.tickets.backfillEmbeddings(actor, projectId)),
