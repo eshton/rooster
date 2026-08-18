@@ -154,6 +154,9 @@ export interface EmbeddingHit {
   sourceId: Id
   /** Cosine distance (0 = identical); lower is closer — the source's best chunk. */
   distance: number
+  /** Character offsets of the nearest chunk in the source's embedded text. */
+  chunkStart?: number
+  chunkEnd?: number
 }
 
 /** One chunk's embedding for a source row (ROO-36 chunk-aware store). */

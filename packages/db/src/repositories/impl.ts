@@ -629,19 +629,35 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
       async searchAny(orgId, queryVector, candidateK) {
         const vec = `[${queryVector.join(',')}]`
         const k = Math.max(1, Math.floor(candidateK))
+        // Rank chunks, keep the nearest per source (rn=1) and carry that chunk's
+        // offsets so callers can quote the matched passage, not the doc head.
         const rows = (await db.all(sql`
-          SELECT e.source_id AS sourceId, e.source_type AS sourceType,
-                 MIN(vector_distance_cos(e.embedding, vector32(${vec}))) AS distance
-          FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
-          JOIN embeddings e ON e.rowid = v.id
-          WHERE e.org_id = ${orgId}
-          GROUP BY e.source_id, e.source_type
+          SELECT sourceId, sourceType, distance, chunkStart, chunkEnd FROM (
+            SELECT e.source_id AS sourceId, e.source_type AS sourceType,
+                   vector_distance_cos(e.embedding, vector32(${vec})) AS distance,
+                   e.char_start AS chunkStart, e.char_end AS chunkEnd,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY e.source_id
+                     ORDER BY vector_distance_cos(e.embedding, vector32(${vec})) ASC
+                   ) AS rn
+            FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
+            JOIN embeddings e ON e.rowid = v.id
+            WHERE e.org_id = ${orgId}
+          ) WHERE rn = 1
           ORDER BY distance ASC
-        `)) as Array<{ sourceId: string; sourceType: string; distance: number }>
+        `)) as Array<{
+          sourceId: string
+          sourceType: string
+          distance: number
+          chunkStart: number | null
+          chunkEnd: number | null
+        }>
         return rows.map((r) => ({
           sourceId: r.sourceId,
           sourceType: r.sourceType,
           distance: Number(r.distance),
+          chunkStart: r.chunkStart ?? undefined,
+          chunkEnd: r.chunkEnd ?? undefined,
         }))
       },
       async delete(orgId, sourceType, sourceId) {

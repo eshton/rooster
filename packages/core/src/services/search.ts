@@ -19,6 +19,9 @@ export interface HybridHit {
   sourceId: Id
   /** RRF score; higher = more relevant. Not comparable across queries. */
   score: number
+  /** Nearest-chunk offsets from the vector arm (absent for keyword-only hits). */
+  chunkStart?: number
+  chunkEnd?: number
 }
 
 export interface HybridSearchInput {
@@ -42,6 +45,8 @@ export interface RagHit {
   snippet: string
   /** RRF fusion score; higher = more relevant. */
   score: number
+  /** Character offsets of the quoted passage in the source's embedded text. */
+  chunk?: { start: number; end: number }
 }
 
 export interface RagSearchResult {
@@ -72,6 +77,25 @@ function snippetOf(text: string, max = 240): string {
   return text.replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
+/**
+ * Quote the matched passage: slice the embedded text by the hit's chunk offsets
+ * when the vector arm supplied them, else fall back to the source head. `chunk`
+ * is the offset range actually quoted (undefined for the head fallback).
+ */
+function passageOf(
+  embeddedText: string,
+  hit: HybridHit,
+): { snippet: string; chunk?: { start: number; end: number } } {
+  const { chunkStart, chunkEnd } = hit
+  if (chunkStart != null && chunkEnd != null && chunkEnd > chunkStart) {
+    return {
+      snippet: snippetOf(embeddedText.slice(chunkStart, chunkEnd)),
+      chunk: { start: chunkStart, end: chunkEnd },
+    }
+  }
+  return { snippet: snippetOf(embeddedText) }
+}
+
 const DEFAULT_OVERFETCH = 5
 
 export function createSearchService(
@@ -100,8 +124,14 @@ export function createSearchService(
       }
       if (allowed.size === 0) return []
 
-      // Vector/semantic arm across all source types (best chunk per source).
-      const vectorArm: Array<{ key: string; sourceType: RagSourceType; sourceId: Id }> = []
+      type Arm = { key: string; sourceType: RagSourceType; sourceId: Id } & {
+        chunkStart?: number
+        chunkEnd?: number
+      }
+
+      // Vector/semantic arm across all source types (best chunk per source),
+      // carrying that chunk's offsets so callers can quote the passage.
+      const vectorArm: Arm[] = []
       if (embedder) {
         const [vec] = await embedder.embed([query])
         if (vec) {
@@ -109,14 +139,20 @@ export function createSearchService(
           for (const h of hits) {
             const st = h.sourceType as RagSourceType
             if (allowed.has(st)) {
-              vectorArm.push({ key: key(st, h.sourceId), sourceType: st, sourceId: h.sourceId })
+              vectorArm.push({
+                key: key(st, h.sourceId),
+                sourceType: st,
+                sourceId: h.sourceId,
+                chunkStart: h.chunkStart,
+                chunkEnd: h.chunkEnd,
+              })
             }
           }
         }
       }
 
       // Keyword/FTS arm — tickets only (the FTS index today).
-      const keywordArm: Array<{ key: string; sourceType: RagSourceType; sourceId: Id }> = []
+      const keywordArm: Arm[] = []
       if (allowed.has('ticket')) {
         const tickets = await repos.tickets.search(actor.orgId, query, { limit: candidateK })
         for (const t of tickets) {
@@ -124,9 +160,16 @@ export function createSearchService(
         }
       }
 
+      // Vector arm first, so a source in both keeps its offsets after fusion.
       return reciprocalRankFusion([vectorArm, keywordArm])
         .slice(0, limit)
-        .map((f) => ({ sourceType: f.item.sourceType, sourceId: f.item.sourceId, score: f.score }))
+        .map((f) => ({
+          sourceType: f.item.sourceType,
+          sourceId: f.item.sourceId,
+          score: f.score,
+          chunkStart: f.item.chunkStart,
+          chunkEnd: f.item.chunkEnd,
+        }))
     },
 
     async rag(actor, rawInput) {
@@ -151,13 +194,15 @@ export function createSearchService(
           if (!t) return null
           if (input.projectId && t.projectId !== input.projectId) return null
           if (input.ticketId && t.id !== input.ticketId) return null
+          // Must match embedTicket's text exactly so offsets line up (it trims).
+          const embedded = `${t.title}\n${t.description ?? ''}`.trim()
           return {
             sourceType: 'ticket',
             sourceKey: t.key,
             projectKey: await projectKeyOf(t.projectId),
             ticketId: t.id,
-            snippet: snippetOf(`${t.title}\n${t.description ?? ''}`),
             score: h.score,
+            ...passageOf(embedded, h),
           }
         }
         if (h.sourceType === 'message') {
@@ -171,8 +216,8 @@ export function createSearchService(
             sourceKey: t ? `${t.key}#${m.stage}` : m.id,
             projectKey: t ? await projectKeyOf(t.projectId) : '',
             ticketId: m.ticketId,
-            snippet: snippetOf(m.body),
             score: h.score,
+            ...passageOf(m.body, h),
           }
         }
         // context_file
@@ -185,8 +230,8 @@ export function createSearchService(
           sourceKey: cf.name,
           projectKey: await projectKeyOf(cf.projectId),
           ticketId: cf.ticketId ?? undefined,
-          snippet: snippetOf(`${cf.name}\n${cf.body}`),
           score: h.score,
+          ...passageOf(`${cf.name}\n${cf.body}`, h),
         }
       }
 
