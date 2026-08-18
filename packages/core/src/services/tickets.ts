@@ -347,18 +347,15 @@ export function createTicketService(
       }),
     )
 
-    // The ticket row and its audit row are not in one transaction (no portable
-    // cross-connection transaction — see CLAUDE.md's in-memory libSQL caveat),
-    // so retry the audit write: it is the insert that failed *after* the ticket
-    // persisted in the ROO-33 report.
-    await withRetry(() =>
-      recordAudit(repos, actor, {
-        action: 'ticket.create',
-        targetType: 'ticket',
-        targetId: ticket.id,
-        after: ticket,
-      }),
-    )
+    // recordAudit self-retries the append (ROO-33) — the audit insert is what
+    // failed *after* the ticket persisted, so it must not surface as a hard error
+    // on a transient blip.
+    await recordAudit(repos, actor, {
+      action: 'ticket.create',
+      targetType: 'ticket',
+      targetId: ticket.id,
+      after: ticket,
+    })
 
     // Bind the idempotency key to this new ticket. If we lost a concurrent race
     // (another create recorded the same key first), return that winner instead —

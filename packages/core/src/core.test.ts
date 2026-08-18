@@ -1206,6 +1206,45 @@ describe('createMany', () => {
   })
 })
 
+describe('audit-write resilience (ROO-33 follow-up)', () => {
+  // recordAudit is centrally retried, so a transient audit-insert blip must not
+  // fail the mutation for ANY audited path — not just ticket creation.
+  it('changeStatus survives a transient audit-insert failure', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const ticket = await services.tickets.create(owner, { projectId: project.id, title: 't' })
+
+    const append = vi.spyOn(db.repositories.audit, 'append').mockImplementationOnce(() => {
+      throw new Error('SQLITE_BUSY: database is locked')
+    })
+
+    const moved = await services.tickets.changeStatus(owner, {
+      ticketId: ticket.id,
+      status: 'todo',
+    })
+
+    expect(moved.status).toBe('todo')
+    expect(append).toHaveBeenCalledTimes(2) // failed once, retried, succeeded
+    append.mockRestore()
+  })
+
+  it('comment survives a transient audit-insert failure', async () => {
+    const { owner } = await bootstrap()
+    const { project } = await makeProject(owner)
+    const ticket = await services.tickets.create(owner, { projectId: project.id, title: 't' })
+
+    const append = vi.spyOn(db.repositories.audit, 'append').mockImplementationOnce(() => {
+      throw new Error('SQLITE_BUSY: database is locked')
+    })
+
+    const comment = await services.comments.create(owner, { ticketId: ticket.id, body: 'hi' })
+
+    expect(comment.body).toBe('hi')
+    expect(append).toHaveBeenCalledTimes(2)
+    append.mockRestore()
+  })
+})
+
 describe('getContext', () => {
   it('bundles comments, attachments, subtasks, links and assignees in one call', async () => {
     const { org, owner, founder } = await bootstrap()
