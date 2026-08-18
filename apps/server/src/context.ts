@@ -68,6 +68,7 @@ export async function createServerContext(
   const services = createServices(db.repositories, {
     crowNotifier: webhookCrowNotifier(config.notifications.crowWebhookUrl),
     embedder: embedderFor(config),
+    chunkConfig: config.chunking,
   })
   const auth = createAuth({
     config,

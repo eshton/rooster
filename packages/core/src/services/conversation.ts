@@ -1,6 +1,8 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
+import type { ChunkConfig } from '../chunk.js'
+import { embedAndStore } from '../embed.js'
 import { NotFoundError, ValidationError } from '../errors.js'
 import type { Embedder } from '../notify.js'
 import { authorize } from '../permissions.js'
@@ -56,6 +58,7 @@ export interface ConversationService {
 export function createConversationService(
   repos: Repositories,
   embedder?: Embedder,
+  chunkConfig?: ChunkConfig,
 ): ConversationService {
   async function requireTicket(actor: Actor, ticketId: Id): Promise<Ticket> {
     const ticket = await repos.tickets.getById(actor.orgId, ticketId)
@@ -70,16 +73,16 @@ export function createConversationService(
    */
   async function embedMessages(orgId: Id, messages: ConversationMessage[]): Promise<void> {
     if (!embedder) return
-    const e = embedder
     const text = messages.filter((m) => m.kind === 'text')
     if (text.length === 0) return
     try {
-      const vecs = await e.embed(text.map((m) => m.body))
-      await Promise.all(
-        text.map((m, i) => {
-          const v = vecs[i]
-          return v ? repos.embeddings.upsert(orgId, EMBED_SOURCE_MESSAGE, m.id, v, e.model) : null
-        }),
+      await embedAndStore(
+        repos,
+        embedder,
+        chunkConfig,
+        orgId,
+        EMBED_SOURCE_MESSAGE,
+        text.map((m) => ({ id: m.id, text: m.body })),
       )
     } catch {
       // best-effort — see doc comment.

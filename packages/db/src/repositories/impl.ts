@@ -572,30 +572,40 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
     },
 
     embeddings: {
-      async upsert(orgId, sourceType, sourceId, vector, model) {
+      async upsertChunks(orgId, sourceType, sourceId, chunks, model) {
         const ts = now()
-        const vec = `[${vector.join(',')}]`
-        // Insert-or-replace keyed by the unique (org, source_type, source_id).
-        // The vector is written through libSQL's native `vector32()`.
+        // Replace-all: drop this source's existing chunks, then insert the new
+        // set. Not wrapped in a transaction (the in-memory libSQL caveat); the
+        // store is a rebuildable cache, and the only racer is a concurrent
+        // re-embed of the same source.
         await db.run(sql`
-          INSERT INTO embeddings (id, org_id, source_type, source_id, model, embedding, created_at, updated_at)
-          VALUES (${newId()}, ${orgId}, ${sourceType}, ${sourceId}, ${model}, vector32(${vec}), ${ts}, ${ts})
-          ON CONFLICT(org_id, source_type, source_id) DO UPDATE SET
-            embedding = vector32(${vec}), model = ${model}, updated_at = ${ts}
+          DELETE FROM embeddings
+          WHERE org_id = ${orgId} AND source_type = ${sourceType} AND source_id = ${sourceId}
         `)
+        for (const c of chunks) {
+          const vec = `[${c.vector.join(',')}]`
+          await db.run(sql`
+            INSERT INTO embeddings
+              (id, org_id, source_type, source_id, chunk_index, char_start, char_end, model, embedding, created_at, updated_at)
+            VALUES
+              (${newId()}, ${orgId}, ${sourceType}, ${sourceId}, ${c.chunkIndex}, ${c.charStart}, ${c.charEnd}, ${model}, vector32(${vec}), ${ts}, ${ts})
+          `)
+        }
       },
       async search(orgId, sourceType, queryVector, candidateK) {
         const vec = `[${queryVector.join(',')}]`
         // ANN top-k is global (no metadata pre-filter), so over-fetch then filter
         // to the org + type. k is a server-controlled integer → inline as a
-        // literal (vector_top_k's k arg doesn't take a bound param).
+        // literal (vector_top_k's k arg doesn't take a bound param). Rows are
+        // chunks; collapse to one hit per source at its nearest chunk.
         const k = Math.max(1, Math.floor(candidateK))
         const rows = (await db.all(sql`
           SELECT e.source_id AS sourceId,
-                 vector_distance_cos(e.embedding, vector32(${vec})) AS distance
+                 MIN(vector_distance_cos(e.embedding, vector32(${vec}))) AS distance
           FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
           JOIN embeddings e ON e.rowid = v.id
           WHERE e.org_id = ${orgId} AND e.source_type = ${sourceType}
+          GROUP BY e.source_id
           ORDER BY distance ASC
         `)) as Array<{ sourceId: string; distance: number }>
         return rows.map((r) => ({ sourceId: r.sourceId, distance: Number(r.distance) }))
@@ -603,13 +613,14 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
       async existingFor(orgId, sourceType, sourceIds) {
         if (sourceIds.length === 0) return []
         // The `embeddings` table is runtime-created (not a Drizzle table), so it
-        // can't be referenced through `s.*` — query it as raw SQL.
+        // can't be referenced through `s.*` — query it as raw SQL. DISTINCT since
+        // a source now has one row per chunk.
         const ids = sql.join(
           sourceIds.map((sid) => sql`${sid}`),
           sql`, `,
         )
         const rows = (await db.all(sql`
-          SELECT source_id AS sourceId FROM embeddings
+          SELECT DISTINCT source_id AS sourceId FROM embeddings
           WHERE org_id = ${orgId} AND source_type = ${sourceType}
             AND source_id IN (${ids})
         `)) as Array<{ sourceId: string }>
@@ -620,10 +631,11 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
         const k = Math.max(1, Math.floor(candidateK))
         const rows = (await db.all(sql`
           SELECT e.source_id AS sourceId, e.source_type AS sourceType,
-                 vector_distance_cos(e.embedding, vector32(${vec})) AS distance
+                 MIN(vector_distance_cos(e.embedding, vector32(${vec}))) AS distance
           FROM vector_top_k('embeddings_vec_idx', vector32(${vec}), ${sql.raw(String(k))}) AS v
           JOIN embeddings e ON e.rowid = v.id
           WHERE e.org_id = ${orgId}
+          GROUP BY e.source_id, e.source_type
           ORDER BY distance ASC
         `)) as Array<{ sourceId: string; sourceType: string; distance: number }>
         return rows.map((r) => ({

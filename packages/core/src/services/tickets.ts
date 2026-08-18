@@ -1,6 +1,8 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
+import type { ChunkConfig } from '../chunk.js'
+import { embedAndStore } from '../embed.js'
 import {
   ConflictError,
   CoreError,
@@ -166,20 +168,21 @@ export function createTicketService(
   repos: Repositories,
   crowNotifier?: CrowNotifier,
   embedder?: Embedder,
+  chunkConfig?: ChunkConfig,
 ): TicketService {
   /**
    * Best-effort embed of a ticket's title+description for semantic search. Never
    * throws — a failure just leaves the row un-embedded (a backfill can fix it),
-   * so embedding never breaks a create/update.
+   * so embedding never breaks a create/update. Long descriptions are chunked
+   * (ROO-36) so retrieval can point at the relevant passage.
    */
   async function embedTicket(orgId: Id, ticket: Ticket): Promise<void> {
     if (!embedder) return
     try {
       const text = `${ticket.title}\n${ticket.description ?? ''}`.trim()
-      const [vec] = await embedder.embed([text])
-      if (vec) {
-        await repos.embeddings.upsert(orgId, EMBED_SOURCE_TICKET, ticket.id, vec, embedder.model)
-      }
+      await embedAndStore(repos, embedder, chunkConfig, orgId, EMBED_SOURCE_TICKET, [
+        { id: ticket.id, text },
+      ])
     } catch {
       // best-effort — see doc comment.
     }

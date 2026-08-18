@@ -34,6 +34,9 @@ export async function ensureEmbeddingsStore(
           org_id text NOT NULL,
           source_type text NOT NULL,
           source_id text NOT NULL,
+          chunk_index integer NOT NULL DEFAULT 0,
+          char_start integer,
+          char_end integer,
           model text NOT NULL,
           embedding F32_BLOB(${n}) NOT NULL,
           created_at text NOT NULL,
@@ -41,9 +44,26 @@ export async function ensureEmbeddingsStore(
         )`,
       ),
     )
+    // Upgrade a pre-chunk table in place (ROO-36): add the chunk columns if
+    // missing. Each ALTER is best-effort — "duplicate column name" on an
+    // already-upgraded table is expected and ignored.
+    for (const col of [
+      'chunk_index integer NOT NULL DEFAULT 0',
+      'char_start integer',
+      'char_end integer',
+    ]) {
+      try {
+        await db.run(sql.raw(`ALTER TABLE embeddings ADD COLUMN ${col}`))
+      } catch {
+        // column already exists — fine.
+      }
+    }
+    // The uniqueness key gained `chunk_index`; drop the old single-row-per-source
+    // index and create the chunk-aware one.
+    await db.run(sql.raw('DROP INDEX IF EXISTS embeddings_source_uq'))
     await db.run(
       sql.raw(
-        'CREATE UNIQUE INDEX IF NOT EXISTS embeddings_source_uq ON embeddings (org_id, source_type, source_id)',
+        'CREATE UNIQUE INDEX IF NOT EXISTS embeddings_source_chunk_uq ON embeddings (org_id, source_type, source_id, chunk_index)',
       ),
     )
     await db.run(

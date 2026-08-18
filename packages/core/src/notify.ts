@@ -9,6 +9,8 @@
  * watchers. The interface name is kept (`CrowNotifier`) for wiring stability.
  */
 
+import type { ChunkConfig } from './chunk.js'
+
 interface NotificationBase {
   orgId: string
   ticketId: string
@@ -55,4 +57,6 @@ export interface Embedder {
 export interface ServiceDeps {
   crowNotifier?: CrowNotifier
   embedder?: Embedder
+  /** Chunking parameters for embeddings; defaults applied when absent. */
+  chunkConfig?: ChunkConfig
 }
