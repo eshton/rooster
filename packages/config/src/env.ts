@@ -119,6 +119,14 @@ const envSchema = z.object({
    * re-embed via `backfill_embeddings`).
    */
   ROOSTER_EMBEDDING_DIMS: z.coerce.number().int().min(1).max(65_536).default(1536),
+
+  /**
+   * Text chunking for embeddings/RAG (character counts, ~4 chars/token). Long
+   * bodies are split into overlapping chunks so retrieval points at a passage,
+   * not a whole document (ROO-36). Overlap must be < size (enforced below).
+   */
+  ROOSTER_CHUNK_SIZE: z.coerce.number().int().min(1).max(100_000).default(1200),
+  ROOSTER_CHUNK_OVERLAP: z.coerce.number().int().min(0).max(100_000).default(200),
 })
 
 export type RawEnv = z.infer<typeof envSchema>
@@ -212,6 +220,11 @@ export interface RoosterConfig {
    * configured, so it must match whatever model the embedder uses.
    */
   embeddingDims: number
+  /** Text chunking parameters for embeddings/RAG (character counts). */
+  chunking: {
+    size: number
+    overlap: number
+  }
 }
 
 function provider(id?: string, secret?: string): OAuthProvider | undefined {
@@ -275,6 +288,18 @@ export function loadConfig(
         }
       : undefined
 
+  const chunking = {
+    size: env.ROOSTER_CHUNK_SIZE,
+    overlap: env.ROOSTER_CHUNK_OVERLAP,
+  }
+
+  // Overlap must leave forward progress; a chunk can't overlap its whole self.
+  if (env.ROOSTER_CHUNK_OVERLAP >= env.ROOSTER_CHUNK_SIZE) {
+    throw new Error(
+      'Invalid Rooster environment configuration:\n  - ROOSTER_CHUNK_OVERLAP must be less than ROOSTER_CHUNK_SIZE',
+    )
+  }
+
   const admin =
     env.ROOSTER_ADMIN_EMAIL && env.ROOSTER_ADMIN_PASSWORD
       ? {
@@ -329,5 +354,6 @@ export function loadConfig(
     },
     embedding,
     embeddingDims: env.ROOSTER_EMBEDDING_DIMS,
+    chunking,
   }
 }

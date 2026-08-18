@@ -85,15 +85,25 @@ describe('embeddings (libSQL native vectors)', () => {
     return v
   }
 
+  // Store a source as a single chunk (the pre-ROO-36 whole-row case).
+  const store = (
+    e: typeof db.repositories.embeddings,
+    org: string,
+    type: string,
+    id: string,
+    vector: number[],
+    model: string,
+  ) => e.upsertChunks(org, type, id, [{ chunkIndex: 0, vector, charStart: 0, charEnd: 1 }], model)
+
   it('upserts and finds nearest, scoped to org + sourceType', async () => {
     const { org } = await makeOrgWithTeamProject('acme')
     const other = await makeOrgWithTeamProject('other')
     const e = db.repositories.embeddings
 
-    await e.upsert(org.id, 'ticket', 't-near', vec([0, 1]), 'mock')
-    await e.upsert(org.id, 'ticket', 't-far', vec([5, 1]), 'mock')
-    await e.upsert(org.id, 'message', 't-near', vec([0, 1]), 'mock') // different sourceType
-    await e.upsert(other.org.id, 'ticket', 't-foreign', vec([0, 1]), 'mock') // different org
+    await store(e, org.id, 'ticket', 't-near', vec([0, 1]), 'mock')
+    await store(e, org.id, 'ticket', 't-far', vec([5, 1]), 'mock')
+    await store(e, org.id, 'message', 't-near', vec([0, 1]), 'mock') // different sourceType
+    await store(e, other.org.id, 'ticket', 't-foreign', vec([0, 1]), 'mock') // different org
 
     const hits = await e.search(org.id, 'ticket', vec([0, 1]), 10)
     expect(hits[0]?.sourceId).toBe('t-near')
@@ -108,9 +118,9 @@ describe('embeddings (libSQL native vectors)', () => {
   it('upsert replaces (keyed by org+sourceType+sourceId) and existingFor/delete work', async () => {
     const { org } = await makeOrgWithTeamProject('acme')
     const e = db.repositories.embeddings
-    await e.upsert(org.id, 'ticket', 't1', vec([0, 1]), 'mock')
-    await e.upsert(org.id, 'ticket', 't1', vec([1, 1]), 'mock') // replace, not duplicate
-    await e.upsert(org.id, 'ticket', 't2', vec([2, 1]), 'mock')
+    await store(e, org.id, 'ticket', 't1', vec([0, 1]), 'mock')
+    await store(e, org.id, 'ticket', 't1', vec([1, 1]), 'mock') // replace, not duplicate
+    await store(e, org.id, 'ticket', 't2', vec([2, 1]), 'mock')
 
     expect((await e.existingFor(org.id, 'ticket', ['t1', 't2', 't3'])).sort()).toEqual(['t1', 't2'])
     // a single row for t1 (replaced, not duplicated)
@@ -136,8 +146,8 @@ describe('embeddings (libSQL native vectors)', () => {
       const repos = smallDb.repositories
       const org = await repos.orgs.create({ slug: 'dim', name: 'dim', enrollmentPolicy: 'token' })
       const e = repos.embeddings
-      await e.upsert(org.id, 'ticket', 't-near', [1, 0, 0, 0], 'mock')
-      await e.upsert(org.id, 'ticket', 't-far', [0, 0, 0, 1], 'mock')
+      await store(e, org.id, 'ticket', 't-near', [1, 0, 0, 0], 'mock')
+      await store(e, org.id, 'ticket', 't-far', [0, 0, 0, 1], 'mock')
 
       const hits = await e.search(org.id, 'ticket', [1, 0, 0, 0], 10)
       expect(hits[0]?.sourceId).toBe('t-near')

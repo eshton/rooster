@@ -1,6 +1,8 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
+import type { ChunkConfig } from '../chunk.js'
+import { embedAndStore } from '../embed.js'
 import { NotFoundError, ValidationError } from '../errors.js'
 import type { Embedder } from '../notify.js'
 import { authorize } from '../permissions.js'
@@ -65,14 +67,14 @@ const snippetOf = (s: string) => s.slice(0, 200)
 export function createContextFileService(
   repos: Repositories,
   embedder?: Embedder,
+  chunkConfig?: ChunkConfig,
 ): ContextFileService {
   async function embedContextFile(orgId: Id, file: ContextFile): Promise<void> {
     if (!embedder) return
-    const e = embedder
     try {
-      const [vec] = await e.embed([`${file.name}\n${file.body}`])
-      if (vec)
-        await repos.embeddings.upsert(orgId, EMBED_SOURCE_CONTEXT_FILE, file.id, vec, e.model)
+      await embedAndStore(repos, embedder, chunkConfig, orgId, EMBED_SOURCE_CONTEXT_FILE, [
+        { id: file.id, text: `${file.name}\n${file.body}` },
+      ])
     } catch {
       // best-effort — leave un-embedded until a future save/backfill.
     }

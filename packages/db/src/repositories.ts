@@ -152,23 +152,38 @@ export interface ConversationRepository {
 /** A nearest-neighbour hit from a vector search. */
 export interface EmbeddingHit {
   sourceId: Id
-  /** Cosine distance (0 = identical); lower is closer. */
+  /** Cosine distance (0 = identical); lower is closer — the source's best chunk. */
   distance: number
+}
+
+/** One chunk's embedding for a source row (ROO-36 chunk-aware store). */
+export interface EmbeddingChunkInput {
+  /** 0-based chunk position within the source. */
+  chunkIndex: number
+  vector: number[]
+  /** Character offsets into the source text (for snippet/citation use). */
+  charStart: number
+  charEnd: number
 }
 
 /**
  * Polymorphic embedding store backing semantic search (libSQL-native vectors).
  * `sourceType` discriminates `ticket` / `message` / `context_file` so one ANN
- * index serves all recall. libSQL/Turso only — methods rely on `vector32()` /
- * `vector_top_k()` SQL and the runtime-created vector index.
+ * index serves all recall. Each source is stored as one or more **chunk** rows
+ * (`chunkIndex`), so a long body is retrievable by passage. libSQL/Turso only —
+ * methods rely on `vector32()` / `vector_top_k()` SQL and the runtime index.
  */
 export interface EmbeddingRepository {
-  /** Insert or replace the embedding for a source row (keyed org+type+id). */
-  upsert(
+  /**
+   * Replace all chunk-embeddings for a source row (keyed org+type+id). Deletes
+   * the source's existing chunks, then inserts `chunks` — so re-embedding after
+   * an edit never leaves stale chunks behind.
+   */
+  upsertChunks(
     orgId: Id,
     sourceType: string,
     sourceId: Id,
-    vector: number[],
+    chunks: EmbeddingChunkInput[],
     model: string,
   ): Promise<void>
   /**
