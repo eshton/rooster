@@ -173,8 +173,11 @@ jobs:
         run: pnpm --filter @rooster/server build
 
       # Migrate first so new columns/tables exist before the new code serves.
+      # ROOSTER_EMBEDDING_DIMS matches the deployed Worker (wrangler.toml [vars])
+      # so ensureEmbeddingsStore sizes/validates the table to the same width and
+      # doesn't warn about a phantom mismatch during migrate.
       - name: Apply domain migrations (Turso)
-        run: pnpm --filter @rooster/db db:migrate
+        run: ROOSTER_EMBEDDING_DIMS=1024 pnpm --filter @rooster/db db:migrate
 
       - name: Apply better-auth migrations (Turso)
         run: pnpm --filter @rooster/server auth:migrate
@@ -183,17 +186,26 @@ jobs:
         working-directory: apps/server
         run: pnpm dlx wrangler@4 deploy
 
+      # A new Worker version takes a few seconds to propagate globally, so poll
+      # /healthz with backoff before asserting — a single immediate curl races
+      # propagation and flaps the deploy red even when it succeeded.
       - name: Post-deploy smoke
         run: |
           set -euo pipefail
-          echo "Smoke-testing $BASE_URL"
-          curl -fsS "$BASE_URL/healthz" | grep -q '"ok":true'
-          curl -fsS "$BASE_URL/.well-known/rooster" -o /tmp/disc.json
+          echo "Waiting for $BASE_URL/healthz to serve the new deploy…"
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -fsS -m 10 "$BASE_URL/healthz" | grep -q '"ok":true'; then ok=1; break; fi
+            echo "  attempt $i: not ready yet, retrying in 6s"
+            sleep 6
+          done
+          if [ "$ok" -ne 1 ]; then echo "::error::/healthz did not become healthy after ~2min"; exit 1; fi
+          curl -fsS -m 10 "$BASE_URL/.well-known/rooster" -o /tmp/disc.json
           # Discovery must advertise the correct base URL (a stale base breaks OAuth/MCP).
           grep -q "$BASE_URL" /tmp/disc.json
-          curl -fsS "$BASE_URL/llms.txt" -o /dev/null
-          curl -fsS "$BASE_URL/api/auth/.well-known/oauth-authorization-server" -o /dev/null
-          curl -fsS "$BASE_URL/api/auth/.well-known/oauth-protected-resource" -o /dev/null
+          curl -fsS -m 10 "$BASE_URL/llms.txt" -o /dev/null
+          curl -fsS -m 10 "$BASE_URL/api/auth/.well-known/oauth-authorization-server" -o /dev/null
+          curl -fsS -m 10 "$BASE_URL/api/auth/.well-known/oauth-protected-resource" -o /dev/null
           echo "Post-deploy smoke passed ✓"
 
   # Deploy the marketing + docs sites (Cloudflare Pages).
