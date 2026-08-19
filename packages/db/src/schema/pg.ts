@@ -318,6 +318,39 @@ export const auditLog = pgTable(
   (t) => [index('audit_log_org_created_idx').on(t.orgId, t.createdAt)],
 )
 
+// --- CRM (ROO-46) — kept structurally identical to schema/sqlite.ts ---------
+
+export const customers = pgTable(
+  'customers',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    name: text('name').notNull(),
+    lifecycleStage: text('lifecycle_stage').notNull().default('lead'),
+    ownerId: text('owner_id'),
+    tags: text('tags').notNull().default('[]'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('customers_org_idx').on(t.orgId)],
+)
+
+export const contacts = pgTable(
+  'contacts',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    customerId: text('customer_id').notNull(),
+    name: text('name').notNull(),
+    email: text('email'),
+    phone: text('phone'),
+    role: text('role'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('contacts_org_customer_idx').on(t.orgId, t.customerId)],
+)
+
 export const pgSchema = {
   orgs,
   teams,
@@ -339,4 +372,6 @@ export const pgSchema = {
   rateLimits,
   idempotencyKeys,
   auditLog,
+  customers,
+  contacts,
 }

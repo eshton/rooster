@@ -133,6 +133,19 @@ delivered through the crow webhook (`ROOSTER_CROW_WEBHOOK_URL`).
 | `set_agent_status` | `agent:write` | Suspend / reactivate an agent |
 | `read_audit` | `audit:read` | Read the append-only audit log |
 
+## CRM (customers & contacts)
+
+| Tool | Scope | Description |
+| --- | --- | --- |
+| `create_customer` | `crm:write` | Create a customer/client (lifecycleStage lead→prospect→active→churned) |
+| `list_customers` | `crm:read` | List the workspace customers, most recent first |
+| `get_customer` | `crm:read` | Fetch a single customer by id |
+| `update_customer` | `crm:write` | Update a customer's name / lifecycleStage / owner / tags |
+| `add_contact` | `crm:write` | Add a person (contact) to a customer |
+| `list_contacts` | `crm:read` | List a customer's contacts |
+| `update_contact` | `crm:write` | Update a contact's name / email / phone / role |
+| `remove_contact` | `crm:write` | Remove a contact |
+
 ## Scopes
 
 Scopes map 1:1 to the core permission set. Each carries a minimum role floor that
@@ -145,6 +158,8 @@ the agent's membership must also satisfy:
 | `project:write` | member |
 | `conversation:read` | member |
 | `conversation:write` | member |
+| `crm:read` | member |
+| `crm:write` | member |
 | `team:write` | admin |
 | `agent:read` | viewer |
 | `agent:write` | admin |

@@ -15,6 +15,8 @@ import {
   claimNextInput,
   commentInput,
   conversationStageSchema,
+  createContactInput,
+  createCustomerInput,
   createInviteInput,
   createMilestoneInput,
   createProjectInput,
@@ -37,6 +39,8 @@ import {
   type Ticket,
   ticketStatusSchema,
   unlinkTicketsInput,
+  updateContactInput,
+  updateCustomerInput,
   updateTicketInput,
   watchTicketInput,
 } from '@rooster/schema'
@@ -843,5 +847,94 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { id: z.uuid(), status: agentStatusSchema },
     },
     async ({ id, status }) => runTool(() => services.agents.setStatus(actor, id, status)),
+  )
+
+  // --- CRM (ROO-46) ---------------------------------------------------------
+
+  server.registerTool(
+    'create_customer',
+    {
+      title: 'Create customer',
+      description:
+        'Create a customer/client — the long-lived relationship record. `lifecycleStage` ' +
+        '(lead|prospect|active|churned) defaults to lead. Add people with add_contact, log ' +
+        'calls/notes with log_interaction, and open revenue with create_deal.',
+      inputSchema: createCustomerInput.shape,
+    },
+    async (args) => runTool(() => services.customers.create(actor, args)),
+  )
+
+  server.registerTool(
+    'list_customers',
+    {
+      title: 'List customers',
+      description: 'List the workspace customers, most recent first.',
+      inputSchema: {},
+    },
+    async () => runTool(() => services.customers.list(actor)),
+  )
+
+  server.registerTool(
+    'get_customer',
+    {
+      title: 'Get customer',
+      description: 'Fetch a single customer by id.',
+      inputSchema: { id: z.uuid() },
+    },
+    async ({ id }) => runTool(() => services.customers.get(actor, id)),
+  )
+
+  server.registerTool(
+    'update_customer',
+    {
+      title: 'Update customer',
+      description:
+        "Update a customer's fields (name, lifecycleStage, ownerId, tags). Advancing " +
+        'lifecycleStage tracks the relationship, distinct from a deal pipeline.',
+      inputSchema: { id: z.uuid(), ...updateCustomerInput.shape },
+    },
+    async ({ id, ...patch }) => runTool(() => services.customers.update(actor, id, patch)),
+  )
+
+  server.registerTool(
+    'add_contact',
+    {
+      title: 'Add contact',
+      description:
+        'Add a person (contact) to a customer — name plus optional email/phone/role. Contacts ' +
+        'are tracked people, not Rooster principals.',
+      inputSchema: createContactInput.shape,
+    },
+    async (args) => runTool(() => services.contacts.add(actor, args)),
+  )
+
+  server.registerTool(
+    'list_contacts',
+    {
+      title: 'List contacts',
+      description: "List a customer's contacts (people), most recent first.",
+      inputSchema: { customerId: z.uuid() },
+    },
+    async ({ customerId }) => runTool(() => services.contacts.list(actor, customerId)),
+  )
+
+  server.registerTool(
+    'update_contact',
+    {
+      title: 'Update contact',
+      description: "Update a contact's name/email/phone/role.",
+      inputSchema: { id: z.uuid(), ...updateContactInput.shape },
+    },
+    async ({ id, ...patch }) => runTool(() => services.contacts.update(actor, id, patch)),
+  )
+
+  server.registerTool(
+    'remove_contact',
+    {
+      title: 'Remove contact',
+      description: 'Remove a contact from a customer.',
+      inputSchema: { id: z.uuid() },
+    },
+    async ({ id }) => runTool(() => services.contacts.remove(actor, id)),
   )
 }

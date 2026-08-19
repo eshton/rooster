@@ -3,8 +3,10 @@ import type {
   Attachment,
   AuditLog,
   Comment,
+  Contact,
   ContextFile,
   ConversationMessage,
+  Customer,
   Id,
   Invite,
   Membership,
@@ -114,6 +116,31 @@ export interface MilestoneRepository {
   create(orgId: Id, input: Omit<Milestone, keyof TimestampedId | 'orgId'>): Promise<Milestone>
   getById(orgId: Id, id: Id): Promise<Milestone | null>
   listForProject(orgId: Id, projectId: Id, opts?: ListOptions): Promise<Milestone[]>
+}
+
+/** CRM customers/clients (ROO-46). */
+export interface CustomerRepository {
+  create(orgId: Id, input: Omit<Customer, keyof TimestampedId | 'orgId'>): Promise<Customer>
+  getById(orgId: Id, id: Id): Promise<Customer | null>
+  list(orgId: Id, opts?: ListOptions): Promise<Customer[]>
+  update(
+    orgId: Id,
+    id: Id,
+    patch: Partial<Omit<Customer, keyof TimestampedId | 'orgId'>>,
+  ): Promise<Customer | null>
+}
+
+/** CRM contacts (people at a customer). */
+export interface ContactRepository {
+  create(orgId: Id, input: Omit<Contact, keyof TimestampedId | 'orgId'>): Promise<Contact>
+  getById(orgId: Id, id: Id): Promise<Contact | null>
+  listForCustomer(orgId: Id, customerId: Id, opts?: ListOptions): Promise<Contact[]>
+  update(
+    orgId: Id,
+    id: Id,
+    patch: Partial<Omit<Contact, keyof TimestampedId | 'orgId' | 'customerId'>>,
+  ): Promise<Contact | null>
+  delete(orgId: Id, id: Id): Promise<boolean>
 }
 
 export interface CommentRepository {
@@ -392,6 +419,8 @@ export interface Repositories {
   watchers: WatcherRepository
   assignees: AssigneeRepository
   milestones: MilestoneRepository
+  customers: CustomerRepository
+  contacts: ContactRepository
   comments: CommentRepository
   conversation: ConversationRepository
   attachments: AttachmentRepository

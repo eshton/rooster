@@ -3,6 +3,7 @@ import {
   agentKindSchema,
   agentStatusSchema,
   conversationStageSchema,
+  customerLifecycleStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
   messageKindSchema,
@@ -308,3 +309,36 @@ export const auditLogSchema = z.object({
   createdAt: timestampSchema,
 })
 export type AuditLog = z.infer<typeof auditLogSchema>
+
+// --- CRM (ROO-46) -----------------------------------------------------------
+
+/**
+ * A customer / client — the long-lived relationship (ROO-46). `lifecycleStage`
+ * tracks the RELATIONSHIP (lead→active→churned), distinct from a deal's sales
+ * pipeline. `ownerId` is the principal who owns the account. Canonical code name
+ * `customer` (avoids the `client`/`account` collisions); the UI label is a
+ * per-deployment preference.
+ */
+export const customerSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  name: z.string().min(1).max(200),
+  lifecycleStage: customerLifecycleStageSchema,
+  /** Principal who owns this account (nullable). */
+  ownerId: idSchema.nullable(),
+  tags: z.array(z.string().min(1).max(60)),
+})
+export type Customer = z.infer<typeof customerSchema>
+
+/** A person at a customer. NOT a principal — contacts are tracked, they don't act. */
+export const contactSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  customerId: idSchema,
+  name: z.string().min(1).max(200),
+  email: z.string().max(320).nullable(),
+  phone: z.string().max(60).nullable(),
+  /** Their role/title at the customer (e.g. "CTO"). */
+  role: z.string().max(120).nullable(),
+})
+export type Contact = z.infer<typeof contactSchema>

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   agentKindSchema,
   conversationStageSchema,
+  customerLifecycleStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
   messageKindSchema,
@@ -401,3 +402,42 @@ export const registerTenantInput = z.object({
     .optional(),
 })
 export type RegisterTenantInput = z.infer<typeof registerTenantInput>
+
+// --- CRM (ROO-46) -----------------------------------------------------------
+
+/** Create a customer/client. `lifecycleStage` defaults to `lead`. */
+export const createCustomerInput = z.object({
+  name: z.string().min(1).max(200),
+  lifecycleStage: customerLifecycleStageSchema.optional(),
+  ownerId: idSchema.nullable().optional(),
+  tags: z.array(z.string().min(1).max(60)).default([]),
+})
+export type CreateCustomerInput = z.infer<typeof createCustomerInput>
+
+/** Patch a customer's fields (all optional). */
+export const updateCustomerInput = z.object({
+  name: z.string().min(1).max(200).optional(),
+  lifecycleStage: customerLifecycleStageSchema.optional(),
+  ownerId: idSchema.nullable().optional(),
+  tags: z.array(z.string().min(1).max(60)).optional(),
+})
+export type UpdateCustomerInput = z.infer<typeof updateCustomerInput>
+
+/** Add a contact (person) to a customer. */
+export const createContactInput = z.object({
+  customerId: idSchema,
+  name: z.string().min(1).max(200),
+  email: z.string().max(320).nullable().optional(),
+  phone: z.string().max(60).nullable().optional(),
+  role: z.string().max(120).nullable().optional(),
+})
+export type CreateContactInput = z.infer<typeof createContactInput>
+
+/** Patch a contact's fields (all optional). */
+export const updateContactInput = z.object({
+  name: z.string().min(1).max(200).optional(),
+  email: z.string().max(320).nullable().optional(),
+  phone: z.string().max(60).nullable().optional(),
+  role: z.string().max(120).nullable().optional(),
+})
+export type UpdateContactInput = z.infer<typeof updateContactInput>
