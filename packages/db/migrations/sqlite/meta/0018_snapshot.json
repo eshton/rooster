@@ -103,9 +103,7 @@
       "indexes": {
         "agents_oauth_client_id_unique": {
           "name": "agents_oauth_client_id_unique",
-          "columns": [
-            "oauth_client_id"
-          ],
+          "columns": ["oauth_client_id"],
           "isUnique": true
         }
       },
@@ -257,10 +255,7 @@
       "indexes": {
         "audit_log_org_created_idx": {
           "name": "audit_log_org_created_idx",
-          "columns": [
-            "org_id",
-            "created_at"
-          ],
+          "columns": ["org_id", "created_at"],
           "isUnique": false
         }
       },
@@ -325,10 +320,7 @@
       "indexes": {
         "comments_org_ticket_idx": {
           "name": "comments_org_ticket_idx",
-          "columns": [
-            "org_id",
-            "ticket_id"
-          ],
+          "columns": ["org_id", "ticket_id"],
           "isUnique": false
         }
       },
@@ -407,10 +399,7 @@
       "indexes": {
         "contacts_org_customer_idx": {
           "name": "contacts_org_customer_idx",
-          "columns": [
-            "org_id",
-            "customer_id"
-          ],
+          "columns": ["org_id", "customer_id"],
           "isUnique": false
         }
       },
@@ -489,10 +478,7 @@
       "indexes": {
         "context_files_org_project_idx": {
           "name": "context_files_org_project_idx",
-          "columns": [
-            "org_id",
-            "project_id"
-          ],
+          "columns": ["org_id", "project_id"],
           "isUnique": false
         }
       },
@@ -593,12 +579,7 @@
       "indexes": {
         "conversation_messages_org_ticket_stage_seq_idx": {
           "name": "conversation_messages_org_ticket_stage_seq_idx",
-          "columns": [
-            "org_id",
-            "ticket_id",
-            "stage",
-            "seq"
-          ],
+          "columns": ["org_id", "ticket_id", "stage", "seq"],
           "isUnique": false
         }
       },
@@ -672,9 +653,7 @@
       "indexes": {
         "customers_org_idx": {
           "name": "customers_org_idx",
-          "columns": [
-            "org_id"
-          ],
+          "columns": ["org_id"],
           "isUnique": false
         }
       },
@@ -725,10 +704,7 @@
       "indexes": {
         "idempotency_keys_org_key_uq": {
           "name": "idempotency_keys_org_key_uq",
-          "columns": [
-            "org_id",
-            "key"
-          ],
+          "columns": ["org_id", "key"],
           "isUnique": true
         }
       },
@@ -816,9 +792,7 @@
       "indexes": {
         "invites_code_unique": {
           "name": "invites_code_unique",
-          "columns": [
-            "code"
-          ],
+          "columns": ["code"],
           "isUnique": true
         }
       },
@@ -883,11 +857,7 @@
       "indexes": {
         "memberships_scope_uq": {
           "name": "memberships_scope_uq",
-          "columns": [
-            "org_id",
-            "principal_id",
-            "team_id"
-          ],
+          "columns": ["org_id", "principal_id", "team_id"],
           "isUnique": true
         }
       },
@@ -1018,9 +988,7 @@
       "indexes": {
         "orgs_slug_unique": {
           "name": "orgs_slug_unique",
-          "columns": [
-            "slug"
-          ],
+          "columns": ["slug"],
           "isUnique": true
         }
       },
@@ -1167,10 +1135,7 @@
       "indexes": {
         "projects_org_key_uq": {
           "name": "projects_org_key_uq",
-          "columns": [
-            "org_id",
-            "key"
-          ],
+          "columns": ["org_id", "key"],
           "isUnique": true
         }
       },
@@ -1267,10 +1232,7 @@
       "indexes": {
         "teams_org_key_uq": {
           "name": "teams_org_key_uq",
-          "columns": [
-            "org_id",
-            "key"
-          ],
+          "columns": ["org_id", "key"],
           "isUnique": true
         }
       },
@@ -1328,19 +1290,12 @@
       "indexes": {
         "ticket_assignees_uq": {
           "name": "ticket_assignees_uq",
-          "columns": [
-            "org_id",
-            "ticket_id",
-            "principal_id"
-          ],
+          "columns": ["org_id", "ticket_id", "principal_id"],
           "isUnique": true
         },
         "ticket_assignees_org_principal_idx": {
           "name": "ticket_assignees_org_principal_idx",
-          "columns": [
-            "org_id",
-            "principal_id"
-          ],
+          "columns": ["org_id", "principal_id"],
           "isUnique": false
         }
       },
@@ -1405,12 +1360,7 @@
       "indexes": {
         "ticket_links_uq": {
           "name": "ticket_links_uq",
-          "columns": [
-            "org_id",
-            "from_ticket_id",
-            "to_ticket_id",
-            "type"
-          ],
+          "columns": ["org_id", "from_ticket_id", "to_ticket_id", "type"],
           "isUnique": true
         }
       },
@@ -1468,11 +1418,7 @@
       "indexes": {
         "ticket_watchers_uq": {
           "name": "ticket_watchers_uq",
-          "columns": [
-            "org_id",
-            "ticket_id",
-            "principal_id"
-          ],
+          "columns": ["org_id", "ticket_id", "principal_id"],
           "isUnique": true
         }
       },
@@ -1615,35 +1561,22 @@
       "indexes": {
         "tickets_org_key_uq": {
           "name": "tickets_org_key_uq",
-          "columns": [
-            "org_id",
-            "key"
-          ],
+          "columns": ["org_id", "key"],
           "isUnique": true
         },
         "tickets_org_project_status_idx": {
           "name": "tickets_org_project_status_idx",
-          "columns": [
-            "org_id",
-            "project_id",
-            "status"
-          ],
+          "columns": ["org_id", "project_id", "status"],
           "isUnique": false
         },
         "tickets_org_assignee_idx": {
           "name": "tickets_org_assignee_idx",
-          "columns": [
-            "org_id",
-            "assignee_id"
-          ],
+          "columns": ["org_id", "assignee_id"],
           "isUnique": false
         },
         "tickets_org_milestone_idx": {
           "name": "tickets_org_milestone_idx",
-          "columns": [
-            "org_id",
-            "milestone_id"
-          ],
+          "columns": ["org_id", "milestone_id"],
           "isUnique": false
         }
       },
@@ -1715,16 +1648,12 @@
       "indexes": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         },
         "users_auth_user_id_unique": {
           "name": "users_auth_user_id_unique",
-          "columns": [
-            "auth_user_id"
-          ],
+          "columns": ["auth_user_id"],
           "isUnique": true
         }
       },
