@@ -1,21 +1,17 @@
 import { type TicketStatus, ticketStatusSchema } from '@rooster/schema'
+import { allowedTransitionsIn, canTransitionIn, DEFAULT_TICKET_WORKFLOW } from './workflow.js'
 
 /**
- * Allowed ticket status transitions (the built-in default workflow). Cancel is
- * reachable from any open state; done and canceled can be reopened. Per-project
- * configurable workflows are a documented post-v1 item.
+ * The built-in default ticket workflow, kept here as named ticket-specific
+ * helpers for existing callers. The graph itself now lives on
+ * {@link DEFAULT_TICKET_WORKFLOW} (the generalized engine, ROO-53); these are
+ * thin, type-narrowed wrappers over it so behavior is byte-identical.
  */
-export const TICKET_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
-  backlog: ['todo', 'in_progress', 'canceled'],
-  todo: ['backlog', 'in_progress', 'canceled'],
-  in_progress: ['todo', 'in_review', 'done', 'canceled'],
-  in_review: ['in_progress', 'done', 'canceled'],
-  done: ['in_progress'],
-  canceled: ['backlog', 'todo'],
-}
+export const TICKET_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> =
+  DEFAULT_TICKET_WORKFLOW.transitions
 
 /** The status assigned to a freshly created ticket. */
-export const INITIAL_TICKET_STATUS: TicketStatus = 'backlog'
+export const INITIAL_TICKET_STATUS: TicketStatus = DEFAULT_TICKET_WORKFLOW.initial
 
 /**
  * Statuses a ticket may be in to be picked up by `claim_next` — actionable but
@@ -24,12 +20,12 @@ export const INITIAL_TICKET_STATUS: TicketStatus = 'backlog'
 export const CLAIMABLE_STATUSES: readonly TicketStatus[] = ['backlog', 'todo']
 
 export function canTransition(from: TicketStatus, to: TicketStatus): boolean {
-  return TICKET_TRANSITIONS[from].includes(to)
+  return canTransitionIn(DEFAULT_TICKET_WORKFLOW, from, to)
 }
 
 /** The set of statuses reachable from `from` (for UIs and validation copy). */
 export function allowedTransitions(from: TicketStatus): readonly TicketStatus[] {
-  return TICKET_TRANSITIONS[from]
+  return allowedTransitionsIn(DEFAULT_TICKET_WORKFLOW, from)
 }
 
 export { ticketStatusSchema }

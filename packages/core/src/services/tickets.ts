@@ -13,8 +13,9 @@ import {
 import type { CrowNotifier, Embedder } from '../notify.js'
 import { authorize, can } from '../permissions.js'
 import { withRetry } from '../retry.js'
-import { CLAIMABLE_STATUSES, canTransition, INITIAL_TICKET_STATUS } from '../transitions.js'
+import { CLAIMABLE_STATUSES, INITIAL_TICKET_STATUS } from '../transitions.js'
 import { parse } from '../validate.js'
+import { canTransitionIn, getDefaultWorkflow } from '../workflow.js'
 import {
   type AssigneeRefInput,
   type AssignTicketInput,
@@ -657,7 +658,10 @@ export function createTicketService(
       if (before.status === input.status) {
         throw new ValidationError(`Ticket is already '${input.status}'`)
       }
-      if (!canTransition(before.status, input.status)) {
+      // Validate against the active workflow for tickets (today the built-in
+      // default; the seam where a per-workspace override would resolve, ROO-53).
+      const workflow = getDefaultWorkflow('ticket')
+      if (!canTransitionIn(workflow, before.status, input.status)) {
         throw new ValidationError(`Illegal transition '${before.status}' → '${input.status}'`)
       }
 
