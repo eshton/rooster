@@ -28,8 +28,11 @@ import {
   createTicketsInput,
   inviteMemberInput,
   joinTenantInput,
+  linkDealWorkInput,
   linkTicketsInput,
   listContextFilesInput,
+  listCustomerWorkInput,
+  listDealWorkInput,
   listInteractionsInput,
   logInteractionInput,
   moveTicketInput,
@@ -1026,5 +1029,41 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: listInteractionsInput.shape,
     },
     async (args) => runTool(() => services.interactions.list(actor, args)),
+  )
+
+  server.registerTool(
+    'link_deal_work',
+    {
+      title: 'Link deal to delivery work',
+      description:
+        'Attach an existing delivery project to a deal — the won-deal → work bridge that ' +
+        'unifies CRM and PM. Create the project first (create_project), then link it here. The ' +
+        "project's customer is derived from the deal, so it also shows up in list_customer_work. " +
+        'Typically called when a deal moves to `won`, but allowed at any stage.',
+      inputSchema: linkDealWorkInput.shape,
+    },
+    async (args) => runTool(() => services.deals.linkWork(actor, args)),
+  )
+
+  server.registerTool(
+    'list_deal_work',
+    {
+      title: 'List deal delivery work',
+      description: 'The delivery projects linked to a deal (most recent first).',
+      inputSchema: listDealWorkInput.shape,
+    },
+    async (args) => runTool(() => services.deals.listWork(actor, args)),
+  )
+
+  server.registerTool(
+    'list_customer_work',
+    {
+      title: 'List customer delivery work',
+      description:
+        'Every delivery project serving a customer, across all their deals — the unified view: ' +
+        'one relationship, all the work.',
+      inputSchema: listCustomerWorkInput.shape,
+    },
+    async (args) => runTool(() => services.customers.listWork(actor, args)),
   )
 }

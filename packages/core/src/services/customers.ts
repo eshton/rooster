@@ -9,6 +9,9 @@ import {
   type Customer,
   createCustomerInput,
   type Id,
+  type ListCustomerWorkInput,
+  listCustomerWorkInput,
+  type Project,
   type UpdateCustomerInput,
   updateCustomerInput,
 } from './deps.js'
@@ -22,6 +25,11 @@ export interface CustomerService {
   list(actor: Actor, opts?: ListOptions): Promise<Customer[]>
   /** Patch a customer's fields. */
   update(actor: Actor, id: Id, input: UpdateCustomerInput): Promise<Customer>
+  /**
+   * Every delivery project serving this customer, across all their deals
+   * (ROO-50) — the unified view: one relationship, all the work.
+   */
+  listWork(actor: Actor, input: ListCustomerWorkInput, opts?: ListOptions): Promise<Project[]>
 }
 
 export function createCustomerService(repos: Repositories): CustomerService {
@@ -74,6 +82,12 @@ export function createCustomerService(repos: Repositories): CustomerService {
         after,
       })
       return after
+    },
+
+    async listWork(actor, rawInput, opts) {
+      authorize(actor, 'crm:read')
+      const { customerId } = parse(listCustomerWorkInput, rawInput)
+      return repos.projects.listForCustomer(actor.orgId, customerId, opts)
     },
   }
 }

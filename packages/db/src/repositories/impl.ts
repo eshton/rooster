@@ -227,6 +227,34 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
         if (!row) throw new Error(`Project ${id} not found in org ${orgId}`)
         return toProject(row)
       },
+      async linkWork(orgId, id, link) {
+        const [row] = await db
+          .update(s.projects)
+          .set({ customerId: link.customerId, dealId: link.dealId, updatedAt: now() })
+          .where(and(eq(s.projects.orgId, orgId), eq(s.projects.id, id)))
+          .returning()
+        return row ? toProject(row) : null
+      },
+      async listForDeal(orgId, dealId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.projects)
+            .where(and(eq(s.projects.orgId, orgId), eq(s.projects.dealId, dealId)))
+            .orderBy(desc(s.projects.createdAt))
+            .limit(limitOf(opts))
+        ).map(toProject)
+      },
+      async listForCustomer(orgId, customerId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.projects)
+            .where(and(eq(s.projects.orgId, orgId), eq(s.projects.customerId, customerId)))
+            .orderBy(desc(s.projects.createdAt))
+            .limit(limitOf(opts))
+        ).map(toProject)
+      },
     },
 
     tickets: {

@@ -496,3 +496,27 @@ export const listInteractionsInput = z.object({
   targetId: idSchema,
 })
 export type ListInteractionsInput = z.infer<typeof listInteractionsInput>
+
+/**
+ * Link a delivery project to a deal (ROO-50) — the won-deal → work bridge.
+ * The project's `customerId` is derived from the deal, so it also shows up in
+ * the customer's aggregated work view. Pass an existing project (create it
+ * first with `create_project`).
+ */
+export const linkDealWorkInput = z.object({
+  dealId: idSchema,
+  projectId: idSchema,
+})
+export type LinkDealWorkInput = z.infer<typeof linkDealWorkInput>
+
+/** List the delivery projects linked to a deal. */
+export const listDealWorkInput = z.object({
+  dealId: idSchema,
+})
+export type ListDealWorkInput = z.infer<typeof listDealWorkInput>
+
+/** List every delivery project serving a customer (across all their deals). */
+export const listCustomerWorkInput = z.object({
+  customerId: idSchema,
+})
+export type ListCustomerWorkInput = z.infer<typeof listCustomerWorkInput>

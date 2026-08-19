@@ -65,6 +65,15 @@ export const projectSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(4000).nullable(),
   archived: z.boolean(),
+  /**
+   * CRM link (ROO-50): the deal this project delivers, and/or the customer it
+   * serves — the bridge that unifies revenue (CRM) and delivery (PM) in one
+   * audited system. Both null for internal/product projects. `customerId` is
+   * derived from the deal when linked, so a customer's work view aggregates
+   * every deal-linked project.
+   */
+  customerId: idSchema.nullable(),
+  dealId: idSchema.nullable(),
 })
 export type Project = z.infer<typeof projectSchema>
 

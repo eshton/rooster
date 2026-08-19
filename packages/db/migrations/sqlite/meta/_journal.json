@@ -148,6 +148,13 @@
       "when": 1787151144008,
       "tag": "0020_special_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1787160823882,
+      "tag": "0021_yellow_stone_men",
+      "breakpoints": true
     }
   ]
 }
