@@ -1,10 +1,11 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
-import { canDealTransition, INITIAL_DEAL_STAGE } from '../deal-transitions.js'
+import { INITIAL_DEAL_STAGE } from '../deal-transitions.js'
 import { NotFoundError, ValidationError } from '../errors.js'
 import { authorize } from '../permissions.js'
 import { parse } from '../validate.js'
+import { canTransitionIn, getDefaultWorkflow } from '../workflow.js'
 import {
   type ChangeDealStageInput,
   type CreateDealInput,
@@ -109,7 +110,10 @@ export function createDealService(repos: Repositories): DealService {
       if (before.pipelineStage === stage) {
         throw new ValidationError(`Deal ${dealId} is already in stage '${stage}'`)
       }
-      if (!canDealTransition(before.pipelineStage, stage)) {
+      // Validate against the active deal workflow (default pipeline today; the
+      // seam for per-workspace configurable pipelines, ROO-53).
+      const workflow = getDefaultWorkflow('deal')
+      if (!canTransitionIn(workflow, before.pipelineStage, stage)) {
         throw new ValidationError(`Illegal deal transition '${before.pipelineStage}' → '${stage}'`)
       }
       const after = await repos.deals.update(actor.orgId, dealId, { pipelineStage: stage })

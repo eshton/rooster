@@ -1,30 +1,25 @@
 import { type DealPipelineStage, dealPipelineStageSchema } from '@rooster/schema'
+import { allowedTransitionsIn, canTransitionIn, DEFAULT_DEAL_WORKFLOW } from './workflow.js'
 
 /**
- * Allowed deal pipeline transitions — the built-in DEFAULT sales pipeline
- * (ROO-48). A second state machine, distinct from ticket status and the customer
- * lifecycle. `won`/`lost` are reachable from late stages and can be reopened.
- * Per-workspace configurable pipelines ride the generalized workflow engine
- * (ROO-53); this module is its default and the seam to generalize.
+ * The built-in default sales pipeline (ROO-48), kept here as named
+ * deal-specific helpers for existing callers. The graph itself now lives on
+ * {@link DEFAULT_DEAL_WORKFLOW} (the generalized engine, ROO-53); these are
+ * thin, type-narrowed wrappers over it so behavior is byte-identical.
  */
-export const DEAL_TRANSITIONS: Record<DealPipelineStage, readonly DealPipelineStage[]> = {
-  prospecting: ['qualified', 'lost'],
-  qualified: ['proposal', 'prospecting', 'lost'],
-  proposal: ['won', 'lost', 'qualified'],
-  won: ['proposal'],
-  lost: ['prospecting', 'qualified'],
-}
+export const DEAL_TRANSITIONS: Record<DealPipelineStage, readonly DealPipelineStage[]> =
+  DEFAULT_DEAL_WORKFLOW.transitions
 
 /** The stage a freshly opened deal starts in. */
-export const INITIAL_DEAL_STAGE: DealPipelineStage = 'prospecting'
+export const INITIAL_DEAL_STAGE: DealPipelineStage = DEFAULT_DEAL_WORKFLOW.initial
 
 export function canDealTransition(from: DealPipelineStage, to: DealPipelineStage): boolean {
-  return DEAL_TRANSITIONS[from].includes(to)
+  return canTransitionIn(DEFAULT_DEAL_WORKFLOW, from, to)
 }
 
 /** Stages reachable from `from` (for UIs and validation copy). */
 export function allowedDealTransitions(from: DealPipelineStage): readonly DealPipelineStage[] {
-  return DEAL_TRANSITIONS[from]
+  return allowedTransitionsIn(DEFAULT_DEAL_WORKFLOW, from)
 }
 
 export { dealPipelineStageSchema }
