@@ -4,8 +4,10 @@ import type {
   AuditLog,
   ClientInfo,
   Comment,
+  Contact,
   ContextFile,
   ConversationMessage,
+  Customer,
   Id,
   Invite,
   Membership,
@@ -95,6 +97,12 @@ const toConversationMessage = (r: Rows['conversationMessages']): ConversationMes
 const toTicketLink = (r: Rows['ticketLinks']): TicketLink => r as TicketLink
 const toWatcher = (r: Rows['ticketWatchers']): Watcher => r as Watcher
 const toMilestone = (r: Rows['milestones']): Milestone => r as Milestone
+const toCustomer = (r: Rows['customers']): Customer =>
+  ({
+    ...r,
+    tags: dec<string[]>(r.tags, []),
+  }) as Customer
+const toContact = (r: Rows['contacts']): Contact => r as Contact
 const toTicketAssignee = (r: Rows['ticketAssignees']): TicketAssignee => r as TicketAssignee
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
 const toContextFile = (r: Rows['contextFiles']): ContextFile => r as ContextFile
@@ -965,6 +973,116 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
             .orderBy(desc(s.milestones.createdAt))
             .limit(limitOf(opts))
         ).map(toMilestone)
+      },
+    },
+
+    customers: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.customers)
+          .values({
+            id: newId(),
+            orgId,
+            ...input,
+            tags: enc(input.tags),
+            createdAt: ts,
+            updatedAt: ts,
+          })
+          .returning()
+        return toCustomer(row!)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.customers)
+              .where(and(eq(s.customers.orgId, orgId), eq(s.customers.id, id)))
+              .limit(1)
+          ).map(toCustomer),
+        )
+      },
+      async list(orgId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.customers)
+            .where(eq(s.customers.orgId, orgId))
+            .orderBy(desc(s.customers.createdAt))
+            .limit(limitOf(opts))
+        ).map(toCustomer)
+      },
+      async update(orgId, id, patch) {
+        const values: Record<string, unknown> = { updatedAt: now() }
+        if (patch.name !== undefined) values.name = patch.name
+        if (patch.lifecycleStage !== undefined) values.lifecycleStage = patch.lifecycleStage
+        if (patch.ownerId !== undefined) values.ownerId = patch.ownerId
+        if (patch.tags !== undefined) values.tags = enc(patch.tags)
+        const rows = (
+          await db
+            .update(s.customers)
+            .set(values)
+            .where(and(eq(s.customers.orgId, orgId), eq(s.customers.id, id)))
+            .returning()
+        ).map(toCustomer)
+        return first(rows)
+      },
+    },
+
+    contacts: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.contacts)
+          .values({ id: newId(), orgId, ...input, createdAt: ts, updatedAt: ts })
+          .returning()
+        return toContact(row!)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.contacts)
+              .where(and(eq(s.contacts.orgId, orgId), eq(s.contacts.id, id)))
+              .limit(1)
+          ).map(toContact),
+        )
+      },
+      async listForCustomer(orgId, customerId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.contacts)
+            .where(and(eq(s.contacts.orgId, orgId), eq(s.contacts.customerId, customerId)))
+            .orderBy(desc(s.contacts.createdAt))
+            .limit(limitOf(opts))
+        ).map(toContact)
+      },
+      async update(orgId, id, patch) {
+        const values: Record<string, unknown> = { updatedAt: now() }
+        if (patch.name !== undefined) values.name = patch.name
+        if (patch.email !== undefined) values.email = patch.email
+        if (patch.phone !== undefined) values.phone = patch.phone
+        if (patch.role !== undefined) values.role = patch.role
+        const rows = (
+          await db
+            .update(s.contacts)
+            .set(values)
+            .where(and(eq(s.contacts.orgId, orgId), eq(s.contacts.id, id)))
+            .returning()
+        ).map(toContact)
+        return first(rows)
+      },
+      async delete(orgId, id) {
+        const rows = (
+          await db
+            .delete(s.contacts)
+            .where(and(eq(s.contacts.orgId, orgId), eq(s.contacts.id, id)))
+            .returning()
+        ).length
+        return rows > 0
       },
     },
 

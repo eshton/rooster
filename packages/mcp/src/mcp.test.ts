@@ -728,3 +728,32 @@ describe('rag_search tool', () => {
     expect(res.contextBlock).toContain(t.key)
   })
 })
+
+describe('CRM tools', () => {
+  it('drives a customer + contact workflow through tools', async () => {
+    const customer = payload(
+      (await call('create_customer', { name: 'Villanyozzunk Kft', tags: ['hosting'] })) as never,
+    )
+    expect(customer.lifecycleStage).toBe('lead')
+
+    const advanced = payload(
+      (await call('update_customer', { id: customer.id, lifecycleStage: 'active' })) as never,
+    )
+    expect(advanced.lifecycleStage).toBe('active')
+
+    const contact = payload(
+      (await call('add_contact', {
+        customerId: customer.id,
+        name: 'Béla',
+        email: 'bela@vill.hu',
+      })) as never,
+    )
+    expect(contact.customerId).toBe(customer.id)
+
+    const contacts = payload((await call('list_contacts', { customerId: customer.id })) as never)
+    expect(contacts.map((c: { id: string }) => c.id)).toEqual([contact.id])
+
+    const customers = payload((await call('list_customers')) as never)
+    expect(customers.map((c: { id: string }) => c.id)).toEqual([customer.id])
+  })
+})

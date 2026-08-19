@@ -18,6 +18,8 @@ export type Permission =
   | 'audit:read'
   | 'conversation:read'
   | 'conversation:write'
+  | 'crm:read'
+  | 'crm:write'
 
 export const PERMISSION_MIN_ROLE: Record<Permission, Role> = {
   'ticket:read': 'viewer',
@@ -33,6 +35,10 @@ export const PERMISSION_MIN_ROLE: Record<Permission, Role> = {
   // seeing raw human↔agent transcripts.
   'conversation:read': 'member',
   'conversation:write': 'member',
+  // CRM (ROO-46). Customer/contact/deal/interaction data — member+ to read
+  // (interactions can hold sensitive relationship notes), member to write.
+  'crm:read': 'member',
+  'crm:write': 'member',
 }
 
 /** A token scope grants a permission directly, or via the `*` wildcard. */

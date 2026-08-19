@@ -152,6 +152,11 @@ not the client.
   webhook). Being assigned or commenting auto-follows.
 - invite_member — invite a human teammate by email (admin). create_invite —
   mint a shareable join code (admin). read_audit — read the audit log (admin).
+- CRM (crm:read/crm:write): create_customer / list_customers / get_customer /
+  update_customer manage client relationships (lifecycleStage lead→prospect→
+  active→churned); add_contact / list_contacts / update_contact / remove_contact
+  manage the people at a customer. Deals, interactions and RAG recall over the
+  relationship history are the next phases.
 
 ## Self-hosting note
 A non-interactive HTTP bootstrap also exists (POST ${base}/onboard with

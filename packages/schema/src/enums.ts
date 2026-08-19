@@ -124,3 +124,12 @@ export type MessageKind = z.infer<typeof messageKindSchema>
 export const ENROLLMENT_POLICIES = ['token', 'approval', 'open'] as const
 export const enrollmentPolicySchema = z.enum(ENROLLMENT_POLICIES)
 export type EnrollmentPolicy = z.infer<typeof enrollmentPolicySchema>
+
+/**
+ * CRM customer relationship lifecycle (ROO-46). The *relationship* state — a
+ * separate state machine from a deal's sales pipeline. Fixed default set for v1;
+ * per-workspace configurability rides the generalized workflow engine (ROO-53).
+ */
+export const CUSTOMER_LIFECYCLE_STAGES = ['lead', 'prospect', 'active', 'churned'] as const
+export const customerLifecycleStageSchema = z.enum(CUSTOMER_LIFECYCLE_STAGES)
+export type CustomerLifecycleStage = z.infer<typeof customerLifecycleStageSchema>
