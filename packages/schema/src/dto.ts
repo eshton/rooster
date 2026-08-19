@@ -3,6 +3,7 @@ import {
   agentKindSchema,
   conversationStageSchema,
   customerLifecycleStageSchema,
+  dealPipelineStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
   messageKindSchema,
@@ -441,3 +442,36 @@ export const updateContactInput = z.object({
   role: z.string().max(120).nullable().optional(),
 })
 export type UpdateContactInput = z.infer<typeof updateContactInput>
+
+/** Open a deal under a customer. `pipelineStage` defaults to `prospecting`. */
+export const createDealInput = z.object({
+  customerId: idSchema,
+  title: z.string().min(1).max(300),
+  pipelineStage: dealPipelineStageSchema.optional(),
+  value: z.number().int().nullable().optional(),
+  currency: z.string().min(3).max(3).nullable().optional(),
+  closeDate: z.string().max(40).nullable().optional(),
+  probability: z.number().int().min(0).max(100).nullable().optional(),
+  ownerId: idSchema.nullable().optional(),
+  tags: z.array(z.string().min(1).max(60)).default([]),
+})
+export type CreateDealInput = z.infer<typeof createDealInput>
+
+/** Patch a deal's fields (stage changes go through change_deal_stage). */
+export const updateDealInput = z.object({
+  title: z.string().min(1).max(300).optional(),
+  value: z.number().int().nullable().optional(),
+  currency: z.string().min(3).max(3).nullable().optional(),
+  closeDate: z.string().max(40).nullable().optional(),
+  probability: z.number().int().min(0).max(100).nullable().optional(),
+  ownerId: idSchema.nullable().optional(),
+  tags: z.array(z.string().min(1).max(60)).optional(),
+})
+export type UpdateDealInput = z.infer<typeof updateDealInput>
+
+/** Move a deal to a new pipeline stage (validated against the pipeline). */
+export const changeDealStageInput = z.object({
+  dealId: idSchema,
+  stage: dealPipelineStageSchema,
+})
+export type ChangeDealStageInput = z.infer<typeof changeDealStageInput>

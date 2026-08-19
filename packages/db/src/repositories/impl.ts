@@ -8,6 +8,7 @@ import type {
   ContextFile,
   ConversationMessage,
   Customer,
+  Deal,
   Id,
   Invite,
   Membership,
@@ -103,6 +104,11 @@ const toCustomer = (r: Rows['customers']): Customer =>
     tags: dec<string[]>(r.tags, []),
   }) as Customer
 const toContact = (r: Rows['contacts']): Contact => r as Contact
+const toDeal = (r: Rows['deals']): Deal =>
+  ({
+    ...r,
+    tags: dec<string[]>(r.tags, []),
+  }) as Deal
 const toTicketAssignee = (r: Rows['ticketAssignees']): TicketAssignee => r as TicketAssignee
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
 const toContextFile = (r: Rows['contextFiles']): ContextFile => r as ContextFile
@@ -1083,6 +1089,64 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
             .returning()
         ).length
         return rows > 0
+      },
+    },
+
+    deals: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.deals)
+          .values({
+            id: newId(),
+            orgId,
+            ...input,
+            tags: enc(input.tags),
+            createdAt: ts,
+            updatedAt: ts,
+          })
+          .returning()
+        return toDeal(row!)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.deals)
+              .where(and(eq(s.deals.orgId, orgId), eq(s.deals.id, id)))
+              .limit(1)
+          ).map(toDeal),
+        )
+      },
+      async listForCustomer(orgId, customerId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.deals)
+            .where(and(eq(s.deals.orgId, orgId), eq(s.deals.customerId, customerId)))
+            .orderBy(desc(s.deals.createdAt))
+            .limit(limitOf(opts))
+        ).map(toDeal)
+      },
+      async update(orgId, id, patch) {
+        const values: Record<string, unknown> = { updatedAt: now() }
+        if (patch.title !== undefined) values.title = patch.title
+        if (patch.pipelineStage !== undefined) values.pipelineStage = patch.pipelineStage
+        if (patch.value !== undefined) values.value = patch.value
+        if (patch.currency !== undefined) values.currency = patch.currency
+        if (patch.closeDate !== undefined) values.closeDate = patch.closeDate
+        if (patch.probability !== undefined) values.probability = patch.probability
+        if (patch.ownerId !== undefined) values.ownerId = patch.ownerId
+        if (patch.tags !== undefined) values.tags = enc(patch.tags)
+        const rows = (
+          await db
+            .update(s.deals)
+            .set(values)
+            .where(and(eq(s.deals.orgId, orgId), eq(s.deals.id, id)))
+            .returning()
+        ).map(toDeal)
+        return first(rows)
       },
     },
 

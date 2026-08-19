@@ -9,6 +9,7 @@ import { type ContactService, createContactService } from './contacts.js'
 import { type ContextFileService, createContextFileService } from './contextfile.js'
 import { type ConversationService, createConversationService } from './conversation.js'
 import { type CustomerService, createCustomerService } from './customers.js'
+import { createDealService, type DealService } from './deals.js'
 import { createInviteService, type InviteService } from './invites.js'
 import { createMemberService, type MemberService } from './members.js'
 import { createMilestoneService, type MilestoneService } from './milestones.js'
@@ -30,6 +31,7 @@ export interface Services {
   search: SearchService
   customers: CustomerService
   contacts: ContactService
+  deals: DealService
   attachments: AttachmentService
   watchers: WatcherService
   milestones: MilestoneService
@@ -58,6 +60,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     search: createSearchService(repos, deps.embedder, deps.ragOverfetch, deps.reranker),
     customers: createCustomerService(repos),
     contacts: createContactService(repos),
+    deals: createDealService(repos),
     attachments: createAttachmentService(repos),
     watchers: createWatcherService(repos),
     milestones: createMilestoneService(repos),
@@ -78,6 +81,7 @@ export type {
   ContextFileService,
   ConversationService,
   CustomerService,
+  DealService,
   InviteService,
   MemberService,
   MilestoneService,

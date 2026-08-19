@@ -756,4 +756,33 @@ describe('CRM tools', () => {
     const customers = payload((await call('list_customers')) as never)
     expect(customers.map((c: { id: string }) => c.id)).toEqual([customer.id])
   })
+
+  it('opens a deal and advances its pipeline through tools', async () => {
+    const customer = payload((await call('create_customer', { name: 'Deal Co' })) as never)
+    const deal = payload(
+      (await call('create_deal', {
+        customerId: customer.id,
+        title: 'Annual hosting',
+        value: 100000,
+        currency: 'USD',
+      })) as never,
+    )
+    expect(deal.pipelineStage).toBe('prospecting')
+
+    const moved = payload(
+      (await call('change_deal_stage', { dealId: deal.id, stage: 'qualified' })) as never,
+    )
+    expect(moved.pipelineStage).toBe('qualified')
+
+    // illegal skip surfaces as an isError result, not a crash
+    const bad = (await call('change_deal_stage', { dealId: deal.id, stage: 'won' })) as {
+      isError?: boolean
+      content: Array<{ text?: string }>
+    }
+    expect(bad.isError).toBe(true)
+    expect(bad.content[0]?.text).toContain('validation')
+
+    const deals = payload((await call('list_deals', { customerId: customer.id })) as never)
+    expect(deals.map((d: { id: string }) => d.id)).toEqual([deal.id])
+  })
 })

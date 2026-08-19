@@ -362,6 +362,26 @@ export const contacts = sqliteTable(
   (t) => [index('contacts_org_customer_idx').on(t.orgId, t.customerId)],
 )
 
+export const deals = sqliteTable(
+  'deals',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    customerId: text('customer_id').notNull(),
+    title: text('title').notNull(),
+    pipelineStage: text('pipeline_stage').notNull().default('prospecting'),
+    value: integer('value'),
+    currency: text('currency'),
+    closeDate: text('close_date'),
+    probability: integer('probability'),
+    ownerId: text('owner_id'),
+    tags: text('tags').notNull().default('[]'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('deals_org_customer_idx').on(t.orgId, t.customerId)],
+)
+
 export const sqliteSchema = {
   orgs,
   teams,
@@ -385,4 +405,5 @@ export const sqliteSchema = {
   auditLog,
   customers,
   contacts,
+  deals,
 }
