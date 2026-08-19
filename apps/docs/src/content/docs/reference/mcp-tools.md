@@ -152,6 +152,9 @@ delivered through the crow webhook (`ROOSTER_CROW_WEBHOOK_URL`).
 | `change_deal_stage` | `crm:write` | Move a deal through the sales pipeline (validated transitions) |
 | `log_interaction` | `crm:write` | Log a call/email/note/meeting against a customer/deal/contact (embedded for recall) |
 | `list_interactions` | `crm:read` | List a target's logged interactions |
+| `link_deal_work` | `crm:write` | Link an existing delivery project to a deal (won-deal → work bridge) |
+| `list_deal_work` | `crm:read` | List the delivery projects linked to a deal |
+| `list_customer_work` | `crm:read` | List every delivery project serving a customer, across all their deals |
 
 ## Scopes
 

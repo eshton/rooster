@@ -148,6 +148,13 @@
       "when": 1787151144987,
       "tag": "0020_yellow_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787160824868,
+      "tag": "0021_sloppy_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

@@ -52,10 +52,25 @@ export interface TeamRepository {
 }
 
 export interface ProjectRepository {
-  create(orgId: Id, input: Omit<Project, keyof TimestampedId | 'orgId'>): Promise<Project>
+  // The CRM link columns (customerId/dealId) are set post-hoc via `linkWork`,
+  // never at create time — a project is born unlinked.
+  create(
+    orgId: Id,
+    input: Omit<Project, keyof TimestampedId | 'orgId' | 'customerId' | 'dealId'>,
+  ): Promise<Project>
   getById(orgId: Id, id: Id): Promise<Project | null>
   list(orgId: Id, teamId?: Id, opts?: ListOptions): Promise<Project[]>
   update(orgId: Id, id: Id, patch: Partial<Project>): Promise<Project>
+  /** Attach (or detach, with nulls) a project to a deal + customer (ROO-50). */
+  linkWork(
+    orgId: Id,
+    id: Id,
+    link: { customerId: Id | null; dealId: Id | null },
+  ): Promise<Project | null>
+  /** Delivery projects linked to a deal (most recent first). */
+  listForDeal(orgId: Id, dealId: Id, opts?: ListOptions): Promise<Project[]>
+  /** Delivery projects serving a customer, across all their deals. */
+  listForCustomer(orgId: Id, customerId: Id, opts?: ListOptions): Promise<Project[]>
 }
 
 export interface TicketRepository {

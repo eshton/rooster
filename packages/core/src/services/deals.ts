@@ -12,6 +12,11 @@ import {
   createDealInput,
   type Deal,
   type Id,
+  type LinkDealWorkInput,
+  type ListDealWorkInput,
+  linkDealWorkInput,
+  listDealWorkInput,
+  type Project,
   type UpdateDealInput,
   updateDealInput,
 } from './deps.js'
@@ -27,6 +32,14 @@ export interface DealService {
   update(actor: Actor, id: Id, input: UpdateDealInput): Promise<Deal>
   /** Move a deal to a new pipeline stage, validated against the pipeline. */
   changeStage(actor: Actor, input: ChangeDealStageInput): Promise<Deal>
+  /**
+   * Link an existing delivery project to this deal (ROO-50) — the won-deal →
+   * work bridge. Sets the project's `dealId` and derives its `customerId` from
+   * the deal, so the project also surfaces in the customer's work view.
+   */
+  linkWork(actor: Actor, input: LinkDealWorkInput): Promise<Project>
+  /** The delivery projects linked to a deal. */
+  listWork(actor: Actor, input: ListDealWorkInput, opts?: ListOptions): Promise<Project[]>
 }
 
 export function createDealService(repos: Repositories): DealService {
@@ -109,6 +122,33 @@ export function createDealService(repos: Repositories): DealService {
         after,
       })
       return after
+    },
+
+    async linkWork(actor, rawInput) {
+      authorize(actor, 'crm:write')
+      const { dealId, projectId } = parse(linkDealWorkInput, rawInput)
+      const deal = await load(actor, dealId)
+      const project = await repos.projects.getById(actor.orgId, projectId)
+      if (!project) throw new NotFoundError(`Project ${projectId} not found`)
+
+      const linked = await repos.projects.linkWork(actor.orgId, projectId, {
+        customerId: deal.customerId,
+        dealId: deal.id,
+      })
+      if (!linked) throw new NotFoundError(`Project ${projectId} not found`)
+      await recordAudit(repos, actor, {
+        action: 'deal.link_work',
+        targetType: 'deal',
+        targetId: dealId,
+        after: { projectId, customerId: deal.customerId },
+      })
+      return linked
+    },
+
+    async listWork(actor, rawInput, opts) {
+      authorize(actor, 'crm:read')
+      const { dealId } = parse(listDealWorkInput, rawInput)
+      return repos.projects.listForDeal(actor.orgId, dealId, opts)
     },
   }
 }

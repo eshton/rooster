@@ -161,7 +161,11 @@ not the client.
   deals over time. log_interaction / list_interactions record calls/emails/notes/
   meetings against a customer/deal/contact; interaction bodies are embedded, so
   rag_search / recall_context surface the relationship history ("what did we
-  promise this customer?") with grounded citations.
+  promise this customer?") with grounded citations. link_deal_work attaches a
+  delivery project to a won deal (create it with create_project first);
+  list_deal_work / list_customer_work then show the live delivery work — so one
+  customer view spans contacts, deals, interactions AND the projects fulfilling
+  them, on a single audit trail.
 
 ## Self-hosting note
 A non-interactive HTTP bootstrap also exists (POST ${base}/onboard with

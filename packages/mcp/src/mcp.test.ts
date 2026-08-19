@@ -806,4 +806,33 @@ describe('CRM tools', () => {
     )
     expect(list.map((i: { id: string }) => i.id)).toEqual([logged.id])
   })
+
+  it('links a won deal to delivery work and surfaces it on the customer', async () => {
+    const customer = payload((await call('create_customer', { name: 'Bridge Co' })) as never)
+    const deal = payload(
+      (await call('create_deal', { customerId: customer.id, title: 'Site rebuild' })) as never,
+    )
+    const team = payload((await call('create_team', { key: 'BRG', name: 'Bridge' })) as never)
+    const project = payload(
+      (await call('create_project', {
+        teamId: team.id,
+        key: 'SITE',
+        name: 'Client site',
+      })) as never,
+    )
+
+    const linked = payload(
+      (await call('link_deal_work', { dealId: deal.id, projectId: project.id })) as never,
+    )
+    expect(linked.dealId).toBe(deal.id)
+    expect(linked.customerId).toBe(customer.id)
+
+    const dealWork = payload((await call('list_deal_work', { dealId: deal.id })) as never)
+    expect(dealWork.map((p: { id: string }) => p.id)).toEqual([project.id])
+
+    const customerWork = payload(
+      (await call('list_customer_work', { customerId: customer.id })) as never,
+    )
+    expect(customerWork.map((p: { id: string }) => p.id)).toEqual([project.id])
+  })
 })

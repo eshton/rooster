@@ -50,12 +50,20 @@ export const projects = sqliteTable(
     name: text('name').notNull(),
     description: text('description'),
     archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    // CRM link (ROO-50): the deal/customer this delivery project fulfils (null
+    // for internal/product work). `customerId` is derived from the deal on link.
+    customerId: text('customer_id'),
+    dealId: text('deal_id'),
     // Per-project ticket number sequence (atomically incremented on create).
     ticketSeq: integer('ticket_seq').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('projects_org_key_uq').on(t.orgId, t.key)],
+  (t) => [
+    uniqueIndex('projects_org_key_uq').on(t.orgId, t.key),
+    index('projects_org_deal_idx').on(t.orgId, t.dealId),
+    index('projects_org_customer_idx').on(t.orgId, t.customerId),
+  ],
 )
 
 export const principals = sqliteTable('principals', {
