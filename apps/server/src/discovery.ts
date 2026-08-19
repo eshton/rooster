@@ -23,6 +23,10 @@ export function discoveryDocument(ctx: ServerContext) {
       method: 'POST',
       gated: 'signup-token',
     },
+    // The human dashboard (SSR). `crmLabel` is the deployment's display name for
+    // the CRM customer entity (Customer / Client / Account) — the domain always
+    // calls it a Customer; this is just branding an agent may mirror.
+    dashboard: { endpoint: `${base}/app`, crmLabel: ctx.config.crm.label },
     docs: `${base}/llms.txt`,
   }
 }

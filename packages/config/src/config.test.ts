@@ -6,6 +6,18 @@ const baseEnv = {
   ROOSTER_AUTH_SECRET: 'a-sufficiently-long-secret',
 }
 
+describe('ROOSTER_CRM_LABEL', () => {
+  it('defaults the CRM label to Customer', () => {
+    const cfg = loadConfig(baseEnv)
+    expect(cfg.crm).toEqual({ label: 'Customer', labelPlural: 'Customers' })
+  })
+
+  it('honours a custom label and derives the plural', () => {
+    const cfg = loadConfig({ ...baseEnv, ROOSTER_CRM_LABEL: 'Client' })
+    expect(cfg.crm).toEqual({ label: 'Client', labelPlural: 'Clients' })
+  })
+})
+
 describe('resolveDbKind', () => {
   it('maps schemes to driver kinds', () => {
     expect(resolveDbKind('postgres://u:p@h/db')).toBe('postgres')

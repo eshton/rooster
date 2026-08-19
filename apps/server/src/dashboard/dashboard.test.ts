@@ -318,6 +318,56 @@ describe('dashboard (authenticated)', () => {
     expect(after).toContain('Runbooks')
   })
 
+  it('runs the CRM flow: create a customer, open + move a deal, log an interaction', async () => {
+    // Create a customer from the list page.
+    const created = await app.request(`${base}/app/customers`, {
+      ...form({ name: 'Villanyozzunk Kft', lifecycleStage: 'prospect', tags: 'hosting, retainer' }),
+    })
+    expect(created.status).toBe(302)
+    const customerId = created.headers
+      .get('location')
+      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
+    expect(customerId).toBeTruthy()
+
+    // It shows up on the list.
+    const list = await (await app.request(`${base}/app/customers`, { headers: { cookie } })).text()
+    expect(list).toContain('Villanyozzunk Kft')
+    expect(list).toContain('Prospect')
+
+    // Open a deal, then move it along the pipeline.
+    await app.request(`${base}/app/customers/${customerId}/deals`, {
+      ...form({ title: 'Hosting retainer', value: '120000', currency: 'eur' }),
+    })
+    let detail = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain('Hosting retainer')
+    expect(detail).toContain('EUR 1,200') // 120000 minor units → 1,200
+    const dealId = detail.match(/\/app\/deals\/([0-9a-f-]{36})\/stage/)?.[1]
+    expect(dealId).toBeTruthy()
+
+    const moved = await app.request(`${base}/app/deals/${dealId}/stage`, {
+      ...form({ stage: 'qualified' }),
+    })
+    expect(moved.status).toBe(302)
+    expect(moved.headers.get('location')).toBe(`/app/customers/${customerId}`)
+
+    // Add a contact and log an interaction.
+    await app.request(`${base}/app/customers/${customerId}/contacts`, {
+      ...form({ name: 'Béla', role: 'Owner', email: 'bela@villany.test', phone: '' }),
+    })
+    await app.request(`${base}/app/customers/${customerId}/interactions`, {
+      ...form({ kind: 'call', body: 'Agreed on the renewal scope.' }),
+    })
+
+    detail = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain('Qualified') // deal advanced
+    expect(detail).toContain('Béla') // contact listed
+    expect(detail).toContain('Agreed on the renewal scope.') // interaction logged
+  })
+
   it('redirects anonymous write attempts to login', async () => {
     const res = await app.request(`${base}/app/tickets/whatever/comments`, {
       method: 'POST',

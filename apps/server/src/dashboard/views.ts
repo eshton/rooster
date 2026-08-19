@@ -4,13 +4,24 @@ import type {
   Attachment,
   AuditLog,
   Comment,
+  Contact,
+  Customer,
+  Deal,
+  Interaction,
   Org,
   Project,
   Team,
   Ticket,
   TicketStatus,
 } from '@rooster/schema'
-import { ESTIMATE_POINTS, TICKET_PRIORITIES, TICKET_STATUSES } from '@rooster/schema'
+import {
+  CUSTOMER_LIFECYCLE_STAGES,
+  DEAL_PIPELINE_STAGES,
+  ESTIMATE_POINTS,
+  INTERACTION_KINDS,
+  TICKET_PRIORITIES,
+  TICKET_STATUSES,
+} from '@rooster/schema'
 
 /** Escape untrusted text for safe HTML interpolation. */
 export function esc(value: unknown): string {
@@ -231,11 +242,19 @@ fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;c
 }
 `
 
+// Dashboard branding, set once at mount from config (static per deployment, so
+// a module singleton is fine for both the Node process and the edge isolate).
+let CRM_LABEL_PLURAL = 'Customers'
+export function setBranding(b: { crmLabelPlural: string }): void {
+  CRM_LABEL_PLURAL = b.crmLabelPlural
+}
+
 function chrome(title: string, actor: Actor | null, body: string): string {
   const nav = actor
     ? `<nav>
         <a href="/app">Overview</a>
         <a href="/app/mine">My tickets</a>
+        <a href="/app/customers">${esc(CRM_LABEL_PLURAL)}</a>
         <a href="/app/search">Search</a>
         <a href="/app/members">Members</a>
         <a href="/app/agents">Agents</a>
@@ -942,4 +961,164 @@ export function membersPage(data: {
 
 export function messagePage(actor: Actor | null, title: string, message: string): string {
   return chrome(title, actor, `<h1>${esc(title)}</h1><p class="muted">${esc(message)}</p>`)
+}
+
+// --- CRM (ROO-51) -----------------------------------------------------------
+
+/** Title-case a snake/lower stage token for display (e.g. `in_review`→`In review`). */
+function titleCase(s: string): string {
+  const spaced = s.replace(/_/g, ' ')
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+/** Format a deal's value (minor units) + currency into a display string. */
+function money(value: number | null, currency: string | null): string {
+  if (value == null) return ''
+  const major = (value / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })
+  return currency ? `${esc(currency)} ${esc(major)}` : esc(major)
+}
+
+/** The org's customers, with an inline create form (gated by crm:write). */
+export function customersList(data: {
+  actor: Actor
+  customers: Customer[]
+  label: string
+  labelPlural: string
+  canWrite: boolean
+}): string {
+  const rows = data.customers
+    .map(
+      (c) =>
+        `<tr>
+          <td><a href="/app/customers/${esc(c.id)}">${esc(c.name)}</a></td>
+          <td><span class="badge">${esc(titleCase(c.lifecycleStage))}</span></td>
+          <td>${c.tags.map((t) => `<span class="t">${esc(t)}</span>`).join(' ')}</td>
+        </tr>`,
+    )
+    .join('')
+
+  const form = data.canWrite
+    ? `<form method="post" action="/app/customers" class="actions">
+        <input name="name" placeholder="${esc(data.label)} name" required maxlength="200">
+        <select name="lifecycleStage">${CUSTOMER_LIFECYCLE_STAGES.map((s) => `<option value="${esc(s)}">${esc(titleCase(s))}</option>`).join('')}</select>
+        <input name="tags" placeholder="tags (comma-separated)">
+        <button class="btn" type="submit">Add ${esc(data.label)}</button>
+      </form>`
+    : ''
+
+  return chrome(
+    data.labelPlural,
+    data.actor,
+    `<h1>${esc(data.labelPlural)}</h1>
+    <p class="muted">Relationship roots — each has contacts, deals, interactions and the delivery work that fulfils them.</p>
+    ${form}
+    <table><thead><tr><th>Name</th><th>Lifecycle</th><th>Tags</th></tr></thead><tbody>${
+      rows ||
+      `<tr><td colspan="3" class="empty">🪹 No ${esc(data.labelPlural.toLowerCase())} yet.</td></tr>`
+    }</tbody></table>`,
+  )
+}
+
+/** A single customer: contacts, deal pipeline, interactions and linked work. */
+export function customerDetail(data: {
+  actor: Actor
+  customer: Customer
+  contacts: Contact[]
+  deals: Deal[]
+  interactions: Interaction[]
+  work: Project[]
+  names: Record<string, string>
+  label: string
+  canWrite: boolean
+}): string {
+  const c = data.customer
+  const nameOf = (id: string) => data.names[id] ?? id
+
+  // Deal pipeline kanban — columns are the pipeline stages (reuses the ticket
+  // board's `.board`/`.col`/`.tk` styling).
+  const dealCols = DEAL_PIPELINE_STAGES.map((stage) => {
+    const inCol = data.deals.filter((d) => d.pipelineStage === stage)
+    const cards = inCol
+      .map((d) => {
+        const stageForm = data.canWrite
+          ? `<form method="post" action="/app/deals/${esc(d.id)}/stage" class="actions" style="margin:.35rem 0 0">
+              <select name="stage">${DEAL_PIPELINE_STAGES.map((s) => `<option value="${esc(s)}"${s === d.pipelineStage ? ' selected' : ''}>${esc(titleCase(s))}</option>`).join('')}</select>
+              <button class="btn sm" type="submit">Move</button>
+            </form>`
+          : ''
+        return `<div class="tk"><strong>${esc(d.title)}</strong>
+          ${d.value != null ? `<div class="muted" style="font-size:.82rem">${money(d.value, d.currency)}</div>` : ''}
+          ${stageForm}</div>`
+      })
+      .join('')
+    return `<div class="col"><h3>${esc(titleCase(stage))} · ${inCol.length}</h3>${cards || '<div class="empty">—</div>'}</div>`
+  }).join('')
+
+  const dealForm = data.canWrite
+    ? `<form method="post" action="/app/customers/${esc(c.id)}/deals" class="actions">
+        <input name="title" placeholder="Deal title" required maxlength="300">
+        <input name="value" placeholder="value (minor units)" inputmode="numeric">
+        <input name="currency" placeholder="CUR" maxlength="3" style="max-width:5rem">
+        <button class="btn" type="submit">Open deal</button>
+      </form>`
+    : ''
+
+  const contactRows = data.contacts
+    .map(
+      (ct) =>
+        `<tr><td>${esc(ct.name)}</td><td>${esc(ct.role ?? '')}</td><td>${esc(ct.email ?? '')}</td><td>${esc(ct.phone ?? '')}</td></tr>`,
+    )
+    .join('')
+  const contactForm = data.canWrite
+    ? `<form method="post" action="/app/customers/${esc(c.id)}/contacts" class="actions">
+        <input name="name" placeholder="Contact name" required maxlength="200">
+        <input name="role" placeholder="role">
+        <input name="email" placeholder="email">
+        <input name="phone" placeholder="phone">
+        <button class="btn" type="submit">Add contact</button>
+      </form>`
+    : ''
+
+  const interactionItems = data.interactions
+    .map(
+      (i) =>
+        `<div class="card"><div class="muted" style="font-size:.8rem"><span class="badge">${esc(i.kind)}</span> ${esc(nameOf(i.authorId))} · <span class="ts">${esc(i.occurredAt)}</span></div><div>${esc(i.body)}</div></div>`,
+    )
+    .join('')
+  const interactionForm = data.canWrite
+    ? `<form method="post" action="/app/customers/${esc(c.id)}/interactions" class="actions" style="flex-direction:column;align-items:stretch">
+        <select name="kind">${INTERACTION_KINDS.map((k) => `<option value="${esc(k)}">${esc(titleCase(k))}</option>`).join('')}</select>
+        <textarea name="body" placeholder="What was discussed / promised?" required></textarea>
+        <button class="btn" type="submit">Log interaction</button>
+      </form>`
+    : ''
+
+  const workRows = data.work
+    .map(
+      (p) =>
+        `<div class="row"><span class="key">${esc(p.key ?? '')}</span> <a href="/app/projects/${esc(p.id)}">${esc(p.name)}</a>${p.archived ? '<span class="badge">archived</span>' : ''}</div>`,
+    )
+    .join('')
+
+  return chrome(
+    c.name,
+    data.actor,
+    `<p class="muted"><a href="/app/customers">← ${esc(data.label)}s</a></p>
+    <h1>${esc(c.name)} <span class="badge">${esc(titleCase(c.lifecycleStage))}</span></h1>
+    ${c.tags.length ? `<div class="tags">${c.tags.map((t) => `<span class="t">${esc(t)}</span>`).join('')}</div>` : ''}
+
+    <h2>Deals</h2>${dealForm}
+    <div class="board">${dealCols}</div>
+
+    <h2>Contacts</h2>${contactForm}
+    <table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th></tr></thead><tbody>${
+      contactRows || '<tr><td colspan="4" class="empty">No contacts yet.</td></tr>'
+    }</tbody></table>
+
+    <h2>Delivery work</h2>
+    ${workRows || '<div class="empty">No linked projects yet — link one from a won deal via <span class="key">link_deal_work</span>.</div>'}
+
+    <h2>Interactions</h2>${interactionForm}
+    ${interactionItems || '<div class="empty">No interactions logged yet.</div>'}`,
+  )
 }
