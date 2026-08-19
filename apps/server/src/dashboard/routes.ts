@@ -2,7 +2,10 @@ import { humanIdentityFromSessionEmail, listUserOrgs } from '@rooster/auth'
 import { type Actor, allowedTransitions, CoreError, can } from '@rooster/core'
 import type {
   AgentStatus,
+  CustomerLifecycleStage,
+  DealPipelineStage,
   EstimatePoints,
+  InteractionKind,
   Role,
   TicketPriority,
   TicketStatus,
@@ -51,6 +54,11 @@ async function resolveSession(ctx: ServerContext, c: Context): Promise<Resolved>
  * checks and tenant scoping apply as for agents.
  */
 export function mountDashboard(app: Hono, ctx: ServerContext): void {
+  // Configurable CRM display label (Customer / Client / Account); the nav label
+  // is a module singleton so set it once here.
+  const crm = ctx.config.crm
+  v.setBranding({ crmLabelPlural: crm.labelPlural })
+
   // One login button per configured OAuth provider (order is stable + sensible).
   const providers = (
     ['github', 'google', 'microsoft', 'apple', 'discord', 'gitlab'] as const
@@ -304,6 +312,46 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
     ),
   )
 
+  // --- CRM (ROO-51) ---------------------------------------------------------
+
+  app.get('/app/customers', (c) =>
+    page(c, async (actor) =>
+      v.customersList({
+        actor,
+        customers: await ctx.services.customers.list(actor),
+        label: crm.label,
+        labelPlural: crm.labelPlural,
+        canWrite: can(actor, 'crm:write'),
+      }),
+    ),
+  )
+
+  app.get('/app/customers/:id', (c) =>
+    page(c, async (actor) => {
+      const id = c.req.param('id')
+      const [customer, contacts, deals, interactions, work, members] = await Promise.all([
+        ctx.services.customers.get(actor, id),
+        ctx.services.contacts.list(actor, id),
+        ctx.services.deals.list(actor, id),
+        ctx.services.interactions.list(actor, { targetType: 'customer', targetId: id }),
+        ctx.services.customers.listWork(actor, { customerId: id }),
+        ctx.services.members.listOrg(actor),
+      ])
+      const names = Object.fromEntries(members.map((m) => [m.principalId, m.displayName]))
+      return v.customerDetail({
+        actor,
+        customer,
+        contacts,
+        deals,
+        interactions,
+        work,
+        names,
+        label: crm.label,
+        canWrite: can(actor, 'crm:write'),
+      })
+    }),
+  )
+
   // --- write actions (POST) -------------------------------------------------
 
   // Run a mutation for the authenticated actor, then redirect. Domain errors
@@ -503,6 +551,88 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         maxUses: 1,
       })
       return `/app/members?code=${encodeURIComponent(invite.code)}`
+    }),
+  )
+
+  // --- CRM write actions ----------------------------------------------------
+
+  const tagsOf = (raw: unknown): string[] =>
+    String(raw ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+
+  app.post('/app/customers', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      const customer = await ctx.services.customers.create(actor, {
+        name: String(body.name ?? ''),
+        lifecycleStage: (body.lifecycleStage
+          ? String(body.lifecycleStage)
+          : 'lead') as CustomerLifecycleStage,
+        tags: tagsOf(body.tags),
+      })
+      return `/app/customers/${customer.id}`
+    }),
+  )
+
+  app.post('/app/customers/:id/contacts', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.contacts.add(actor, {
+        customerId: id,
+        name: String(body.name ?? ''),
+        role: body.role ? String(body.role) : null,
+        email: body.email ? String(body.email) : null,
+        phone: body.phone ? String(body.phone) : null,
+      })
+      return `/app/customers/${id}`
+    }),
+  )
+
+  app.post('/app/customers/:id/deals', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      const rawValue = String(body.value ?? '').trim()
+      const value = rawValue === '' ? null : Number.parseInt(rawValue, 10)
+      const currency = String(body.currency ?? '')
+        .trim()
+        .toUpperCase()
+      await ctx.services.deals.create(actor, {
+        customerId: id,
+        title: String(body.title ?? ''),
+        value: value != null && Number.isFinite(value) ? value : null,
+        currency: currency === '' ? null : currency,
+        tags: [],
+      })
+      return `/app/customers/${id}`
+    }),
+  )
+
+  app.post('/app/deals/:id/stage', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      const deal = await ctx.services.deals.changeStage(actor, {
+        dealId: c.req.param('id'),
+        stage: String(body.stage) as DealPipelineStage,
+      })
+      return `/app/customers/${deal.customerId}`
+    }),
+  )
+
+  app.post('/app/customers/:id/interactions', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.interactions.log(actor, {
+        targetType: 'customer',
+        targetId: id,
+        kind: String(body.kind ?? 'note') as InteractionKind,
+        body: String(body.body ?? ''),
+      })
+      return `/app/customers/${id}`
     }),
   )
 }

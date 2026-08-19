@@ -72,6 +72,13 @@ const envSchema = z.object({
   ROOSTER_ROADMAP_PROJECT_KEY: z.string().optional(),
   ROOSTER_ROADMAP_TITLE: z.string().optional(),
 
+  /**
+   * Dashboard/discovery display label for the CRM customer entity. The domain
+   * code always calls it a "Customer"; some teams prefer "Client" or "Account".
+   * Singular; the plural is derived by appending "s". Default "Customer".
+   */
+  ROOSTER_CRM_LABEL: z.string().min(1).max(40).optional(),
+
   ROOSTER_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 
   /**
@@ -243,6 +250,13 @@ export interface RoosterConfig {
   }
   /** Over-fetch multiplier for hybrid retrieval arms before RRF fusion. */
   ragOverfetch: number
+  /** Branding: the dashboard/discovery label for the CRM customer entity. */
+  crm: {
+    /** Singular label (e.g. Customer / Client / Account). */
+    label: string
+    /** Plural of {@link label}. */
+    labelPlural: string
+  }
   /**
    * Optional reranker provider for rag_search. Present only when both URL and
    * key are configured; otherwise rag_search keeps its fusion order.
@@ -404,5 +418,9 @@ export function loadConfig(
     chunking,
     ragOverfetch: env.ROOSTER_RAG_OVERFETCH,
     rerank,
+    crm: (() => {
+      const label = env.ROOSTER_CRM_LABEL?.trim() || 'Customer'
+      return { label, labelPlural: `${label}s` }
+    })(),
   }
 }
