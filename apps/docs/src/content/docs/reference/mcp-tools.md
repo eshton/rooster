@@ -145,6 +145,11 @@ delivered through the crow webhook (`ROOSTER_CROW_WEBHOOK_URL`).
 | `list_contacts` | `crm:read` | List a customer's contacts |
 | `update_contact` | `crm:write` | Update a contact's name / email / phone / role |
 | `remove_contact` | `crm:write` | Remove a contact |
+| `create_deal` | `crm:write` | Open a deal under a customer (pipeline prospecting→…→won/lost) |
+| `list_deals` | `crm:read` | List a customer's deals |
+| `get_deal` | `crm:read` | Fetch a single deal by id |
+| `update_deal` | `crm:write` | Update a deal's title / value / currency / closeDate / probability / owner / tags |
+| `change_deal_stage` | `crm:write` | Move a deal through the sales pipeline (validated transitions) |
 
 ## Scopes
 

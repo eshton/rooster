@@ -133,3 +133,12 @@ export type EnrollmentPolicy = z.infer<typeof enrollmentPolicySchema>
 export const CUSTOMER_LIFECYCLE_STAGES = ['lead', 'prospect', 'active', 'churned'] as const
 export const customerLifecycleStageSchema = z.enum(CUSTOMER_LIFECYCLE_STAGES)
 export type CustomerLifecycleStage = z.infer<typeof customerLifecycleStageSchema>
+
+/**
+ * A deal's sales-pipeline stage (ROO-48) — a state machine distinct from the
+ * customer's relationship lifecycle. Default fixed set for v1; per-workspace
+ * configurable pipelines ride the generalized workflow engine (ROO-53).
+ */
+export const DEAL_PIPELINE_STAGES = ['prospecting', 'qualified', 'proposal', 'won', 'lost'] as const
+export const dealPipelineStageSchema = z.enum(DEAL_PIPELINE_STAGES)
+export type DealPipelineStage = z.infer<typeof dealPipelineStageSchema>

@@ -4,6 +4,7 @@ import {
   agentStatusSchema,
   conversationStageSchema,
   customerLifecycleStageSchema,
+  dealPipelineStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
   messageKindSchema,
@@ -329,6 +330,31 @@ export const customerSchema = z.object({
   tags: z.array(z.string().min(1).max(60)),
 })
 export type Customer = z.infer<typeof customerSchema>
+
+/**
+ * A deal / opportunity — a time-boxed revenue pursuit under a Customer (ROO-48).
+ * `pipelineStage` is its own state machine, distinct from the customer's
+ * relationship lifecycle. `value` is in minor units (e.g. cents) with a separate
+ * `currency`; both nullable until known.
+ */
+export const dealSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  customerId: idSchema,
+  title: z.string().min(1).max(300),
+  pipelineStage: dealPipelineStageSchema,
+  /** Amount in minor units (e.g. cents); null until known. */
+  value: z.number().int().nullable(),
+  /** ISO-4217 currency code for `value` (e.g. "USD"); null until known. */
+  currency: z.string().min(3).max(3).nullable(),
+  /** Expected/actual close date (ISO-8601), nullable. */
+  closeDate: z.string().max(40).nullable(),
+  /** Win probability 0–100, nullable. */
+  probability: z.number().int().min(0).max(100).nullable(),
+  ownerId: idSchema.nullable(),
+  tags: z.array(z.string().min(1).max(60)),
+})
+export type Deal = z.infer<typeof dealSchema>
 
 /** A person at a customer. NOT a principal — contacts are tracked, they don't act. */
 export const contactSchema = z.object({

@@ -155,8 +155,10 @@ not the client.
 - CRM (crm:read/crm:write): create_customer / list_customers / get_customer /
   update_customer manage client relationships (lifecycleStage lead→prospect→
   active→churned); add_contact / list_contacts / update_contact / remove_contact
-  manage the people at a customer. Deals, interactions and RAG recall over the
-  relationship history are the next phases.
+  manage the people at a customer; create_deal / list_deals / get_deal /
+  update_deal / change_deal_stage track revenue opportunities through a sales
+  pipeline (prospecting→qualified→proposal→won/lost) — a customer accrues many
+  deals over time. Interactions + RAG recall over the relationship are next.
 
 ## Self-hosting note
 A non-interactive HTTP bootstrap also exists (POST ${base}/onboard with

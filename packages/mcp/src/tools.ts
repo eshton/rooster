@@ -11,12 +11,14 @@ import {
   appendMessagesInput,
   assigneeRefInput,
   assignTicketInput,
+  changeDealStageInput,
   changeStatusInput,
   claimNextInput,
   commentInput,
   conversationStageSchema,
   createContactInput,
   createCustomerInput,
+  createDealInput,
   createInviteInput,
   createMilestoneInput,
   createProjectInput,
@@ -41,6 +43,7 @@ import {
   unlinkTicketsInput,
   updateContactInput,
   updateCustomerInput,
+  updateDealInput,
   updateTicketInput,
   watchTicketInput,
 } from '@rooster/schema'
@@ -936,5 +939,64 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: { id: z.uuid() },
     },
     async ({ id }) => runTool(() => services.contacts.remove(actor, id)),
+  )
+
+  server.registerTool(
+    'create_deal',
+    {
+      title: 'Create deal',
+      description:
+        'Open a deal (revenue opportunity) under a customer — a ticket-with-a-pipeline. ' +
+        '`pipelineStage` (prospecting|qualified|proposal|won|lost) defaults to prospecting. ' +
+        '`value` is in minor units (e.g. cents) with a `currency`. One customer can have many ' +
+        'deals over time (initial sale, renewals, upsells).',
+      inputSchema: createDealInput.shape,
+    },
+    async (args) => runTool(() => services.deals.create(actor, args)),
+  )
+
+  server.registerTool(
+    'list_deals',
+    {
+      title: 'List deals',
+      description: "List a customer's deals, most recent first.",
+      inputSchema: { customerId: z.uuid() },
+    },
+    async ({ customerId }) => runTool(() => services.deals.list(actor, customerId)),
+  )
+
+  server.registerTool(
+    'get_deal',
+    {
+      title: 'Get deal',
+      description: 'Fetch a single deal by id.',
+      inputSchema: { id: z.uuid() },
+    },
+    async ({ id }) => runTool(() => services.deals.get(actor, id)),
+  )
+
+  server.registerTool(
+    'update_deal',
+    {
+      title: 'Update deal',
+      description:
+        "Update a deal's fields (title, value, currency, closeDate, probability, owner, tags). " +
+        'Move it through the pipeline with change_deal_stage, not here.',
+      inputSchema: { id: z.uuid(), ...updateDealInput.shape },
+    },
+    async ({ id, ...patch }) => runTool(() => services.deals.update(actor, id, patch)),
+  )
+
+  server.registerTool(
+    'change_deal_stage',
+    {
+      title: 'Change deal stage',
+      description:
+        'Move a deal to a new pipeline stage, validated against the default pipeline ' +
+        '(prospecting→qualified→proposal→won/lost; won/lost reopen to earlier stages). Rejects ' +
+        'illegal transitions and same-stage no-ops.',
+      inputSchema: changeDealStageInput.shape,
+    },
+    async (args) => runTool(() => services.deals.changeStage(actor, args)),
   )
 }

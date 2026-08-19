@@ -7,6 +7,7 @@ import type {
   ContextFile,
   ConversationMessage,
   Customer,
+  Deal,
   Id,
   Invite,
   Membership,
@@ -128,6 +129,18 @@ export interface CustomerRepository {
     id: Id,
     patch: Partial<Omit<Customer, keyof TimestampedId | 'orgId'>>,
   ): Promise<Customer | null>
+}
+
+/** CRM deals (revenue pursuits under a customer). */
+export interface DealRepository {
+  create(orgId: Id, input: Omit<Deal, keyof TimestampedId | 'orgId'>): Promise<Deal>
+  getById(orgId: Id, id: Id): Promise<Deal | null>
+  listForCustomer(orgId: Id, customerId: Id, opts?: ListOptions): Promise<Deal[]>
+  update(
+    orgId: Id,
+    id: Id,
+    patch: Partial<Omit<Deal, keyof TimestampedId | 'orgId' | 'customerId'>>,
+  ): Promise<Deal | null>
 }
 
 /** CRM contacts (people at a customer). */
@@ -421,6 +434,7 @@ export interface Repositories {
   milestones: MilestoneRepository
   customers: CustomerRepository
   contacts: ContactRepository
+  deals: DealRepository
   comments: CommentRepository
   conversation: ConversationRepository
   attachments: AttachmentRepository
