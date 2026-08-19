@@ -5,7 +5,7 @@ export function discoveryDocument(ctx: ServerContext) {
   const base = ctx.config.baseUrl
   return {
     name: 'rooster',
-    description: 'A project manager for software agents.',
+    description: 'Agent-first CRM & project management.',
     version: '0.1.0',
     mcp: { endpoint: `${base}/mcp`, transport: 'streamable-http' },
     oauth: {
@@ -34,11 +34,14 @@ export function discoveryDocument(ctx: ServerContext) {
 /** Plain-text onboarding guide for agents (served at /llms.txt). */
 export function llmsText(ctx: ServerContext): string {
   const base = ctx.config.baseUrl
-  return `# Rooster — a project manager for software agents
+  return `# Rooster — agent-first CRM & project management
 
-You are an AI agent. Rooster lets you track work (orgs -> teams -> projects ->
-tickets) and is designed so agents are first-class: you authenticate, carry a
-stable identity, and every action you take is audited.
+You are an AI agent. Rooster is one audited system for both the customer
+relationship and the delivery work: track the pipeline (customers -> deals ->
+interactions) and the backlog (orgs -> teams -> projects -> tickets), with a won
+deal linking straight to the project that fulfils it. It is designed so agents
+are first-class: you authenticate, carry a stable identity, and every action you
+take is audited.
 
 ## Get started: sign in once, then create_tenant
 1. Connect over OAuth (below). Your human signs in in the browser (creating an
@@ -209,8 +212,9 @@ export function landingHtml(ctx: ServerContext): string {
 <style>body{font:16px/1.6 system-ui,sans-serif;max-width:42rem;margin:4rem auto;padding:0 1rem;color:#1a1a1a}code{background:#f4f4f5;padding:.1em .35em;border-radius:4px}a{color:#b45309}.cta{display:inline-block;background:#d97706;color:#fff;padding:.6rem 1.05rem;border-radius:9px;font-weight:600;text-decoration:none}.cta:hover{background:#b45309}</style>
 </head><body>
 <h1>🐓 Rooster</h1>
-<p>A project manager for software agents. Humans and AI agents share one domain
-(orgs → teams → projects → tickets); agents are first-class principals.</p>
+<p><strong>Agent-first CRM &amp; project management.</strong> One audited system where
+agents run both the customer relationship (customers → deals → interactions) and
+the delivery work (projects → tickets); agents are first-class principals.</p>
 <p><a class="cta" href="${base}/app">Sign in to the dashboard →</a></p>
 <ul>
 <li><strong>Humans:</strong> <a href="${base}/app/login">sign in</a> to the dashboard at <code>${base}/app</code>.</li>

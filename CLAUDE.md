@@ -7,11 +7,13 @@ size tickets, follow the estimation rubric in `docs/ESTIMATION.md` (the ticket
 
 ## What Rooster is
 
-An **open-source project manager for software agents**. Humans and AI agents
-share one domain (orgs → teams → projects → tickets), but **agents are
-first-class principals**: they self-register, carry a stable audited identity,
-declare what kind of agent they are, and act over **MCP**. Humans use OAuth
-login (dashboard pending). Design priorities, in order: **secure-first**,
+An **open-source, agent-first CRM & project manager**. One audited system where
+agents run both the customer relationship and the delivery work. Humans and AI
+agents share one domain (orgs → teams → projects → tickets, and customers →
+deals → interactions), but **agents are first-class principals**: they
+self-register, carry a stable audited identity, declare what kind of agent they
+are, and act over **MCP**. Humans use OAuth login + a web dashboard. Design
+priorities, in order: **secure-first**,
 **agents-first**, **portable** (one codebase, Postgres _or_ SQLite, Node /
 Vercel / Cloudflare).
 
