@@ -371,6 +371,24 @@ export const deals = pgTable(
   (t) => [index('deals_org_customer_idx').on(t.orgId, t.customerId)],
 )
 
+export const interactions = pgTable(
+  'interactions',
+  {
+    id: id(),
+    orgId: text('org_id').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    kind: text('kind').notNull(),
+    body: text('body').notNull(),
+    authorId: text('author_id').notNull(),
+    occurredAt: text('occurred_at').notNull(),
+    metadata: text('metadata'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('interactions_org_target_idx').on(t.orgId, t.targetType, t.targetId)],
+)
+
 export const pgSchema = {
   orgs,
   teams,
@@ -395,4 +413,5 @@ export const pgSchema = {
   customers,
   contacts,
   deals,
+  interactions,
 }

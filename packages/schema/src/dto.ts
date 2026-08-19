@@ -6,6 +6,8 @@ import {
   dealPipelineStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
+  interactionKindSchema,
+  interactionTargetTypeSchema,
   messageKindSchema,
   messageRoleSchema,
   ticketLinkTypeSchema,
@@ -221,7 +223,7 @@ export const recallContextInput = z.object({
 export type RecallContextInput = z.infer<typeof recallContextInput>
 
 /** The kinds of source `rag_search` can retrieve and cite. */
-export const ragSourceTypeSchema = z.enum(['ticket', 'message', 'context_file'])
+export const ragSourceTypeSchema = z.enum(['ticket', 'message', 'context_file', 'interaction'])
 export type RagSourceTypeDto = z.infer<typeof ragSourceTypeSchema>
 
 /**
@@ -475,3 +477,22 @@ export const changeDealStageInput = z.object({
   stage: dealPipelineStageSchema,
 })
 export type ChangeDealStageInput = z.infer<typeof changeDealStageInput>
+
+/** Log an interaction (call/email/note/meeting) against a customer/deal/contact. */
+export const logInteractionInput = z.object({
+  targetType: interactionTargetTypeSchema,
+  targetId: idSchema,
+  kind: interactionKindSchema,
+  body: z.string().min(1).max(50_000),
+  /** When it happened (ISO-8601); defaults to now if omitted. */
+  occurredAt: z.string().max(40).optional(),
+  metadata: z.unknown().optional(),
+})
+export type LogInteractionInput = z.infer<typeof logInteractionInput>
+
+/** List interactions logged against a target. */
+export const listInteractionsInput = z.object({
+  targetType: interactionTargetTypeSchema,
+  targetId: idSchema,
+})
+export type ListInteractionsInput = z.infer<typeof listInteractionsInput>

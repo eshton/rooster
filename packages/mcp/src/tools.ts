@@ -30,6 +30,8 @@ import {
   joinTenantInput,
   linkTicketsInput,
   listContextFilesInput,
+  listInteractionsInput,
+  logInteractionInput,
   moveTicketInput,
   ragSearchInput,
   recallContextInput,
@@ -998,5 +1000,31 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
       inputSchema: changeDealStageInput.shape,
     },
     async (args) => runTool(() => services.deals.changeStage(actor, args)),
+  )
+
+  server.registerTool(
+    'log_interaction',
+    {
+      title: 'Log interaction',
+      description:
+        'Record a call/email/note/meeting against a customer, deal, or contact ' +
+        '(`targetType` + `targetId`). The body is embedded for RAG recall, so later you can ask ' +
+        'rag_search / recall_context "what did we discuss/promise with this customer?" and get ' +
+        'grounded, cited history. `occurredAt` defaults to now.',
+      inputSchema: logInteractionInput.shape,
+    },
+    async (args) => runTool(() => services.interactions.log(actor, args)),
+  )
+
+  server.registerTool(
+    'list_interactions',
+    {
+      title: 'List interactions',
+      description:
+        "A target's logged interactions (most recent first). Pass the `targetType` " +
+        '(customer|deal|contact) and `targetId`.',
+      inputSchema: listInteractionsInput.shape,
+    },
+    async (args) => runTool(() => services.interactions.list(actor, args)),
   )
 }

@@ -150,6 +150,8 @@ delivered through the crow webhook (`ROOSTER_CROW_WEBHOOK_URL`).
 | `get_deal` | `crm:read` | Fetch a single deal by id |
 | `update_deal` | `crm:write` | Update a deal's title / value / currency / closeDate / probability / owner / tags |
 | `change_deal_stage` | `crm:write` | Move a deal through the sales pipeline (validated transitions) |
+| `log_interaction` | `crm:write` | Log a call/email/note/meeting against a customer/deal/contact (embedded for recall) |
+| `list_interactions` | `crm:read` | List a target's logged interactions |
 
 ## Scopes
 

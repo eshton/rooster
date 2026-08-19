@@ -158,7 +158,10 @@ not the client.
   manage the people at a customer; create_deal / list_deals / get_deal /
   update_deal / change_deal_stage track revenue opportunities through a sales
   pipeline (prospecting→qualified→proposal→won/lost) — a customer accrues many
-  deals over time. Interactions + RAG recall over the relationship are next.
+  deals over time. log_interaction / list_interactions record calls/emails/notes/
+  meetings against a customer/deal/contact; interaction bodies are embedded, so
+  rag_search / recall_context surface the relationship history ("what did we
+  promise this customer?") with grounded citations.
 
 ## Self-hosting note
 A non-interactive HTTP bootstrap also exists (POST ${base}/onboard with

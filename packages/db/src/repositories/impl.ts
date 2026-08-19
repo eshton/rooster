@@ -10,6 +10,7 @@ import type {
   Customer,
   Deal,
   Id,
+  Interaction,
   Invite,
   Membership,
   Milestone,
@@ -109,6 +110,11 @@ const toDeal = (r: Rows['deals']): Deal =>
     ...r,
     tags: dec<string[]>(r.tags, []),
   }) as Deal
+const toInteraction = (r: Rows['interactions']): Interaction =>
+  ({
+    ...r,
+    metadata: dec<unknown>(r.metadata, null),
+  }) as Interaction
 const toTicketAssignee = (r: Rows['ticketAssignees']): TicketAssignee => r as TicketAssignee
 const toAttachment = (r: Rows['attachments']): Attachment => r as Attachment
 const toContextFile = (r: Rows['contextFiles']): ContextFile => r as ContextFile
@@ -1147,6 +1153,51 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
             .returning()
         ).map(toDeal)
         return first(rows)
+      },
+    },
+
+    interactions: {
+      async create(orgId, input) {
+        const ts = now()
+        const [row] = await db
+          .insert(s.interactions)
+          .values({
+            id: newId(),
+            orgId,
+            ...input,
+            metadata: input.metadata == null ? null : enc(input.metadata),
+            createdAt: ts,
+            updatedAt: ts,
+          })
+          .returning()
+        return toInteraction(row!)
+      },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.interactions)
+              .where(and(eq(s.interactions.orgId, orgId), eq(s.interactions.id, id)))
+              .limit(1)
+          ).map(toInteraction),
+        )
+      },
+      async listForTarget(orgId, targetType, targetId, opts) {
+        return (
+          await db
+            .select()
+            .from(s.interactions)
+            .where(
+              and(
+                eq(s.interactions.orgId, orgId),
+                eq(s.interactions.targetType, targetType),
+                eq(s.interactions.targetId, targetId),
+              ),
+            )
+            .orderBy(desc(s.interactions.occurredAt))
+            .limit(limitOf(opts))
+        ).map(toInteraction)
       },
     },
 
