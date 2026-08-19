@@ -7,6 +7,8 @@ import {
   dealPipelineStageSchema,
   enrollmentPolicySchema,
   estimatePointsSchema,
+  interactionKindSchema,
+  interactionTargetTypeSchema,
   messageKindSchema,
   messageRoleSchema,
   principalTypeSchema,
@@ -355,6 +357,27 @@ export const dealSchema = z.object({
   tags: z.array(z.string().min(1).max(60)),
 })
 export type Deal = z.infer<typeof dealSchema>
+
+/**
+ * A logged CRM interaction (ROO-49): a call/email/note/meeting recorded against
+ * a customer, deal, or contact. `body` is embedded for RAG recall over the
+ * relationship history. Polymorphic target like conversation traces.
+ */
+export const interactionSchema = z.object({
+  ...base,
+  orgId: idSchema,
+  targetType: interactionTargetTypeSchema,
+  targetId: idSchema,
+  kind: interactionKindSchema,
+  body: z.string().min(1).max(50_000),
+  /** Principal who logged it (trusted). */
+  authorId: idSchema,
+  /** When the interaction happened (ISO-8601). */
+  occurredAt: z.string().max(40),
+  /** Optional structured metadata (JSON-as-TEXT; untrusted). */
+  metadata: z.unknown().nullable(),
+})
+export type Interaction = z.infer<typeof interactionSchema>
 
 /** A person at a customer. NOT a principal — contacts are tracked, they don't act. */
 export const contactSchema = z.object({

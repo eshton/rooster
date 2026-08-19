@@ -1,17 +1,26 @@
 import type { Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import type { Embedder, Reranker } from '../notify.js'
-import { authorize, can } from '../permissions.js'
+import { authorize, can, type Permission } from '../permissions.js'
 import { reciprocalRankFusion } from '../rag.js'
 import { parse } from '../validate.js'
 import { type Id, type RagSearchInput, ragSearchInput } from './deps.js'
 
 /** Embedding `source_type` discriminators (mirror the per-service constants). */
-export const RAG_SOURCE_TYPES = ['ticket', 'message', 'context_file'] as const
+export const RAG_SOURCE_TYPES = ['ticket', 'message', 'context_file', 'interaction'] as const
 export type RagSourceType = (typeof RAG_SOURCE_TYPES)[number]
 
-/** Sources that expose transcript/context content, gated by `conversation:read`. */
-const GATED_SOURCE_TYPES: ReadonlySet<string> = new Set(['message', 'context_file'])
+/**
+ * The permission each source requires to appear in results. Tickets ride the
+ * base `ticket:read`; transcripts/context need `conversation:read`; CRM
+ * interactions need `crm:read`. A source is included only if the actor holds it.
+ */
+const SOURCE_PERMISSION: Record<RagSourceType, Permission> = {
+  ticket: 'ticket:read',
+  message: 'conversation:read',
+  context_file: 'conversation:read',
+  interaction: 'crm:read',
+}
 
 /** A fused retrieval hit — a source ranked by keyword+semantic fusion. */
 export interface HybridHit {
@@ -116,11 +125,10 @@ export function createSearchService(
 
       const limit = Math.min(Math.max(input.limit ?? 10, 1), 50)
       const candidateK = limit * Math.max(1, Math.floor(overfetch))
-      const includeGated = can(actor, 'conversation:read')
 
       // Which source types this actor may see, intersected with the request.
       const allowed = new Set<RagSourceType>(
-        RAG_SOURCE_TYPES.filter((t) => includeGated || !GATED_SOURCE_TYPES.has(t)),
+        RAG_SOURCE_TYPES.filter((t) => can(actor, SOURCE_PERMISSION[t])),
       )
       if (input.sourceTypes && input.sourceTypes.length > 0) {
         for (const t of [...allowed]) if (!input.sourceTypes.includes(t)) allowed.delete(t)
@@ -223,18 +231,38 @@ export function createSearchService(
             ...passageOf(m.body, h),
           }
         }
-        // context_file
-        const cf = await repos.contextFiles.getById(actor.orgId, h.sourceId)
-        if (!cf) return null
-        if (input.projectId && cf.projectId !== input.projectId) return null
-        if (input.ticketId && cf.ticketId !== input.ticketId) return null
+        if (h.sourceType === 'context_file') {
+          const cf = await repos.contextFiles.getById(actor.orgId, h.sourceId)
+          if (!cf) return null
+          if (input.projectId && cf.projectId !== input.projectId) return null
+          if (input.ticketId && cf.ticketId !== input.ticketId) return null
+          return {
+            sourceType: 'context_file',
+            sourceKey: cf.name,
+            projectKey: await projectKeyOf(cf.projectId),
+            ticketId: cf.ticketId ?? undefined,
+            score: h.score,
+            ...passageOf(`${cf.name}\n${cf.body}`, h),
+          }
+        }
+        // interaction — CRM relationship history; not project/ticket scoped, so
+        // it can't satisfy those filters.
+        if (input.projectId || input.ticketId) return null
+        const i = await repos.interactions.getById(actor.orgId, h.sourceId)
+        if (!i) return null
+        const customerId =
+          i.targetType === 'customer'
+            ? i.targetId
+            : i.targetType === 'deal'
+              ? ((await repos.deals.getById(actor.orgId, i.targetId))?.customerId ?? null)
+              : ((await repos.contacts.getById(actor.orgId, i.targetId))?.customerId ?? null)
+        const customer = customerId ? await repos.customers.getById(actor.orgId, customerId) : null
         return {
-          sourceType: 'context_file',
-          sourceKey: cf.name,
-          projectKey: await projectKeyOf(cf.projectId),
-          ticketId: cf.ticketId ?? undefined,
+          sourceType: 'interaction',
+          sourceKey: customer ? `${customer.name} · ${i.kind}` : i.kind,
+          projectKey: '',
           score: h.score,
-          ...passageOf(`${cf.name}\n${cf.body}`, h),
+          ...passageOf(i.body, h),
         }
       }
 

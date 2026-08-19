@@ -5,12 +5,14 @@ import type { ChunkConfig } from '../chunk.js'
 import { embedAndStore } from '../embed.js'
 import { NotFoundError, ValidationError } from '../errors.js'
 import type { Embedder } from '../notify.js'
-import { authorize } from '../permissions.js'
+import { authorize, can } from '../permissions.js'
 import { parse } from '../validate.js'
 import {
   type ContextFile,
   type ConversationStage,
   type Id,
+  type InteractionKind,
+  type InteractionTargetType,
   type ListContextFilesInput,
   listContextFilesInput,
   type MessageRole,
@@ -21,6 +23,7 @@ import {
 } from './deps.js'
 
 const EMBED_SOURCE_CONTEXT_FILE = 'context_file'
+const EMBED_SOURCE_INTERACTION = 'interaction'
 
 /** A unified recall hit, discriminated by which kind of source matched. */
 export type RecallContextHit =
@@ -41,6 +44,15 @@ export type RecallContextHit =
       name: string
       projectId: Id
       ticketId: Id | null
+      snippet: string
+      score: number
+    }
+  | {
+      source: 'interaction'
+      interactionId: Id
+      kind: InteractionKind
+      targetType: InteractionTargetType
+      targetId: Id
       snippet: string
       score: number
     }
@@ -201,6 +213,21 @@ export function createContextFileService(
             projectId: f.projectId,
             ticketId: f.ticketId,
             snippet: snippetOf(f.body),
+            score,
+          })
+        } else if (hit.sourceType === EMBED_SOURCE_INTERACTION) {
+          // Interactions are CRM data — only surface them to a crm:read actor,
+          // even though recall_context's own gate is conversation:read.
+          if (!can(actor, 'crm:read')) continue
+          const i = await repos.interactions.getById(actor.orgId, hit.sourceId)
+          if (!i) continue
+          results.push({
+            source: 'interaction',
+            interactionId: i.id,
+            kind: i.kind,
+            targetType: i.targetType,
+            targetId: i.targetId,
+            snippet: snippetOf(i.body),
             score,
           })
         }

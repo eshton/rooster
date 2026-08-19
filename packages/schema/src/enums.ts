@@ -142,3 +142,13 @@ export type CustomerLifecycleStage = z.infer<typeof customerLifecycleStageSchema
 export const DEAL_PIPELINE_STAGES = ['prospecting', 'qualified', 'proposal', 'won', 'lost'] as const
 export const dealPipelineStageSchema = z.enum(DEAL_PIPELINE_STAGES)
 export type DealPipelineStage = z.infer<typeof dealPipelineStageSchema>
+
+/** What a CRM interaction is logged against (ROO-49). */
+export const INTERACTION_TARGET_TYPES = ['customer', 'deal', 'contact'] as const
+export const interactionTargetTypeSchema = z.enum(INTERACTION_TARGET_TYPES)
+export type InteractionTargetType = z.infer<typeof interactionTargetTypeSchema>
+
+/** The kind of a logged CRM interaction (ROO-49). */
+export const INTERACTION_KINDS = ['call', 'email', 'note', 'meeting'] as const
+export const interactionKindSchema = z.enum(INTERACTION_KINDS)
+export type InteractionKind = z.infer<typeof interactionKindSchema>

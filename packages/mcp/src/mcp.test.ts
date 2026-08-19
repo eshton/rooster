@@ -785,4 +785,25 @@ describe('CRM tools', () => {
     const deals = payload((await call('list_deals', { customerId: customer.id })) as never)
     expect(deals.map((d: { id: string }) => d.id)).toEqual([deal.id])
   })
+
+  it('logs and lists interactions through tools', async () => {
+    const customer = payload((await call('create_customer', { name: 'Interlog Co' })) as never)
+    const logged = payload(
+      (await call('log_interaction', {
+        targetType: 'customer',
+        targetId: customer.id,
+        kind: 'call',
+        body: 'Kickoff call — agreed on scope.',
+      })) as never,
+    )
+    expect(logged.kind).toBe('call')
+
+    const list = payload(
+      (await call('list_interactions', {
+        targetType: 'customer',
+        targetId: customer.id,
+      })) as never,
+    )
+    expect(list.map((i: { id: string }) => i.id)).toEqual([logged.id])
+  })
 })

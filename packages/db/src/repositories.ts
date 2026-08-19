@@ -9,6 +9,8 @@ import type {
   Customer,
   Deal,
   Id,
+  Interaction,
+  InteractionTargetType,
   Invite,
   Membership,
   Milestone,
@@ -141,6 +143,18 @@ export interface DealRepository {
     id: Id,
     patch: Partial<Omit<Deal, keyof TimestampedId | 'orgId' | 'customerId'>>,
   ): Promise<Deal | null>
+}
+
+/** CRM interactions (logged calls/notes/emails against a customer/deal/contact). */
+export interface InteractionRepository {
+  create(orgId: Id, input: Omit<Interaction, keyof TimestampedId | 'orgId'>): Promise<Interaction>
+  getById(orgId: Id, id: Id): Promise<Interaction | null>
+  listForTarget(
+    orgId: Id,
+    targetType: InteractionTargetType,
+    targetId: Id,
+    opts?: ListOptions,
+  ): Promise<Interaction[]>
 }
 
 /** CRM contacts (people at a customer). */
@@ -435,6 +449,7 @@ export interface Repositories {
   customers: CustomerRepository
   contacts: ContactRepository
   deals: DealRepository
+  interactions: InteractionRepository
   comments: CommentRepository
   conversation: ConversationRepository
   attachments: AttachmentRepository
