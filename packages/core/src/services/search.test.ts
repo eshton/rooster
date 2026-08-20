@@ -207,20 +207,32 @@ describe('rag_search — grounded retrieval (ROO-38)', () => {
     const team = await svc.teams.create(owner, { key: 'RRK', name: 'Rrk' })
     const project = await svc.projects.create(owner, { teamId: team.id, key: 'RRK', name: 'P' })
 
-    await svc.tickets.create(owner, { projectId: project.id, title: 'gamma alpha' })
+    // Query on two terms ("gamma delta"). `dominant` matches BOTH — so it
+    // strictly out-scores the others in both arms (extra vector dimension +
+    // extra keyword term) and is the unambiguous fusion winner. The single-term
+    // docs only match "gamma". The marked ticket also carries the PRIORITYMARK
+    // token the reranker keys on. Nothing ties at the top, which is what makes
+    // this deterministic (the old single-term corpus tied on "gamma" and made
+    // the "not first" assertion flaky — ROO-56).
+    const dominant = await svc.tickets.create(owner, {
+      projectId: project.id,
+      title: 'gamma delta alpha',
+    })
     await svc.tickets.create(owner, { projectId: project.id, title: 'gamma beta' })
     const marked = await svc.tickets.create(owner, {
       projectId: project.id,
       title: 'gamma PRIORITYMARK zed',
     })
 
-    const reranked = await svc.search.rag(owner, { query: 'gamma', limit: 3 })
-    expect(reranked.hits[0]?.sourceKey).toBe(marked.key) // reranker promoted it
+    const reranked = await svc.search.rag(owner, { query: 'gamma delta', limit: 3 })
+    expect(reranked.hits[0]?.sourceKey).toBe(marked.key) // reranker promoted it to the top
 
-    // Same corpus, no reranker → fusion order (the marked ticket is not first).
+    // Same corpus, no reranker → fusion order, where `dominant` (matches both
+    // query terms) deterministically wins and the marked ticket is not first.
     const noRerank = createServices(db.repositories, { embedder: fakeEmbedder, ragOverfetch: 5 })
     const ownerNo = await noRerank.resolveActor({ orgId: org.id, principalId: owner.principalId })
-    const fused = await noRerank.search.rag(ownerNo, { query: 'gamma', limit: 3 })
+    const fused = await noRerank.search.rag(ownerNo, { query: 'gamma delta', limit: 3 })
+    expect(fused.hits[0]?.sourceKey).toBe(dominant.key)
     expect(fused.hits[0]?.sourceKey).not.toBe(marked.key)
   })
 
