@@ -417,14 +417,28 @@ export const createCustomerInput = z.object({
 })
 export type CreateCustomerInput = z.infer<typeof createCustomerInput>
 
-/** Patch a customer's fields (all optional). */
+/**
+ * Patch a customer's fields (all optional). Note: `lifecycleStage` is NOT here —
+ * it is a state machine, moved through the validated `changeLifecycleStageInput`
+ * transition, not a free-form patch (ROO-55).
+ */
 export const updateCustomerInput = z.object({
   name: z.string().min(1).max(200).optional(),
-  lifecycleStage: customerLifecycleStageSchema.optional(),
   ownerId: idSchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(60)).optional(),
 })
 export type UpdateCustomerInput = z.infer<typeof updateCustomerInput>
+
+/**
+ * Move a customer to a new lifecycle stage, validated against the customer
+ * workflow (lead → prospect → active, with churn/re-engagement). Distinct from a
+ * deal's pipeline stage.
+ */
+export const changeLifecycleStageInput = z.object({
+  customerId: idSchema,
+  stage: customerLifecycleStageSchema,
+})
+export type ChangeLifecycleStageInput = z.infer<typeof changeLifecycleStageInput>
 
 /** Add a contact (person) to a customer. */
 export const createContactInput = z.object({

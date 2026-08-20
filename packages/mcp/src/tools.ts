@@ -12,6 +12,7 @@ import {
   assigneeRefInput,
   assignTicketInput,
   changeDealStageInput,
+  changeLifecycleStageInput,
   changeStatusInput,
   claimNextInput,
   commentInput,
@@ -897,11 +898,26 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     {
       title: 'Update customer',
       description:
-        "Update a customer's fields (name, lifecycleStage, ownerId, tags). Advancing " +
-        'lifecycleStage tracks the relationship, distinct from a deal pipeline.',
+        "Update a customer's fields (name, ownerId, tags). To move the relationship " +
+        'lifecycle (lead → prospect → active, churn/re-engage) use change_lifecycle_stage — ' +
+        "it's a validated state machine, not a free-form field.",
       inputSchema: { id: z.uuid(), ...updateCustomerInput.shape },
     },
     async ({ id, ...patch }) => runTool(() => services.customers.update(actor, id, patch)),
+  )
+
+  server.registerTool(
+    'change_lifecycle_stage',
+    {
+      title: 'Change customer lifecycle stage',
+      description:
+        'Move a customer through the relationship lifecycle (lead → prospect → active; any ' +
+        'stage can churn, and a churned customer can be re-engaged). Validated against the ' +
+        'customer workflow — rejects illegal transitions and same-stage no-ops. Distinct from a ' +
+        "deal's sales pipeline (change_deal_stage).",
+      inputSchema: changeLifecycleStageInput.shape,
+    },
+    async (args) => runTool(() => services.customers.changeLifecycleStage(actor, args)),
   )
 
   server.registerTool(
