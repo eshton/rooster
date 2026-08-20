@@ -1,0 +1,35 @@
+# Rooster self-host — zero dependencies (SQLite file, no external database).
+#
+#   ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+#   ROOSTER_ADMIN_EMAIL=you@example.com \
+#   ROOSTER_ADMIN_PASSWORD=change-me-8+chars \
+#   docker compose -f docker-compose.sqlite.yml up
+#
+# Then open http://localhost:3000/app and sign in with those admin credentials.
+# On first boot the server creates your account + a starter workspace.
+#
+# Domain data (tickets, customers, …) persists in the `rooster-data` volume.
+# NOTE: on SQLite, login sessions use an in-memory store, so they reset when the
+# container restarts — your data is safe, just sign in again. For durable
+# sessions run the Postgres compose (docker-compose.yml) instead.
+
+services:
+  server:
+    image: ghcr.io/eshton/rooster:latest
+    # Prefer building locally instead of pulling the published image? Swap the
+    # line above for:
+    # build: { context: ., dockerfile: apps/server/Dockerfile }
+    environment:
+      DATABASE_URL: file:/data/rooster.db
+      ROOSTER_AUTH_SECRET: ${ROOSTER_AUTH_SECRET:?set ROOSTER_AUTH_SECRET, e.g. $(openssl rand -base64 32)}
+      ROOSTER_ADMIN_EMAIL: ${ROOSTER_ADMIN_EMAIL:?set ROOSTER_ADMIN_EMAIL}
+      ROOSTER_ADMIN_PASSWORD: ${ROOSTER_ADMIN_PASSWORD:?set ROOSTER_ADMIN_PASSWORD (min 8 chars)}
+      ROOSTER_BASE_URL: http://localhost:3000
+      PORT: '3000'
+    ports:
+      - '3000:3000'
+    volumes:
+      - rooster-data:/data
+
+volumes:
+  rooster-data:
