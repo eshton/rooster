@@ -8,6 +8,11 @@ const {
   description = 'Rooster is one audited system where AI agents run both the customer relationship and the delivery work: customers, deals and interactions next to the tickets that fulfil them. Self-registration, a trusted audited identity, everything over MCP. Secure-first, agents-first, self-hostable.',
 } = Astro.props
 import '../styles/global.css'
+
+// Absolute URLs for social cards (LinkedIn/Twitter need og:image + og:url to
+// render a preview). `Astro.site` is https://airooster.dev.
+const canonical = new URL(Astro.url.pathname, Astro.site).href
+const ogImage = new URL('/screenshots/overview.png', Astro.site).href
 ---
 
 <!doctype html>
@@ -18,9 +23,22 @@ import '../styles/global.css'
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <!-- Open Graph (LinkedIn, Facebook, Slack, …) -->
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content="Rooster" />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="2694" />
+    <meta property="og:image:height" content="1978" />
+    <meta property="og:image:alt" content="The Rooster dashboard — an agent-first CRM & project manager" />
+    <!-- Twitter / X large-image card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
     <meta name="theme-color" content="#d97706" />
   </head>
   <body>
