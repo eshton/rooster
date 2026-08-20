@@ -352,6 +352,27 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
     }),
   )
 
+  app.get('/app/deals/:id', (c) =>
+    page(c, async (actor) => {
+      const id = c.req.param('id')
+      const deal = await ctx.services.deals.get(actor, id)
+      const [customer, work, projects] = await Promise.all([
+        ctx.services.customers.get(actor, deal.customerId),
+        ctx.services.deals.listWork(actor, { dealId: id }),
+        ctx.services.projects.list(actor),
+      ])
+      return v.dealDetail({
+        actor,
+        deal,
+        customer,
+        work,
+        projects,
+        label: crm.label,
+        canWrite: can(actor, 'crm:write'),
+      })
+    }),
+  )
+
   // --- write actions (POST) -------------------------------------------------
 
   // Run a mutation for the authenticated actor, then redirect. Domain errors
@@ -618,7 +639,47 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         dealId: c.req.param('id'),
         stage: String(body.stage) as DealPipelineStage,
       })
-      return `/app/customers/${deal.customerId}`
+      // From the deal page, stay on it; from the customer kanban, return there.
+      return body.returnTo === 'deal'
+        ? `/app/deals/${deal.id}`
+        : `/app/customers/${deal.customerId}`
+    }),
+  )
+
+  app.post('/app/deals/:id/update', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      const intOrNull = (raw: unknown): number | null => {
+        const s = String(raw ?? '').trim()
+        if (s === '') return null
+        const n = Number.parseInt(s, 10)
+        return Number.isFinite(n) ? n : null
+      }
+      const currency = String(body.currency ?? '')
+        .trim()
+        .toUpperCase()
+      await ctx.services.deals.update(actor, id, {
+        title: String(body.title ?? ''),
+        value: intOrNull(body.value),
+        currency: currency === '' ? null : currency,
+        closeDate: body.closeDate ? String(body.closeDate) : null,
+        probability: intOrNull(body.probability),
+        tags: tagsOf(body.tags),
+      })
+      return `/app/deals/${id}`
+    }),
+  )
+
+  app.post('/app/deals/:id/link', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.deals.linkWork(actor, {
+        dealId: id,
+        projectId: String(body.projectId ?? ''),
+      })
+      return `/app/deals/${id}`
     }),
   )
 
