@@ -1063,11 +1063,44 @@ export function customerDetail(data: {
       </form>`
     : ''
 
+  // Edit the customer's own fields (name + tags). Lifecycle stage is deliberately
+  // not here — it moves through a validated transition, not a free patch (ROO-61).
+  const customerEdit = data.canWrite
+    ? `<details style="margin:.4rem 0 1rem">
+        <summary class="muted" style="cursor:pointer">Edit ${esc(data.label.toLowerCase())}</summary>
+        <form method="post" action="/app/customers/${esc(c.id)}/update" class="actions" style="margin:.5rem 0 0">
+          <input name="name" value="${esc(c.name)}" required maxlength="200">
+          <input name="tags" value="${esc(c.tags.join(', '))}" placeholder="tags (comma-separated)">
+          <button class="btn" type="submit">Save</button>
+        </form>
+      </details>`
+    : ''
+
   const contactRows = data.contacts
-    .map(
-      (ct) =>
-        `<tr><td>${esc(ct.name)}</td><td>${esc(ct.role ?? '')}</td><td>${esc(ct.email ?? '')}</td><td>${esc(ct.phone ?? '')}</td></tr>`,
-    )
+    .map((ct) => {
+      const manage = data.canWrite
+        ? `<details><summary class="muted" style="cursor:pointer;font-size:.85rem">Edit</summary>
+            <form method="post" action="/app/contacts/${esc(ct.id)}/update" class="actions" style="margin:.4rem 0 0">
+              <input type="hidden" name="customerId" value="${esc(c.id)}">
+              <input name="name" value="${esc(ct.name)}" required maxlength="200">
+              <input name="role" value="${esc(ct.role ?? '')}" placeholder="role">
+              <input name="email" value="${esc(ct.email ?? '')}" placeholder="email">
+              <input name="phone" value="${esc(ct.phone ?? '')}" placeholder="phone">
+              <button class="btn sm" type="submit">Save</button>
+            </form>
+            <form method="post" action="/app/contacts/${esc(ct.id)}/remove" class="actions" style="margin:.3rem 0 0">
+              <input type="hidden" name="customerId" value="${esc(c.id)}">
+              <button class="btn sm ghost" type="submit">Remove</button>
+            </form>
+          </details>`
+        : ''
+      const contactLine = [ct.email, ct.phone].filter(Boolean).map(esc).join(' · ')
+      return `<div class="card">
+        <div class="row"><strong>${esc(ct.name)}</strong>${ct.role ? `<span class="badge">${esc(ct.role)}</span>` : ''}</div>
+        ${contactLine ? `<div class="muted" style="font-size:.85rem">${contactLine}</div>` : ''}
+        ${manage}
+      </div>`
+    })
     .join('')
   const contactForm = data.canWrite
     ? `<form method="post" action="/app/customers/${esc(c.id)}/contacts" class="actions">
@@ -1106,14 +1139,13 @@ export function customerDetail(data: {
     `<p class="muted"><a href="/app/customers">← ${esc(data.label)}s</a></p>
     <h1>${esc(c.name)} <span class="badge">${esc(titleCase(c.lifecycleStage))}</span></h1>
     ${c.tags.length ? `<div class="tags">${c.tags.map((t) => `<span class="t">${esc(t)}</span>`).join('')}</div>` : ''}
+    ${customerEdit}
 
     <h2>Deals</h2>${dealForm}
     <div class="board">${dealCols}</div>
 
     <h2>Contacts</h2>${contactForm}
-    <table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th></tr></thead><tbody>${
-      contactRows || '<tr><td colspan="4" class="empty">No contacts yet.</td></tr>'
-    }</tbody></table>
+    ${contactRows || '<div class="empty">No contacts yet.</div>'}
 
     <h2>Delivery work</h2>
     ${workRows || '<div class="empty">No linked projects yet — link one from a won deal via <span class="key">link_deal_work</span>.</div>'}

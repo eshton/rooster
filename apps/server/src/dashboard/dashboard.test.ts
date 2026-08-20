@@ -368,6 +368,63 @@ describe('dashboard (authenticated)', () => {
     expect(detail).toContain('Agreed on the renewal scope.') // interaction logged
   })
 
+  it('edits a customer and edits + removes a contact from the dashboard (ROO-59)', async () => {
+    const created = await app.request(`${base}/app/customers`, {
+      ...form({ name: 'Editable Co', lifecycleStage: 'lead', tags: 'old' }),
+    })
+    const customerId = created.headers
+      .get('location')
+      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
+    expect(customerId).toBeTruthy()
+
+    // Edit the customer's name + tags.
+    const edited = await app.request(`${base}/app/customers/${customerId}/update`, {
+      ...form({ name: 'Renamed Co', tags: 'vip, retainer' }),
+    })
+    expect(edited.status).toBe(302)
+
+    // Add a contact, then discover its id from the edit form on the detail page.
+    await app.request(`${base}/app/customers/${customerId}/contacts`, {
+      ...form({ name: 'Csaba', role: 'Dev', email: 'csaba@ed.test', phone: '' }),
+    })
+    let detail = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain('Renamed Co') // rename applied
+    expect(detail).toContain('vip')
+    expect(detail).toContain('Csaba')
+    const contactId = detail.match(/\/app\/contacts\/([0-9a-f-]{36})\/update/)?.[1]
+    expect(contactId).toBeTruthy()
+
+    // Edit the contact.
+    const cEdited = await app.request(`${base}/app/contacts/${contactId}/update`, {
+      ...form({
+        customerId: customerId as string,
+        name: 'Csaba Nagy',
+        role: 'Lead',
+        email: 'csaba@ed.test',
+        phone: '',
+      }),
+    })
+    expect(cEdited.status).toBe(302)
+    expect(cEdited.headers.get('location')).toBe(`/app/customers/${customerId}`)
+    detail = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain('Csaba Nagy')
+
+    // Remove the contact.
+    const removed = await app.request(`${base}/app/contacts/${contactId}/remove`, {
+      ...form({ customerId: customerId as string }),
+    })
+    expect(removed.status).toBe(302)
+    detail = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).not.toContain('Csaba Nagy')
+    expect(detail).toContain('No contacts yet')
+  })
+
   it('redirects anonymous write attempts to login', async () => {
     const res = await app.request(`${base}/app/tickets/whatever/comments`, {
       method: 'POST',

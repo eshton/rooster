@@ -635,4 +635,42 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       return `/app/customers/${id}`
     }),
   )
+
+  app.post('/app/customers/:id/update', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.customers.update(actor, id, {
+        name: String(body.name ?? ''),
+        tags: tagsOf(body.tags),
+      })
+      return `/app/customers/${id}`
+    }),
+  )
+
+  // Contact edit/remove redirect back to the owning customer (passed as a hidden
+  // field, since remove() returns only a flag).
+  const contactReturn = (body: Record<string, unknown>) =>
+    `/app/customers/${String(body.customerId ?? '')}`
+
+  app.post('/app/contacts/:id/update', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      await ctx.services.contacts.update(actor, c.req.param('id'), {
+        name: String(body.name ?? ''),
+        role: body.role ? String(body.role) : null,
+        email: body.email ? String(body.email) : null,
+        phone: body.phone ? String(body.phone) : null,
+      })
+      return contactReturn(body)
+    }),
+  )
+
+  app.post('/app/contacts/:id/remove', (c) =>
+    action(c, async (actor) => {
+      const body = await c.req.parseBody()
+      await ctx.services.contacts.remove(actor, c.req.param('id'))
+      return contactReturn(body)
+    }),
+  )
 }
