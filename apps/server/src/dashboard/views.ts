@@ -6,6 +6,7 @@ import type {
   Comment,
   Contact,
   Customer,
+  CustomerLifecycleStage,
   Deal,
   Interaction,
   Org,
@@ -1028,11 +1029,23 @@ export function customerDetail(data: {
   interactions: Interaction[]
   work: Project[]
   names: Record<string, string>
+  /** Legal lifecycle stages reachable from the customer's current one (ROO-61). */
+  lifecycleNext: CustomerLifecycleStage[]
   label: string
   canWrite: boolean
 }): string {
   const c = data.customer
   const nameOf = (id: string) => data.names[id] ?? id
+
+  // Lifecycle stage move — only the legal next stages, through the validated
+  // transition (change_lifecycle_stage), not a free patch.
+  const lifecycleForm =
+    data.canWrite && data.lifecycleNext.length > 0
+      ? `<form method="post" action="/app/customers/${esc(c.id)}/lifecycle" class="actions" style="margin:.2rem 0 1rem">
+          <select name="stage">${data.lifecycleNext.map((s) => `<option value="${esc(s)}">${esc(titleCase(s))}</option>`).join('')}</select>
+          <button class="btn sm" type="submit">Move lifecycle</button>
+        </form>`
+      : ''
 
   // Deal pipeline kanban — columns are the pipeline stages (reuses the ticket
   // board's `.board`/`.col`/`.tk` styling).
@@ -1139,6 +1152,7 @@ export function customerDetail(data: {
     `<p class="muted"><a href="/app/customers">← ${esc(data.label)}s</a></p>
     <h1>${esc(c.name)} <span class="badge">${esc(titleCase(c.lifecycleStage))}</span></h1>
     ${c.tags.length ? `<div class="tags">${c.tags.map((t) => `<span class="t">${esc(t)}</span>`).join('')}</div>` : ''}
+    ${lifecycleForm}
     ${customerEdit}
 
     <h2>Deals</h2>${dealForm}

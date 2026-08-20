@@ -494,6 +494,39 @@ describe('dashboard (authenticated)', () => {
     expect(cust).toContain(projectName)
   })
 
+  it('moves a customer through the lifecycle, rejecting illegal jumps (ROO-61)', async () => {
+    const created = await app.request(`${base}/app/customers`, {
+      ...form({ name: 'Lifecycle Co' }),
+    })
+    const customerId = created.headers
+      .get('location')
+      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
+
+    // The detail page offers only the legal next stages from `lead`.
+    let detail = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain(`/app/customers/${customerId}/lifecycle`) // the form
+    expect(detail).toMatch(/<option value="prospect"/)
+    expect(detail).not.toMatch(/<option value="active"/) // lead → active is illegal
+
+    // An illegal jump (lead → active) is a 400.
+    const bad = await app.request(`${base}/app/customers/${customerId}/lifecycle`, {
+      ...form({ stage: 'active' }),
+    })
+    expect(bad.status).toBe(400)
+
+    // A legal move (lead → prospect) sticks.
+    const ok = await app.request(`${base}/app/customers/${customerId}/lifecycle`, {
+      ...form({ stage: 'prospect' }),
+    })
+    expect(ok.status).toBe(302)
+    detail = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(detail).toContain('Prospect') // badge advanced
+  })
+
   it('redirects anonymous write attempts to login', async () => {
     const res = await app.request(`${base}/app/tickets/whatever/comments`, {
       method: 'POST',
