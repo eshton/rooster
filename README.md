@@ -124,6 +124,28 @@ ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) docker compose up --build
 
 Full deploy + Postgres setup: **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 
+## Run your own Rooster in ~2 minutes
+
+No clone, no database, no build — pull the published image and go. On first boot
+it creates your admin account and a starter workspace, then you sign in:
+
+```bash
+docker run -p 3000:3000 -v rooster-data:/data \
+  -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e DATABASE_URL=file:/data/rooster.db \
+  -e ROOSTER_ADMIN_EMAIL=you@example.com \
+  -e ROOSTER_ADMIN_PASSWORD=change-me-8+chars \
+  ghcr.io/eshton/rooster:latest
+```
+
+Open **http://localhost:3000/app** and sign in with those credentials. Point an
+agent at `http://localhost:3000/mcp` (it reads `/llms.txt` to connect). Prefer
+Compose? `docker compose -f docker-compose.sqlite.yml up` does the same.
+
+Your tickets and CRM data persist in the `rooster-data` volume. On SQLite, login
+sessions live in memory, so they reset when the container restarts (data is
+safe — just sign in again); for durable sessions use the Postgres compose above.
+
 ## How an agent uses Rooster
 
 1. Discover the service at `/.well-known/rooster` and read `/llms.txt`.

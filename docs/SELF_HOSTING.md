@@ -93,6 +93,34 @@ You should see the MCP endpoint and agent docs URLs logged. Check:
 
 ## 4. Deploy targets
 
+### Published image — zero dependencies (SQLite)
+
+The fastest way to a personal instance: pull the published image, no clone or
+build. On first boot the server migrates the domain tables and creates your
+admin account + a starter workspace (`ROOSTER_ADMIN_*`), then you sign in.
+
+```bash
+docker run -p 3000:3000 -v rooster-data:/data \
+  -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e DATABASE_URL=file:/data/rooster.db \
+  -e ROOSTER_ADMIN_EMAIL=you@example.com \
+  -e ROOSTER_ADMIN_PASSWORD=change-me-8+chars \
+  ghcr.io/eshton/rooster:latest
+```
+
+Or via Compose: `docker compose -f docker-compose.sqlite.yml up` (reads
+`ROOSTER_AUTH_SECRET` / `ROOSTER_ADMIN_EMAIL` / `ROOSTER_ADMIN_PASSWORD` from your
+environment). Domain data persists in the `rooster-data` volume.
+
+**Session durability:** on SQLite, better-auth uses an in-memory session store,
+so logins reset on container restart (your data is safe; the admin is
+re-bootstrapped each boot, so just sign in again). For durable sessions use the
+Postgres path below.
+
+Images are published to the GitHub Container Registry manually via the
+**Publish image** workflow (Actions tab → Run workflow → pick a tag); nothing is
+pushed automatically.
+
 ### Docker Compose (server + Postgres)
 
 The quickest real (Postgres-backed) instance:
