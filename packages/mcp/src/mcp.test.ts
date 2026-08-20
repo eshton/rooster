@@ -848,3 +848,43 @@ describe('CRM tools', () => {
     expect(customerWork.map((p: { id: string }) => p.id)).toEqual([project.id])
   })
 })
+
+describe('semantic-search nudge (ROO-68)', () => {
+  it('reports the capability in whoami and nudges keyword search when semantic search is on', async () => {
+    // The default server (beforeEach) has semanticSearch off.
+    expect(payload((await call('whoami')) as never).semanticSearch).toBe(false)
+
+    // A second server with semantic search enabled.
+    const semServer = createRoosterMcpServer({ services, actor: owner, semanticSearch: true })
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair()
+    await semServer.connect(serverT)
+    const semClient = new Client({ name: 'sem', version: '1.0' })
+    await semClient.connect(clientT)
+    const semCall = (name: string, args: Record<string, unknown> = {}) =>
+      semClient.callTool({ name, arguments: args })
+
+    expect(payload((await semCall('whoami')) as never).semanticSearch).toBe(true)
+
+    // Seed a ticket so keyword search returns something.
+    const team = await services.teams.create(owner, { key: 'SEM', name: 'Sem' })
+    const project = await services.projects.create(owner, {
+      teamId: team.id,
+      key: 'SEM',
+      name: 'P',
+    })
+    await services.tickets.create(owner, { projectId: project.id, title: 'deploy pipeline flake' })
+
+    // With semantic search on, search_tickets keeps its JSON payload AND appends a nudge.
+    const on = (await semCall('search_tickets', { query: 'deploy' })) as {
+      content: Array<{ text: string }>
+    }
+    expect(() => JSON.parse(on.content[0]?.text ?? '')).not.toThrow() // primary payload intact
+    expect(on.content.map((c) => c.text).join('\n')).toContain('find_similar_tickets') // nudge appended
+
+    // With semantic search off (default server), no nudge — just the payload.
+    const off = (await call('search_tickets', { query: 'deploy' })) as { content: unknown[] }
+    expect(off.content).toHaveLength(1)
+
+    await semClient.close()
+  })
+})
