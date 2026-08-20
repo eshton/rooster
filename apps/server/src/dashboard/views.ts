@@ -1046,7 +1046,7 @@ export function customerDetail(data: {
               <button class="btn sm" type="submit">Move</button>
             </form>`
           : ''
-        return `<div class="tk"><strong>${esc(d.title)}</strong>
+        return `<div class="tk"><a href="/app/deals/${esc(d.id)}"><strong>${esc(d.title)}</strong></a>
           ${d.value != null ? `<div class="muted" style="font-size:.82rem">${money(d.value, d.currency)}</div>` : ''}
           ${stageForm}</div>`
       })
@@ -1152,5 +1152,82 @@ export function customerDetail(data: {
 
     <h2>Interactions</h2>${interactionForm}
     ${interactionItems || '<div class="empty">No interactions logged yet.</div>'}`,
+  )
+}
+
+/** A single deal: fields, stage, edit form, and its linked delivery work (ROO-60). */
+export function dealDetail(data: {
+  actor: Actor
+  deal: Deal
+  customer: Customer
+  work: Project[]
+  projects: Project[]
+  label: string
+  canWrite: boolean
+}): string {
+  const d = data.deal
+  const facts = [
+    d.value != null ? money(d.value, d.currency) : '',
+    d.probability != null ? `${esc(String(d.probability))}% likely` : '',
+    d.closeDate ? `close ${esc(d.closeDate.slice(0, 10))}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const stageForm = data.canWrite
+    ? `<form method="post" action="/app/deals/${esc(d.id)}/stage" class="actions">
+        <input type="hidden" name="returnTo" value="deal">
+        <select name="stage">${DEAL_PIPELINE_STAGES.map((s) => `<option value="${esc(s)}"${s === d.pipelineStage ? ' selected' : ''}>${esc(titleCase(s))}</option>`).join('')}</select>
+        <button class="btn sm" type="submit">Move stage</button>
+      </form>`
+    : ''
+
+  const editForm = data.canWrite
+    ? `<details style="margin:.4rem 0 1rem">
+        <summary class="muted" style="cursor:pointer">Edit deal</summary>
+        <form method="post" action="/app/deals/${esc(d.id)}/update" class="actions" style="flex-wrap:wrap;margin:.5rem 0 0">
+          <input name="title" value="${esc(d.title)}" required maxlength="300">
+          <input name="value" value="${d.value ?? ''}" placeholder="value (minor units)" inputmode="numeric">
+          <input name="currency" value="${esc(d.currency ?? '')}" placeholder="CUR" maxlength="3" style="max-width:5rem">
+          <input name="closeDate" value="${esc(d.closeDate ?? '')}" placeholder="close date (YYYY-MM-DD)">
+          <input name="probability" value="${d.probability ?? ''}" placeholder="% likely" inputmode="numeric" style="max-width:7rem">
+          <input name="tags" value="${esc(d.tags.join(', '))}" placeholder="tags (comma-separated)">
+          <button class="btn" type="submit">Save</button>
+        </form>
+      </details>`
+    : ''
+
+  const workRows = data.work
+    .map(
+      (p) =>
+        `<div class="row"><span class="key">${esc(p.key ?? '')}</span> <a href="/app/projects/${esc(p.id)}">${esc(p.name)}</a>${p.archived ? '<span class="badge">archived</span>' : ''}</div>`,
+    )
+    .join('')
+
+  // Projects not already linked to this deal are candidates to attach.
+  const linkedIds = new Set(data.work.map((p) => p.id))
+  const candidates = data.projects.filter((p) => !linkedIds.has(p.id))
+  const linkForm =
+    data.canWrite && candidates.length > 0
+      ? `<form method="post" action="/app/deals/${esc(d.id)}/link" class="actions">
+          <select name="projectId">${candidates.map((p) => `<option value="${esc(p.id)}">${esc(p.key ? `${p.key} · ` : '')}${esc(p.name)}</option>`).join('')}</select>
+          <button class="btn sm" type="submit">Link delivery work</button>
+        </form>`
+      : ''
+
+  return chrome(
+    d.title,
+    data.actor,
+    `<p class="muted"><a href="/app/customers/${esc(data.customer.id)}">← ${esc(data.customer.name)}</a></p>
+    <h1>${esc(d.title)} <span class="badge amber">${esc(titleCase(d.pipelineStage))}</span></h1>
+    ${facts ? `<p class="muted">${facts}</p>` : ''}
+    ${d.tags.length ? `<div class="tags">${d.tags.map((t) => `<span class="t">${esc(t)}</span>`).join('')}</div>` : ''}
+    ${editForm}
+
+    <h2>Stage</h2>${stageForm}
+
+    <h2>Delivery work</h2>
+    ${workRows || '<div class="empty">No projects linked to this deal yet.</div>'}
+    ${linkForm}`,
   )
 }

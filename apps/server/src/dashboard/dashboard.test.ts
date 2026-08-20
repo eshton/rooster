@@ -425,6 +425,75 @@ describe('dashboard (authenticated)', () => {
     expect(detail).toContain('No contacts yet')
   })
 
+  it('opens a deal detail page, edits it, moves its stage, and links delivery work (ROO-60)', async () => {
+    const created = await app.request(`${base}/app/customers`, { ...form({ name: 'Dealy Co' }) })
+    const customerId = created.headers
+      .get('location')
+      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
+    await app.request(`${base}/app/customers/${customerId}/deals`, {
+      ...form({ title: 'Retainer deal', value: '90000', currency: 'usd' }),
+    })
+
+    // The kanban card links to the deal detail page.
+    let cust = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    const dealId = cust.match(/\/app\/deals\/([0-9a-f-]{36})/)?.[1]
+    expect(dealId).toBeTruthy()
+
+    let deal = await (
+      await app.request(`${base}/app/deals/${dealId}`, { headers: { cookie } })
+    ).text()
+    expect(deal).toContain('Retainer deal')
+    expect(deal).toContain('USD 900') // 90000 minor units
+
+    // Edit deal fields.
+    const edited = await app.request(`${base}/app/deals/${dealId}/update`, {
+      ...form({
+        title: 'Retainer deal',
+        value: '120000',
+        currency: 'usd',
+        probability: '60',
+        tags: 'hot',
+      }),
+    })
+    expect(edited.status).toBe(302)
+
+    // Move stage, staying on the deal page.
+    const moved = await app.request(`${base}/app/deals/${dealId}/stage`, {
+      ...form({ stage: 'qualified', returnTo: 'deal' }),
+    })
+    expect(moved.headers.get('location')).toBe(`/app/deals/${dealId}`)
+
+    // Link the first available project via the link form. Capture its id AND
+    // its display name (the option label is "<KEY> · <Name>") so we assert on
+    // exactly the project we linked, not a hard-coded one.
+    deal = await (await app.request(`${base}/app/deals/${dealId}`, { headers: { cookie } })).text()
+    expect(deal).toContain('USD 1,200') // edit applied
+    expect(deal).toContain('60% likely')
+    expect(deal).toContain('Qualified') // stage moved
+    const opt = deal.match(
+      /name="projectId"[\s\S]*?<option value="([0-9a-f-]{36})">([^<]+)<\/option>/,
+    )
+    expect(opt).toBeTruthy()
+    const projectId = opt?.[1]
+    const projectName = (opt?.[2] ?? '').split('·').pop()?.trim() ?? ''
+    expect(projectName).not.toBe('')
+
+    const linked = await app.request(`${base}/app/deals/${dealId}/link`, {
+      ...form({ projectId: projectId as string }),
+    })
+    expect(linked.status).toBe(302)
+    deal = await (await app.request(`${base}/app/deals/${dealId}`, { headers: { cookie } })).text()
+    expect(deal).toContain(projectName) // linked project shows in delivery work
+
+    // And it surfaces on the customer's aggregate work view too.
+    cust = await (
+      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
+    ).text()
+    expect(cust).toContain(projectName)
+  })
+
   it('redirects anonymous write attempts to login', async () => {
     const res = await app.request(`${base}/app/tickets/whatever/comments`, {
       method: 'POST',
