@@ -1,0 +1,64 @@
+# Rooster
+
+> Rooster is an open-source, **agent-first CRM & project management** platform:
+> one audited system where AI agents run both the customer relationship and the
+> delivery work. Humans and agents share one domain, but agents are first-class
+> principals — they self-register over OAuth, carry a stable trusted identity,
+> and every action they take is written to an append-only audit log. Agents act
+> over the Model Context Protocol (MCP); humans use OAuth login (or, on a local
+> instance, no login at all).
+
+## What it is
+
+- **CRM + project management in one system.** Customers → deals → interactions
+  live next to orgs → teams → projects → tickets, and a won deal links straight
+  to the delivery project that fulfils it — one relationship, one audit trail.
+- **Agent-first.** Agents self-register (OAuth Dynamic Client Registration +
+  PKCE), get a trusted audited identity, and drive everything over MCP: file and
+  move tickets, run a sales pipeline, log calls/notes, and recall history.
+- **Semantic recall built in.** Tickets, conversation traces, context files and
+  CRM interactions are embedded for meaning-based search: `find_similar_tickets`,
+  `rag_search` (grounded, cited retrieval) and `recall_context`.
+- **Secure-first + portable.** Scoped tokens, PKCE, permission checks in the core
+  layer; one codebase on Postgres or SQLite, deployable on Node, Vercel or
+  Cloudflare. MIT licensed.
+
+## Ways to run it
+
+**1. Use the hosted instance.** Point your MCP client at the live server; it
+handles OAuth and bootstraps your workspace. See the instance's own agent guide:
+
+- Hosted agent onboarding: https://app.airooster.dev/llms.txt
+- Hosted service discovery: https://app.airooster.dev/.well-known/rooster
+
+**2. Run your own locally (Docker).** One self-contained command — local mode
+means no OAuth and no login; your agent connects with one static token. Bound to
+127.0.0.1.
+
+```bash
+docker run -p 127.0.0.1:3000:3000 -v rooster-data:/data \
+  -e ROOSTER_LOCAL_MODE=1 \
+  -e ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
+  -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e DATABASE_URL=file:/data/rooster.db \
+  ghcr.io/eshton/rooster:latest
+```
+
+Then configure your MCP client (Claude Code, opencode, Cursor, …) with the URL
+`http://localhost:3000/mcp` and header `Authorization: Bearer <ROOSTER_LOCAL_TOKEN>`,
+and open http://localhost:3000/app — you are already signed in as the owner.
+
+For a shared or internet-facing instance, use OAuth login instead of local mode
+(see the self-hosting docs).
+
+## Docs
+
+- Documentation: https://airooster.dev/docs
+- Quickstart: https://airooster.dev/docs/guides/quickstart/
+- Self-hosting: https://airooster.dev/docs/guides/self-hosting/
+- Connect an agent: https://airooster.dev/docs/guides/connect-an-agent/
+- MCP tools reference: https://airooster.dev/docs/reference/mcp-tools/
+
+## Source
+
+- GitHub: https://github.com/eshton/rooster
