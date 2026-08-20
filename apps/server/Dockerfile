@@ -19,11 +19,16 @@ ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NODE_ENV=production
 ENV PORT=3000
-RUN corepack enable
+# Default SQLite data location so a bare `docker run` starts without crashing.
+# Mount a named/bind volume at /data to persist it; without one it's ephemeral
+# (lost when the container is removed). Override DATABASE_URL for Postgres/Turso.
+ENV DATABASE_URL=file:/data/rooster.db
+RUN corepack enable && mkdir -p /data
 
 # Copy the built workspace (preserves pnpm's node_modules symlink layout).
 COPY --from=builder /app /app
 
+VOLUME /data
 EXPOSE 3000
 
 # The Node entry auto-migrates the domain tables on boot. better-auth owns its
