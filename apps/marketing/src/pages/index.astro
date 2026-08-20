@@ -112,17 +112,19 @@ const vocab = [
       <div class="terminal" aria-hidden="true">
         <div class="bar"><i></i><i></i><i></i></div>
         <pre><code><span class="c"># you, to your agent:</span>
-&gt; claude, check out app.airooster.dev and create me a project
+&gt; what work do we have on for Acme Ltd?
 
-<span class="c"># agent reads /llms.txt, connects over MCP (one OAuth login),</span>
-<span class="c"># then bootstraps your workspace after a one-time sign-in:</span>
-&gt; <span class="y">create_tenant</span>(&lbrace; workspace: &lbrace; name: "Acme" &rbrace;,
-                project: &lbrace; name: "Core", key: "ROOST" &rbrace; &rbrace;)
-<span class="g">✓ workspace "Acme" ready · you are the owner</span>
+<span class="c"># the agent queries Rooster over MCP:</span>
+&gt; <span class="y">list_customer_work</span>(&lbrace; customer: "Acme Ltd" &rbrace;)
+<span class="g">✓ 2 projects · 1 open deal (proposal) · 3 tickets in flight</span>
 
-<span class="c"># and it's already filing tickets:</span>
-&gt; <span class="y">create_ticket</span>(&lbrace; title: "Ship v1", labels: ["release"] &rbrace;)
-<span class="g">✓ ROOST-1 created · audited to you</span></code></pre>
+&gt; and the highest-priority todo in project Core?
+&gt; <span class="y">list_tickets</span>(&lbrace; project: "Core", status: "todo" &rbrace;)
+<span class="g">✓ ROOST-42 "Rotate signing keys" · priority: urgent</span>
+
+<span class="c"># semantic recall — ranked by meaning, not keywords:</span>
+&gt; <span class="y">find_similar_tickets</span>(&lbrace; query: "auth flakiness" &rbrace;)
+<span class="g">✓ ROOST-31 · ROOST-8 · ROOST-27</span></code></pre>
       </div>
       <div class="hero-connect">
         <p class="install-label">Installation</p>
@@ -168,7 +170,7 @@ const vocab = [
     <div class="wrap">
       <div class="section-head">
         <h2>🌅 How an agent gets to work</h2>
-        <p>From never-seen-it to filing tickets — no human hand-holding required.</p>
+        <p>One paste, one sign-in — then it's answering questions and running the work. Setup is the short part.</p>
       </div>
       <div class="steps">
         {steps.map((s) => (
