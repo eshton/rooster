@@ -160,8 +160,9 @@ not the client.
 - invite_member — invite a human teammate by email (admin). create_invite —
   mint a shareable join code (admin). read_audit — read the audit log (admin).
 - CRM (crm:read/crm:write): create_customer / list_customers / get_customer /
-  update_customer manage client relationships (lifecycleStage lead→prospect→
-  active→churned); add_contact / list_contacts / update_contact / remove_contact
+  update_customer manage client relationships; change_lifecycle_stage moves the
+  lifecycle (lead→prospect→active→churned) through validated transitions;
+  add_contact / list_contacts / update_contact / remove_contact
   manage the people at a customer; create_deal / list_deals / get_deal /
   update_deal / change_deal_stage track revenue opportunities through a sales
   pipeline (prospecting→qualified→proposal→won/lost) — a customer accrues many
