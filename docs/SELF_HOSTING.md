@@ -121,6 +121,42 @@ Images are published to the GitHub Container Registry manually via the
 **Publish image** workflow (Actions tab → Run workflow → pick a tag); nothing is
 pushed automatically.
 
+### Local mode — no OAuth, no login (single user)
+
+For a single user on their own machine, the OAuth (DCR + PKCE) dance is
+unnecessary friction. `ROOSTER_LOCAL_MODE=1` gates `/mcp` on a static bearer
+token instead, and the dashboard auto-authenticates as the local owner — so you
+run the image, point your agent at localhost, and go.
+
+```bash
+docker run -p 127.0.0.1:3000:3000 -v rooster-data:/data \
+  -e ROOSTER_LOCAL_MODE=1 \
+  -e ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
+  -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e DATABASE_URL=file:/data/rooster.db \
+  ghcr.io/eshton/rooster:latest
+```
+
+Configure your MCP client with one static header — `Authorization: Bearer
+<ROOSTER_LOCAL_TOKEN>` — pointed at `http://localhost:3000/mcp`. Open
+`http://localhost:3000/app` and you are already signed in as the owner. Compose
+equivalent: `docker compose -f docker-compose.local.yml up`.
+
+**Secure-first.** Local mode is opt-in and stays within the security model:
+
+- **Off by default** — unset `ROOSTER_LOCAL_MODE` keeps the full OAuth flow.
+- **Token-gated, not open** — `/mcp` requires the token (constant-time compared);
+  a leaked port still needs it. If `ROOSTER_LOCAL_TOKEN` is unset the server
+  generates a strong one and prints it on boot (set it to keep it stable).
+- **Localhost-enforced** — the server **refuses to start** in local mode unless
+  `ROOSTER_BASE_URL` is localhost, so the frictionless path can't be exposed on a
+  public URL. Bind the container to `127.0.0.1` as shown.
+- **Accountable** — the local principal is the real bootstrapped owner; every
+  action still runs the permission checks and writes the append-only audit log.
+
+Do **not** use local mode for a shared or internet-facing instance — use OAuth
+login (the SQLite or Postgres paths) there.
+
 ### Docker Compose (server + Postgres)
 
 The quickest real (Postgres-backed) instance:
