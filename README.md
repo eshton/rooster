@@ -126,8 +126,44 @@ Full deploy + Postgres setup: **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 
 ## Run your own Rooster in ~2 minutes
 
-No clone, no database, no build — pull the published image and go. On first boot
-it creates your admin account and a starter workspace, then you sign in:
+No clone, no database, no build — pull the published image and go.
+
+### Just you + your agent (local mode)
+
+The frictionless path for a single user on your own machine: **no OAuth, no
+login**. The agent connects with one static token; the dashboard signs you in
+automatically.
+
+```bash
+docker run -p 127.0.0.1:3000:3000 -v rooster-data:/data \
+  -e ROOSTER_LOCAL_MODE=1 \
+  -e ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
+  -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e DATABASE_URL=file:/data/rooster.db \
+  ghcr.io/eshton/rooster:latest
+```
+
+Point your MCP client (Claude Code, opencode, Cursor, …) at it — one header, no
+auth dance:
+
+```jsonc
+"rooster": {
+  "url": "http://localhost:3000/mcp",
+  "headers": { "Authorization": "Bearer <ROOSTER_LOCAL_TOKEN>" }
+}
+```
+
+Then open **http://localhost:3000/app** — you're already signed in as the owner.
+Compose equivalent: `docker compose -f docker-compose.local.yml up`.
+
+> **Secure-first:** local mode is token-only auth for a single trusted user. It's
+> bound to `127.0.0.1` above and the server **refuses to run it on a public URL**.
+> For a shared or internet-facing instance, use OAuth login + the Postgres compose
+> below instead.
+
+### Shared instance (OAuth login)
+
+For more than one person, keep the full OAuth flow and real logins:
 
 ```bash
 docker run -p 3000:3000 -v rooster-data:/data \
@@ -138,9 +174,9 @@ docker run -p 3000:3000 -v rooster-data:/data \
   ghcr.io/eshton/rooster:latest
 ```
 
-Open **http://localhost:3000/app** and sign in with those credentials. Point an
-agent at `http://localhost:3000/mcp` (it reads `/llms.txt` to connect). Prefer
-Compose? `docker compose -f docker-compose.sqlite.yml up` does the same.
+Open **http://localhost:3000/app**, sign in, and agents connect at
+`http://localhost:3000/mcp` over OAuth (they read `/llms.txt` to connect).
+Compose: `docker compose -f docker-compose.sqlite.yml up`.
 
 Your tickets and CRM data persist in the `rooster-data` volume. On SQLite, login
 sessions live in memory, so they reset when the container restarts (data is

@@ -1,0 +1,35 @@
+# Rooster — frictionless local single-user mode (no OAuth, no login).
+#
+#   ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+#   ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
+#   docker compose -f docker-compose.local.yml up
+#
+# Then point your agent's MCP client at http://localhost:3000/mcp with header
+#   Authorization: Bearer <ROOSTER_LOCAL_TOKEN>
+# and open http://localhost:3000/app — you are already signed in as the owner.
+#
+# SECURITY: local mode is token-only auth for a single trusted user on your own
+# machine. It is bound to 127.0.0.1 below (never exposed to your network) and the
+# server refuses to run local mode on a non-localhost base URL. Data persists in
+# the `rooster-data` volume.
+
+services:
+  server:
+    image: ghcr.io/eshton/rooster:latest
+    # Build locally instead of pulling? Swap the line above for:
+    # build: { context: ., dockerfile: apps/server/Dockerfile }
+    environment:
+      ROOSTER_LOCAL_MODE: '1'
+      ROOSTER_LOCAL_TOKEN: ${ROOSTER_LOCAL_TOKEN:?set ROOSTER_LOCAL_TOKEN, e.g. $(openssl rand -base64 24)}
+      ROOSTER_AUTH_SECRET: ${ROOSTER_AUTH_SECRET:?set ROOSTER_AUTH_SECRET, e.g. $(openssl rand -base64 32)}
+      DATABASE_URL: file:/data/rooster.db
+      ROOSTER_BASE_URL: http://localhost:3000
+      PORT: '3000'
+    ports:
+      # Bound to loopback on purpose — local mode is single-user, token-only auth.
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - rooster-data:/data
+
+volumes:
+  rooster-data:
