@@ -78,6 +78,65 @@ the image — mount a volume at `/data` to persist it. Name your workspace with
 Images are published to GHCR manually via the **Publish image** workflow
 (Actions → Run workflow → pick a tag).
 
+## Semantic search (optional)
+
+Rooster always has keyword search (`search_tickets`). **Semantic** search —
+`find_similar_tickets`, `rag_search`, `recall_context` — is **off until you
+configure an embeddings provider**. The vectors are stored locally in your
+SQLite/libSQL database (native `F32_BLOB` — no extra service for storage); you
+only need something to *create* the embeddings.
+
+Rooster calls an **OpenAI-compatible `/v1/embeddings`** endpoint. Set:
+
+| Variable | Purpose |
+| --- | --- |
+| `ROOSTER_EMBEDDING_URL` | the `/v1/embeddings` endpoint |
+| `ROOSTER_EMBEDDING_API_KEY` | the provider key (any non-empty value for local Ollama) |
+| `ROOSTER_EMBEDDING_MODEL` | model name |
+| `ROOSTER_EMBEDDING_DIMS` | vector size — **must match the model** |
+
+`URL` + `API_KEY` are all-or-nothing; set both or semantic search stays off (a
+log line tells you). Common `DIMS`: `nomic-embed-text` = 768, `bge-m3` /
+`mxbai-embed-large` = 1024, OpenAI `text-embedding-3-small` = 1536.
+
+**Fully local, zero cloud (bundled Ollama):** `docker-compose.ollama.yml` runs
+Ollama alongside Rooster, wired with working defaults (`nomic-embed-text`, 768
+dims) — semantic search works out of the box:
+
+```bash
+ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
+docker compose -f docker-compose.ollama.yml up
+```
+
+The first start pulls the embed model (~a minute). Tickets created before it's
+ready won't be embedded — run `backfill_embeddings` once to catch up.
+
+**Point at an existing provider** instead — a cloud API:
+
+```bash
+-e ROOSTER_EMBEDDING_URL=https://api.openai.com/v1/embeddings \
+-e ROOSTER_EMBEDDING_API_KEY=sk-... \
+-e ROOSTER_EMBEDDING_MODEL=text-embedding-3-small \
+-e ROOSTER_EMBEDDING_DIMS=1536
+```
+
+…or an Ollama you already run on the host (`ollama pull nomic-embed-text`):
+
+```bash
+-e ROOSTER_EMBEDDING_URL=http://host.docker.internal:11434/v1/embeddings \
+-e ROOSTER_EMBEDDING_API_KEY=ollama \
+-e ROOSTER_EMBEDDING_MODEL=nomic-embed-text \
+-e ROOSTER_EMBEDDING_DIMS=768
+```
+
+:::caution[Changing DIMS on an existing database]
+The `embeddings` table is sized from `ROOSTER_EMBEDDING_DIMS` when it's first
+created. To switch to a model with a different vector size, drop the
+`embeddings` table (it recreates on next connect), then re-embed with
+`backfill_embeddings`.
+:::
+
 ## Run (from source)
 
 ```bash

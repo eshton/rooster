@@ -1,0 +1,54 @@
+# Rooster + Ollama — local semantic search, fully offline, no cloud.
+#
+#   ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+#   ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
+#   docker compose -f docker-compose.ollama.yml up
+#
+# Runs Ollama alongside Rooster (local mode) and wires Rooster's embedder to it
+# with working defaults (nomic-embed-text, 768 dims), so find_similar_tickets /
+# rag_search / recall_context work out of the box. The first start pulls the
+# embed model (~a minute); the healthcheck holds Rooster back until it's ready.
+# Everything is bound to 127.0.0.1 — single-user, token-only auth.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    # Serve, then pull the embed model in the background; the healthcheck below
+    # reports healthy only once the model is present.
+    entrypoint: ['/bin/sh', '-lc']
+    command:
+      - 'ollama serve & until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull nomic-embed-text; wait'
+    healthcheck:
+      test: ['CMD-SHELL', 'ollama list | grep -q nomic-embed-text']
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+    volumes:
+      - ollama-models:/root/.ollama
+
+  rooster:
+    image: ghcr.io/eshton/rooster:latest
+    environment:
+      ROOSTER_LOCAL_MODE: '1'
+      ROOSTER_LOCAL_TOKEN: ${ROOSTER_LOCAL_TOKEN:?set ROOSTER_LOCAL_TOKEN, e.g. $(openssl rand -base64 24)}
+      ROOSTER_AUTH_SECRET: ${ROOSTER_AUTH_SECRET:?set ROOSTER_AUTH_SECRET, e.g. $(openssl rand -base64 32)}
+      DATABASE_URL: file:/data/rooster.db
+      ROOSTER_BASE_URL: http://localhost:3000
+      PORT: '3000'
+      # Point the embedder at the Ollama service (OpenAI-compatible endpoint).
+      ROOSTER_EMBEDDING_URL: http://ollama:11434/v1/embeddings
+      ROOSTER_EMBEDDING_API_KEY: ollama # dummy — Ollama ignores it, config needs it set
+      ROOSTER_EMBEDDING_MODEL: nomic-embed-text
+      ROOSTER_EMBEDDING_DIMS: '768'
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - rooster-data:/data
+
+volumes:
+  ollama-models:
+  rooster-data:
