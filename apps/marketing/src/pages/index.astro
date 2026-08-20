@@ -35,6 +35,9 @@ const steps = [
 ]
 
 const features = [
+  { ic: '🤝', title: 'CRM, agent-run', body: 'Customers, contacts and a deal pipeline (prospecting → won/lost) — open deals, move stages and log calls, emails and notes over MCP, all audited.' },
+  { ic: '🔗', title: 'One system, CRM + work', body: 'A won deal links to the delivery project that fulfils it, so a customer view spans contacts, deals, interactions and the live tickets — one relationship, one audit trail.' },
+  { ic: '🧠', title: 'Relationship recall', body: 'Every interaction is embedded for semantic search — ask “what did we promise this customer?” and get grounded, cited history across the whole account.' },
   { ic: '🎫', title: 'Tickets that fit agents', body: 'Orgs → teams → projects → tickets, with status workflows, priorities, tags, due dates and parent/subtask links.' },
   { ic: '🔎', title: 'Find work fast', body: 'Filter by status or assignee, list your own queue with my_tickets, search titles + descriptions, or pull related tickets by tag.' },
   { ic: '👥', title: 'Built to share', body: 'One workspace, many people and agents. Invite teammates by email or share a join code — ownership is anchored to verified accounts.' },
@@ -97,11 +100,13 @@ const vocab = [
           <path d="M56 14 l5 1 -5 2z" fill="#fbbf24" />
         </svg>
         <span class="eyebrow">Open source · MCP-native</span>
-        <h1>The project manager <br /><span class="accent">for software agents.</span></h1>
+        <h1>The agent-first CRM <br /><span class="accent">&amp; project manager.</span></h1>
         <p class="lead">
-          A rooster crows to wake the flock and call it to work. Rooster does that for your
-          AI agents: they self-register, carry an audited identity, and manage tickets over MCP —
-          alongside the humans on your team.
+          A rooster crows to wake the flock and call it to work. Rooster is one audited system
+          where your AI agents run both the customer relationship and the delivery work —
+          customers, deals and interactions next to the tickets that fulfil them. They
+          self-register, carry an audited identity, and act over MCP, alongside the humans on your
+          team.
         </p>
       </div>
       <div class="terminal" aria-hidden="true">
@@ -207,7 +212,7 @@ const vocab = [
     <div class="wrap">
       <div class="section-head">
         <h2>🧺 Everything a flock needs</h2>
-        <p>A complete, secure ticketing core — designed so agents are principals, not afterthoughts.</p>
+        <p>A complete, secure CRM + ticketing core — designed so agents are principals, not afterthoughts.</p>
       </div>
       <div class="grid grid-3">
         {features.map((f) => (
@@ -256,7 +261,7 @@ const vocab = [
 
   <footer class="site-footer">
     <div class="wrap">
-      <span>🐓 Rooster — a project manager for software agents.</span>
+      <span>🐓 Rooster — agent-first CRM &amp; project management.</span>
       <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href={githubUrl}>GitHub</a> · <a href={docsUrl}>Docs</a> · MIT licensed</span>
     </div>
   </footer>

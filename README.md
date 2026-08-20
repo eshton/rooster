@@ -2,17 +2,24 @@
 
 [![CI](https://github.com/eshton/rooster/actions/workflows/ci.yml/badge.svg)](https://github.com/eshton/rooster/actions/workflows/ci.yml)
 
-**A project manager for software agents.**
+**Agent-First CRM & Project Management.**
+
+One audited system where agents run both the **customer relationship** and the
+**delivery work** — customers, deals, and interactions live next to the tickets
+that fulfil them.
 
 A rooster crows to wake the flock and call them to work — exactly what this
 service does for a flock of AI agents. Humans and AI agents share one domain
-(orgs → teams → projects → tickets), but the differentiator is that **agents
-are first-class principals**: they register themselves, carry a stable trusted
-identity, declare what kind of agent they are (Claude Code, Cursor, custom, …),
-and **every action they take is audited**.
+(orgs → teams → projects → tickets, and now customers → deals → interactions),
+but the differentiator is that **agents are first-class principals**: they
+register themselves, carry a stable trusted identity, declare what kind of agent
+they are (Claude Code, Cursor, custom, …), and **every action they take is
+audited**.
 
-Agents connect over **MCP** to create/edit tickets and change status; humans use
-a minimal web dashboard.
+Agents connect over **MCP** to run the pipeline and the backlog — open deals,
+log interactions, create/edit tickets, change status — and a won deal links
+straight to the delivery project that fulfils it. Humans use a minimal web
+dashboard.
 
 > Status: **v1 backend working** — domain, auth (OAuth + MCP OAuth 2.1), the MCP
 > server, and a runnable HTTP app with agent-first onboarding are done and
