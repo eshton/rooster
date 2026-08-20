@@ -40,7 +40,6 @@ docker run -p 127.0.0.1:3000:3000 -v rooster-data:/data \
   -e ROOSTER_LOCAL_MODE=1 \
   -e ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
   -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
-  -e DATABASE_URL=file:/data/rooster.db \
   ghcr.io/eshton/rooster:latest
 ```
 

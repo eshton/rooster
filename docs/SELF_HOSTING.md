@@ -102,7 +102,6 @@ admin account + a starter workspace (`ROOSTER_ADMIN_*`), then you sign in.
 ```bash
 docker run -p 3000:3000 -v rooster-data:/data \
   -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
-  -e DATABASE_URL=file:/data/rooster.db \
   -e ROOSTER_ADMIN_EMAIL=you@example.com \
   -e ROOSTER_ADMIN_PASSWORD=change-me-8+chars \
   ghcr.io/eshton/rooster:latest
@@ -133,7 +132,6 @@ docker run -p 127.0.0.1:3000:3000 -v rooster-data:/data \
   -e ROOSTER_LOCAL_MODE=1 \
   -e ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
   -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
-  -e DATABASE_URL=file:/data/rooster.db \
   ghcr.io/eshton/rooster:latest
 ```
 
