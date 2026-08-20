@@ -56,11 +56,17 @@ describe('CRM: customers + contacts (ROO-47)', () => {
     expect((await services.customers.list(owner)).map((c) => c.id)).toEqual([created.id])
 
     const updated = await services.customers.update(owner, created.id, {
-      lifecycleStage: 'active',
       tags: ['hosting', 'vip'],
     })
-    expect(updated.lifecycleStage).toBe('active')
     expect(updated.tags).toEqual(['hosting', 'vip'])
+    expect(updated.lifecycleStage).toBe('lead') // update doesn't touch the lifecycle
+
+    // Lifecycle moves through the validated transition (ROO-55), not update.
+    const advanced = await services.customers.changeLifecycleStage(owner, {
+      customerId: created.id,
+      stage: 'prospect',
+    })
+    expect(advanced.lifecycleStage).toBe('prospect')
   })
 
   it('adds/lists/updates/removes contacts under a customer', async () => {
