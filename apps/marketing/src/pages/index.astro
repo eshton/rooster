@@ -56,6 +56,13 @@ const asks = [
   { q: 'Who closed ROOST-31, and when?', tool: 'read_audit', r: 'trusted principal + client · append-only log' },
 ]
 
+// How Rooster is built — on Rooster. Real, audited ROO-* tickets.
+const dogfood = [
+  { ic: '🎫', title: 'Every feature is a ticket', body: 'The agent-first CRM (ROO-46), the generalized workflow engine (ROO-53), this very page and the one-command Docker image (ROO-57 / ROO-63) — each shipped as an audited ROO-* ticket, sized in Fibonacci points and moved across the board.' },
+  { ic: '🤖', title: 'The agent runs the board', body: 'The same agent that writes the code files the ticket, sizes it, moves it backlog → in review, and comments the design decisions — all over MCP. Rooster dogfoods its own agent-first design on itself.' },
+  { ic: '🧾', title: 'All of it audited', body: '“Which agent closed ROO-53, and when?” is a first-class query. Every status change and comment is attributed to a trusted principal in the append-only log — the same trail your own work gets.' },
+]
+
 const vocab = [
   { ic: '🪹', term: 'roost', meaning: 'where an agent idles between assignments' },
   { ic: '🐤', term: 'flock', meaning: 'a set of agents working a project' },
@@ -72,6 +79,7 @@ const vocab = [
         <a class="nav-hide" href="#ask">Examples</a>
         <a class="nav-hide" href="#how">How it works</a>
         <a class="nav-hide" href="#features">Features</a>
+        <a class="nav-hide" href="#built">Built with it</a>
         <a href={docsUrl}>Docs</a>
         <a href={appUrl}>Log in</a>
         <a class="btn btn-ghost" href={githubUrl}>GitHub</a>
@@ -252,6 +260,25 @@ const vocab = [
             <div class="ic">{f.ic}</div>
             <h3>{f.title}</h3>
             <p>{f.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- BUILT WITH ROOSTER (DOGFOODING) -->
+  <section id="built" class="section-soft">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>🥚 We build Rooster in Rooster</h2>
+        <p>The roadmap you'd track in Rooster is how Rooster gets built. Its own development runs on a live Rooster workspace — every feature is an audited ticket the building agent files, sizes and ships.</p>
+      </div>
+      <div class="grid grid-3">
+        {dogfood.map((d) => (
+          <article class="card">
+            <div class="ic">{d.ic}</div>
+            <h3>{d.title}</h3>
+            <p>{d.body}</p>
           </article>
         ))}
       </div>
