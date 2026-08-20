@@ -308,10 +308,24 @@ export function loadConfig(
 ): RoosterConfig {
   const parsed = envSchema.safeParse(source)
   if (!parsed.success) {
+    // Actionable hints for the handful of must-have vars, so a first-time
+    // self-hoster sees what to set, not just "expected string, received undefined".
+    const hint: Record<string, string> = {
+      DATABASE_URL:
+        'set a database — e.g. DATABASE_URL=file:./local.db (SQLite). The Docker image defaults this to file:/data/rooster.db.',
+      ROOSTER_AUTH_SECRET:
+        'set a secret ≥ 16 chars — e.g. ROOSTER_AUTH_SECRET=$(openssl rand -base64 32)',
+    }
     const issues = parsed.error.issues
-      .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+      .map((i) => {
+        const key = String(i.path[0] ?? '(root)')
+        return `  - ${key}: ${i.message}${hint[key] ? ` → ${hint[key]}` : ''}`
+      })
       .join('\n')
-    throw new Error(`Invalid Rooster environment configuration:\n${issues}`)
+    throw new Error(
+      `Rooster can't start — invalid environment configuration:\n${issues}\n\n` +
+        'See https://airooster.dev/docs/guides/self-hosting/ for the required variables.',
+    )
   }
   const env = parsed.data
 

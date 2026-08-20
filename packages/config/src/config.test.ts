@@ -220,7 +220,7 @@ describe('loadConfig', () => {
     expect(loadConfig(baseEnv).embeddingDims).toBe(1536)
     expect(loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_DIMS: '1024' }).embeddingDims).toBe(1024)
     expect(() => loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_DIMS: '0' })).toThrow(
-      /Invalid Rooster environment configuration/,
+      /environment configuration/,
     )
   })
 })

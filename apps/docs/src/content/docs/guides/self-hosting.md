@@ -42,7 +42,43 @@ Rooster keeps **two** sets of tables in the same database:
 
    Use `auth:generate` first if you want to review the SQL.
 
-## Run
+## Docker (published image)
+
+The fastest real instance — no clone, no build. Pull the published image and go;
+it auto-migrates the domain tables and bootstraps an owner on first boot.
+
+**Personal (SQLite, no login):** local mode gates `/mcp` on a static token and
+auto-signs-you-in on the dashboard. Bound to loopback.
+
+```bash
+docker run -p 127.0.0.1:3000:3000 -v rooster-data:/data \
+  -e ROOSTER_LOCAL_MODE=1 \
+  -e ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) \
+  -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  ghcr.io/eshton/rooster:latest
+```
+
+**Shared (SQLite, OAuth login):** set an admin to bootstrap, keep the full login
+flow.
+
+```bash
+docker run -p 3000:3000 -v rooster-data:/data \
+  -e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e ROOSTER_ADMIN_EMAIL=you@example.com \
+  -e ROOSTER_ADMIN_PASSWORD=change-me-8+chars \
+  ghcr.io/eshton/rooster:latest
+```
+
+Compose files are provided: `docker-compose.local.yml` (local mode),
+`docker-compose.sqlite.yml` (SQLite + login), and `docker-compose.yml`
+(server + Postgres). `DATABASE_URL` defaults to `file:/data/rooster.db` inside
+the image — mount a volume at `/data` to persist it. Name your workspace with
+`ROOSTER_ADMIN_WORKSPACE` / `ROOSTER_ADMIN_PROJECT_KEY`.
+
+Images are published to GHCR manually via the **Publish image** workflow
+(Actions → Run workflow → pick a tag).
+
+## Run (from source)
 
 ```bash
 pnpm build
@@ -59,7 +95,10 @@ pnpm --filter @rooster/server start
   Postgres — the in-memory adapter is dev/SQLite only and is **not** durable on
   serverless.
 
-:::caution
-The in-memory auth adapter loses all sessions/tokens between invocations. Always
-use Postgres (or another durable store) for anything beyond local dev.
+:::caution[Session durability on SQLite]
+On SQLite, better-auth uses an in-memory session store, so **OAuth logins reset
+when the process restarts** (your domain data in the volume is safe, and an
+admin is re-bootstrapped each boot). **Local mode is unaffected** — it
+auto-authenticates, no sessions. For durable OAuth sessions on a shared instance,
+use **Postgres**.
 :::
