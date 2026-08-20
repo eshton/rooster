@@ -32,6 +32,15 @@ type Resolved = { actor: Actor } | { noOrg: string } | null
 
 /** Resolve the dashboard session to an actor (or a "signed in, no org" state). */
 async function resolveSession(ctx: ServerContext, c: Context): Promise<Resolved> {
+  // Local single-user mode: no login — act as the bootstrapped local owner.
+  // (Config permits this only on a localhost base URL.)
+  if (ctx.config.localMode) {
+    const email = ctx.config.admin?.email
+    const identity = email ? await humanIdentityFromSessionEmail(ctx.db.repositories, email) : null
+    if (!identity) return { noOrg: email ?? 'local owner' }
+    return { actor: await ctx.services.resolveActor(identity) }
+  }
+
   const session = await ctx.auth.api.getSession({ headers: c.req.raw.headers })
   if (!session) return null
   const activeOrgId = getCookie(c, ACTIVE_ORG_COOKIE) ?? null
