@@ -9,6 +9,14 @@ const appUrl = `https://${serverHost}/app`
 // The one prompt you paste into any agent — identical across platforms.
 const connectPrompt = `check out ${serverHost} and create me a project`
 
+// One self-contained command to run Rooster locally (published image + local
+// mode: no login, your agent connects with one token). Bound to 127.0.0.1.
+const localRunCmd =
+  'docker run -p 127.0.0.1:3000:3000 -v rooster-data:/data ' +
+  '-e ROOSTER_LOCAL_MODE=1 -e ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) ' +
+  '-e ROOSTER_AUTH_SECRET=$(openssl rand -base64 32) ' +
+  '-e DATABASE_URL=file:/data/rooster.db ghcr.io/eshton/rooster:latest'
+
 const principles = [
   {
     ic: '🔒',
@@ -156,6 +164,15 @@ const vocab = [
             </button>
           </div>
           <p class="install-host">MCP endpoint <a href={`https://${serverHost}/mcp`}>{serverHost}/mcp</a> · one OAuth login, then it bootstraps your workspace.</p>
+
+          <p class="connect-or"><span>or run it on your machine</span></p>
+          <div class="prompt">
+            <code id="local-cmd">{localRunCmd}</code>
+            <button class="copy-btn" type="button" data-copy="local-cmd" aria-label="Copy the local run command">
+              Copy
+            </button>
+          </div>
+          <p class="install-host">Local mode · no login · your agent connects with one token. <a href={docsUrl}>Self-host docs</a>.</p>
         </div>
         <div class="hero-cta">
           <a class="btn btn-primary" href={appUrl}>Open the app →</a>
@@ -374,4 +391,10 @@ const vocab = [
   .ask-tool { margin: 0.7rem 0 0.4rem; }
   .ask-tool code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; background: #1c1917; color: #fcd34d; padding: 0.15rem 0.5rem; border-radius: 6px; }
   .ask-r { color: var(--muted); font-size: 0.94rem; margin: 0; }
+
+  /* "or run it on your machine" divider between the hosted + local install. */
+  .connect-or { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0 0.6rem; color: var(--muted); font-size: 0.85rem; }
+  .connect-or::before, .connect-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  /* The local docker command is long — scroll it rather than wrap/overflow. */
+  #local-cmd { white-space: pre; overflow-x: auto; }
 </style>
