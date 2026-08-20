@@ -18,6 +18,38 @@ describe('ROOSTER_CRM_LABEL', () => {
   })
 })
 
+describe('ROOSTER_LOCAL_MODE', () => {
+  it('is off by default', () => {
+    expect(loadConfig(baseEnv).localMode).toBeUndefined()
+  })
+
+  it('enables on a localhost base URL and defaults the admin owner', () => {
+    const cfg = loadConfig({
+      ...baseEnv,
+      ROOSTER_LOCAL_MODE: '1',
+      ROOSTER_BASE_URL: 'http://localhost:3000',
+      ROOSTER_LOCAL_TOKEN: 'a-stable-local-token',
+    })
+    expect(cfg.localMode).toEqual({ token: 'a-stable-local-token' })
+    expect(cfg.admin?.email).toBe('admin@rooster.local')
+  })
+
+  it('carries an empty token when unset (the Node entry generates one)', () => {
+    const cfg = loadConfig({ ...baseEnv, ROOSTER_LOCAL_MODE: '1' })
+    expect(cfg.localMode).toEqual({ token: '' })
+  })
+
+  it('hard-refuses a non-localhost base URL (secure-first)', () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        ROOSTER_LOCAL_MODE: '1',
+        ROOSTER_BASE_URL: 'https://rooster.example.com',
+      }),
+    ).toThrow(/ROOSTER_LOCAL_MODE requires a localhost/)
+  })
+})
+
 describe('resolveDbKind', () => {
   it('maps schemes to driver kinds', () => {
     expect(resolveDbKind('postgres://u:p@h/db')).toBe('postgres')

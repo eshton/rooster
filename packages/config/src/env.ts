@@ -52,6 +52,21 @@ const envSchema = z.object({
   ROOSTER_DISABLE_SIGNUP: z.string().optional(),
 
   /**
+   * Local single-user mode for self-hosting on your own machine. When on, `/mcp`
+   * accepts a static bearer token instead of the OAuth (DCR + PKCE) flow, and the
+   * dashboard auto-authenticates as the local owner — so you can run the image,
+   * point your agent at localhost, and go. OFF unless explicitly enabled, and
+   * ONLY permitted on a localhost base URL (enforced at load). Accepts `true`/`1`.
+   */
+  ROOSTER_LOCAL_MODE: z.string().optional(),
+  /**
+   * The static bearer token that gates `/mcp` in local mode. Set it to keep the
+   * token stable across restarts; if unset, the Node entry generates a strong
+   * random one and prints it on boot. Min 16 chars.
+   */
+  ROOSTER_LOCAL_TOKEN: z.string().min(16).optional(),
+
+  /**
    * Optional first-run admin. When email + password are set and the email has
    * no Rooster user yet, the server creates the account and a starter workspace
    * on startup — a zero-friction "just me" / internal self-host: set these,
@@ -180,6 +195,16 @@ export interface RoosterConfig {
   }
   /** When true, email/password users must verify their email before sign-in. */
   requireEmailVerification: boolean
+  /**
+   * Local single-user mode (self-host on your own machine). Present only when
+   * `ROOSTER_LOCAL_MODE` is enabled — and then only on a localhost base URL.
+   * `/mcp` accepts the static `token` (Bearer) instead of OAuth, and the
+   * dashboard auto-authenticates as the local owner. `token` is empty here when
+   * unset in the env; the Node entry fills a generated one before serving.
+   */
+  localMode?: {
+    token: string
+  }
   enrollment: {
     policy: RawEnv['ROOSTER_ENROLLMENT_POLICY']
     token?: string
@@ -361,6 +386,29 @@ export function loadConfig(
     )
   }
 
+  // Local single-user mode. Secure-first: opt-in only, and hard-refuse to run
+  // token-only auth on anything but a localhost base URL — you cannot expose the
+  // frictionless path on a public URL by accident.
+  const localModeOn = env.ROOSTER_LOCAL_MODE === 'true' || env.ROOSTER_LOCAL_MODE === '1'
+  if (localModeOn) {
+    let host: string
+    try {
+      host = new URL(env.ROOSTER_BASE_URL).hostname
+    } catch {
+      host = ''
+    }
+    const isLocal =
+      host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]'
+    if (!isLocal) {
+      throw new Error(
+        'Invalid Rooster environment configuration:\n' +
+          `  - ROOSTER_LOCAL_MODE requires a localhost ROOSTER_BASE_URL (got "${host}"). ` +
+          'Refusing to run token-only auth on a public URL.',
+      )
+    }
+  }
+  const localMode = localModeOn ? { token: env.ROOSTER_LOCAL_TOKEN ?? '' } : undefined
+
   const admin =
     env.ROOSTER_ADMIN_EMAIL && env.ROOSTER_ADMIN_PASSWORD
       ? {
@@ -369,7 +417,19 @@ export function loadConfig(
           workspace: env.ROOSTER_ADMIN_WORKSPACE ?? 'My Workspace',
           projectKey: env.ROOSTER_ADMIN_PROJECT_KEY ?? 'TASK',
         }
-      : undefined
+      : // Local mode always needs an owner principal to resolve to, so default the
+        // admin bootstrap when it isn't explicitly configured. The password is only
+        // used by the (bypassed) login form — the dashboard auto-authenticates.
+        localModeOn
+        ? {
+            // A valid-format address (better-auth rejects dot-less domains like
+            // "admin@localhost"); the login form is bypassed in local mode anyway.
+            email: env.ROOSTER_ADMIN_EMAIL ?? 'admin@rooster.local',
+            password: env.ROOSTER_ADMIN_PASSWORD ?? 'local-mode-owner',
+            workspace: env.ROOSTER_ADMIN_WORKSPACE ?? 'My Workspace',
+            projectKey: env.ROOSTER_ADMIN_PROJECT_KEY ?? 'TASK',
+          }
+        : undefined
 
   return {
     nodeEnv: env.NODE_ENV,
@@ -393,6 +453,7 @@ export function loadConfig(
     requireEmailVerification:
       env.ROOSTER_REQUIRE_EMAIL_VERIFICATION === 'true' ||
       env.ROOSTER_REQUIRE_EMAIL_VERIFICATION === '1',
+    localMode,
     enrollment: {
       policy: env.ROOSTER_ENROLLMENT_POLICY,
       token: env.ROOSTER_ENROLLMENT_TOKEN,

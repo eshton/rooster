@@ -1,4 +1,4 @@
-import { resolveMcpIdentity } from '@rooster/auth'
+import { humanIdentityFromSessionEmail, resolveMcpIdentity } from '@rooster/auth'
 import { CoreError, isProvisional, provisionTenant } from '@rooster/core'
 import { createRoosterMcpServer, handleStatelessMcpRequest } from '@rooster/mcp'
 import { type ClientInfo, registerTenantInput } from '@rooster/schema'
@@ -10,6 +10,19 @@ import { discoveryDocument, landingHtml, llmsText } from './discovery.js'
 import { signupAllowed } from './gate.js'
 import { DbRateLimiter } from './rate-limit.js'
 import { loadPublicRoadmap } from './roadmap.js'
+
+/**
+ * Constant-time string equality for the local-mode bearer token. Pure JS (no
+ * `node:crypto`) so this module still bundles for the edge/Worker. A differing
+ * length short-circuits — acceptable here since the token is a fixed-length
+ * random secret, not user-chosen.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
 
 /**
  * Best-effort capture of the calling MCP client's identity for the audit log
@@ -187,6 +200,47 @@ export function createApp(ctx: ServerContext): Hono {
       const clientInfo = await extractClientInfo(req)
       // A multi-workspace human can select which org to act in per request.
       const desiredOrgId = req.headers.get('x-rooster-org')
+
+      // Local single-user mode: gate on the static bearer token (no OAuth) and
+      // resolve to the bootstrapped local owner. Only active when configured,
+      // which the config layer permits only on a localhost base URL.
+      if (ctx.config.localMode) {
+        const header = req.headers.get('authorization') ?? ''
+        const presented = header.startsWith('Bearer ') ? header.slice(7) : ''
+        const token = ctx.config.localMode.token
+        if (!token || !constantTimeEqual(presented, token)) {
+          return new Response(JSON.stringify({ error: 'unauthorized' }), {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        const adminEmail = ctx.config.admin?.email
+        const localIdentity = adminEmail
+          ? await humanIdentityFromSessionEmail(ctx.db.repositories, adminEmail, desiredOrgId)
+          : null
+        if (!localIdentity) {
+          return new Response(
+            JSON.stringify({ error: 'local owner not provisioned yet — check server logs' }),
+            { status: 503, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        const rl = await mcpRateLimiter.check(localIdentity.principalId, Date.now())
+        if (!rl.allowed) {
+          return new Response(JSON.stringify({ error: 'rate_limited' }), {
+            status: 429,
+            headers: {
+              'content-type': 'application/json',
+              'Retry-After': String(rl.retryAfterSeconds),
+            },
+          })
+        }
+        const actor = await ctx.services.resolveActor(localIdentity)
+        const server = createRoosterMcpServer({
+          services: ctx.services,
+          actor: { ...actor, clientInfo },
+        })
+        return await handleStatelessMcpRequest(server, req)
+      }
 
       // Fast path: a recently-resolved actor cached by token hash (+ selected
       // org). On a hit we skip the whole identity-resolution chain; rate limiting
