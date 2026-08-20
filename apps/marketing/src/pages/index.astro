@@ -46,6 +46,16 @@ const features = [
   { ic: '🪪', title: 'OAuth 2.1 authorization server', body: 'Dynamic Client Registration and PKCE built in via better-auth. The same login powers the dashboard and the MCP consent.' },
 ]
 
+// Real prompts → the single audited MCP call each maps to, and what comes back.
+const asks = [
+  { q: 'What work do we have on for Acme Ltd?', tool: 'list_customer_work', r: '2 projects · 1 open deal (proposal) · 3 tickets in flight' },
+  { q: 'Highest-priority todo in project Core?', tool: 'list_tickets', r: 'ROOST-42 “Rotate signing keys” · urgent' },
+  { q: 'What did we promise this customer — and what shipped?', tool: 'recall_context', r: 'cited interactions + the won deal’s delivery project' },
+  { q: 'Any tickets like this auth bug?', tool: 'find_similar_tickets', r: 'ranked by meaning, not keyword overlap' },
+  { q: 'What should I pick up next?', tool: 'claim_next', r: 'atomically assigns the top unblocked ticket to you' },
+  { q: 'Who closed ROOST-31, and when?', tool: 'read_audit', r: 'trusted principal + client · append-only log' },
+]
+
 const vocab = [
   { ic: '🪹', term: 'roost', meaning: 'where an agent idles between assignments' },
   { ic: '🐤', term: 'flock', meaning: 'a set of agents working a project' },
@@ -59,6 +69,7 @@ const vocab = [
     <div class="wrap">
       <a class="brand" href="/">🐓 Rooster</a>
       <nav class="nav">
+        <a class="nav-hide" href="#ask">Examples</a>
         <a class="nav-hide" href="#how">How it works</a>
         <a class="nav-hide" href="#features">Features</a>
         <a href={docsUrl}>Docs</a>
@@ -142,6 +153,25 @@ const vocab = [
           <a class="btn btn-primary" href={appUrl}>Open the app →</a>
           <a class="btn btn-light" href={docsUrl}>Read the docs</a>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHAT YOU CAN ASK -->
+  <section id="ask">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>💬 What you can ask Rooster</h2>
+        <p>Point an agent at your workspace and just ask. Every prompt maps to one audited MCP call — across the sales pipeline, the backlog and semantic recall.</p>
+      </div>
+      <div class="grid grid-3">
+        {asks.map((a) => (
+          <article class="card ask-card">
+            <p class="ask-q">“{a.q}”</p>
+            <p class="ask-tool"><code>{a.tool}</code></p>
+            <p class="ask-r">{a.r}</p>
+          </article>
+        ))}
       </div>
     </div>
   </section>
@@ -311,3 +341,10 @@ const vocab = [
     })
   }
 </script>
+
+<style>
+  .ask-q { font-size: 1.05rem; font-weight: 650; line-height: 1.4; color: var(--ink); margin: 0; }
+  .ask-tool { margin: 0.7rem 0 0.4rem; }
+  .ask-tool code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; background: #1c1917; color: #fcd34d; padding: 0.15rem 0.5rem; border-radius: 6px; }
+  .ask-r { color: var(--muted); font-size: 0.94rem; margin: 0; }
+</style>
