@@ -1,5 +1,12 @@
 import { humanIdentityFromSessionEmail, listUserOrgs } from '@rooster/auth'
-import { type Actor, allowedTransitions, CoreError, can } from '@rooster/core'
+import {
+  type Actor,
+  allowedTransitions,
+  allowedTransitionsIn,
+  CoreError,
+  can,
+  getDefaultWorkflow,
+} from '@rooster/core'
 import type {
   AgentStatus,
   CustomerLifecycleStage,
@@ -347,6 +354,10 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         ctx.services.members.listOrg(actor),
       ])
       const names = Object.fromEntries(members.map((m) => [m.principalId, m.displayName]))
+      const lifecycleNext = allowedTransitionsIn(
+        getDefaultWorkflow('customer'),
+        customer.lifecycleStage,
+      ) as CustomerLifecycleStage[]
       return v.customerDetail({
         actor,
         customer,
@@ -355,6 +366,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         interactions,
         work,
         names,
+        lifecycleNext,
         label: crm.label,
         canWrite: can(actor, 'crm:write'),
       })
@@ -713,6 +725,18 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       await ctx.services.customers.update(actor, id, {
         name: String(body.name ?? ''),
         tags: tagsOf(body.tags),
+      })
+      return `/app/customers/${id}`
+    }),
+  )
+
+  app.post('/app/customers/:id/lifecycle', (c) =>
+    action(c, async (actor) => {
+      const id = c.req.param('id')
+      const body = await c.req.parseBody()
+      await ctx.services.customers.changeLifecycleStage(actor, {
+        customerId: id,
+        stage: String(body.stage) as CustomerLifecycleStage,
       })
       return `/app/customers/${id}`
     }),
