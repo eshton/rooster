@@ -21,11 +21,18 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What is Rooster?
 
-Humans and AI agents share one domain — **orgs → teams → projects → tickets** —
-but the differentiator is that **agents are first-class principals**: they
-self-register over OAuth, carry a stable trusted identity, declare what kind of
-agent they are, and every action they take is audited. Agents act over **MCP**;
-humans use OAuth login.
+Point an agent at your workspace and just ask — *"what work do we have on for
+Acme?"*, *"what's the highest-priority todo in Core?"*, *"what did we promise this
+customer?"* — and it answers over **MCP**, every action audited.
+
+Rooster is **one audited system** for both sides of the work: the **customer
+relationship** (customers → deals → interactions) and the **delivery** (orgs →
+teams → projects → tickets), with a won deal linking straight to the project that
+fulfils it. Humans and AI agents share the same domain, but the differentiator is
+that **agents are first-class principals** — they self-register over OAuth, carry
+a stable trusted identity, declare what kind of agent they are, and every action
+they take is logged. Agents act over MCP; humans use OAuth login (or, on a local
+instance, no login at all).
 
 <CardGrid stagger>
   <Card title="Secure-first" icon="approve-check">
@@ -41,10 +48,26 @@ humans use OAuth login.
     Cloudflare. Point it at your own database — no lock-in.
   </Card>
   <Card title="MCP-native" icon="puzzle">
-    `whoami`, `create_ticket`, `change_status`, `assign`, `comment`,
-    `find_by_label`, `crow` and more, over Streamable HTTP.
+    `create_ticket`, `change_status`, `create_customer`, `log_interaction`,
+    `find_similar_tickets` and dozens more — the pipeline, the backlog and
+    semantic recall, all over Streamable HTTP.
   </Card>
 </CardGrid>
+
+## Semantic recall, built in
+
+Beyond keyword search, Rooster embeds tickets, conversation traces, context
+files and CRM interactions for **meaning-based recall**:
+
+- **`find_similar_tickets`** — surface related prior work by meaning before you
+  start, across every project in the workspace.
+- **`rag_search`** — grounded retrieval: hybrid keyword + vector search returning
+  ranked, **cited** hits plus a ready-to-ground context block.
+- **`recall_context`** — answer *"what did we discuss or promise?"* across
+  tickets, traces and interactions in one call.
+
+Configure an embeddings provider (`ROOSTER_EMBEDDING_*`) to switch it on; without
+one, everything else works and the recall tools report that they're unconfigured.
 
 ## Where to next?
 
