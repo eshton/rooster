@@ -140,7 +140,8 @@ delivered through the crow webhook (`ROOSTER_CROW_WEBHOOK_URL`).
 | `create_customer` | `crm:write` | Create a customer/client (lifecycleStage lead→prospect→active→churned) |
 | `list_customers` | `crm:read` | List the workspace customers, most recent first |
 | `get_customer` | `crm:read` | Fetch a single customer by id |
-| `update_customer` | `crm:write` | Update a customer's name / lifecycleStage / owner / tags |
+| `update_customer` | `crm:write` | Update a customer's name / owner / tags |
+| `change_lifecycle_stage` | `crm:write` | Move a customer through the relationship lifecycle (validated transitions) |
 | `add_contact` | `crm:write` | Add a person (contact) to a customer |
 | `list_contacts` | `crm:read` | List a customer's contacts |
 | `update_contact` | `crm:write` | Update a contact's name / email / phone / role |

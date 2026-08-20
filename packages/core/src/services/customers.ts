@@ -1,12 +1,15 @@
 import type { ListOptions, Repositories } from '@rooster/db'
 import type { Actor } from '../actor.js'
 import { recordAudit } from '../audit.js'
-import { NotFoundError } from '../errors.js'
+import { NotFoundError, ValidationError } from '../errors.js'
 import { authorize } from '../permissions.js'
 import { parse } from '../validate.js'
+import { canTransitionIn, getDefaultWorkflow } from '../workflow.js'
 import {
+  type ChangeLifecycleStageInput,
   type CreateCustomerInput,
   type Customer,
+  changeLifecycleStageInput,
   createCustomerInput,
   type Id,
   type ListCustomerWorkInput,
@@ -23,8 +26,13 @@ export interface CustomerService {
   get(actor: Actor, id: Id): Promise<Customer>
   /** List the org's customers (most recent first). */
   list(actor: Actor, opts?: ListOptions): Promise<Customer[]>
-  /** Patch a customer's fields. */
+  /** Patch a customer's fields (not lifecycle stage — see {@link changeLifecycleStage}). */
   update(actor: Actor, id: Id, input: UpdateCustomerInput): Promise<Customer>
+  /**
+   * Move a customer to a new lifecycle stage, validated against the customer
+   * workflow (ROO-55). Rejects same-stage no-ops and illegal transitions.
+   */
+  changeLifecycleStage(actor: Actor, input: ChangeLifecycleStageInput): Promise<Customer>
   /**
    * Every delivery project serving this customer, across all their deals
    * (ROO-50) — the unified view: one relationship, all the work.
@@ -78,6 +86,33 @@ export function createCustomerService(repos: Repositories): CustomerService {
         action: 'customer.update',
         targetType: 'customer',
         targetId: id,
+        before,
+        after,
+      })
+      return after
+    },
+
+    async changeLifecycleStage(actor, rawInput) {
+      authorize(actor, 'crm:write')
+      const { customerId, stage } = parse(changeLifecycleStageInput, rawInput)
+      const before = await load(actor, customerId)
+      if (before.lifecycleStage === stage) {
+        throw new ValidationError(`Customer ${customerId} is already '${stage}'`)
+      }
+      // Validate against the active customer workflow (default today; the seam
+      // for per-workspace overrides, ROO-53).
+      const workflow = getDefaultWorkflow('customer')
+      if (!canTransitionIn(workflow, before.lifecycleStage, stage)) {
+        throw new ValidationError(
+          `Illegal lifecycle transition '${before.lifecycleStage}' → '${stage}'`,
+        )
+      }
+      const after = await repos.customers.update(actor.orgId, customerId, { lifecycleStage: stage })
+      if (!after) throw new NotFoundError(`Customer ${customerId} not found`)
+      await recordAudit(repos, actor, {
+        action: 'customer.change_lifecycle_stage',
+        targetType: 'customer',
+        targetId: customerId,
         before,
         after,
       })

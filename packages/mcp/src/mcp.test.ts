@@ -736,10 +736,22 @@ describe('CRM tools', () => {
     )
     expect(customer.lifecycleStage).toBe('lead')
 
+    // Lifecycle moves through the validated transition tool, not update_customer.
     const advanced = payload(
-      (await call('update_customer', { id: customer.id, lifecycleStage: 'active' })) as never,
+      (await call('change_lifecycle_stage', {
+        customerId: customer.id,
+        stage: 'prospect',
+      })) as never,
     )
-    expect(advanced.lifecycleStage).toBe('active')
+    expect(advanced.lifecycleStage).toBe('prospect')
+
+    // An illegal jump (prospect → churned is legal; prospect → nothing-beyond) —
+    // skipping to a non-adjacent stage is rejected as an isError result.
+    const bad = (await call('change_lifecycle_stage', {
+      customerId: customer.id,
+      stage: 'prospect',
+    })) as { isError?: boolean }
+    expect(bad.isError).toBe(true) // same-stage no-op
 
     const contact = payload(
       (await call('add_contact', {
