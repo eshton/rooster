@@ -150,390 +150,73 @@ describe('dashboard (authenticated)', () => {
     expect(await res.text()).toContain('Agent registry')
   })
 
-  // --- write actions --------------------------------------------------------
+  // --- read-only surface (agents-first) -------------------------------------
+  // The dashboard performs no domain mutations; data is seeded through the core
+  // services (as an agent would over MCP) and the UI only renders it.
 
-  function form(fields: Record<string, string>) {
-    return {
+  async function ownerActor() {
+    const identity = await humanIdentityFromSessionEmail(ctx.db.repositories, 'ada@acme.test')
+    return ctx.services.resolveActor(identity ?? { orgId: '', principalId: '' })
+  }
+
+  it('renders seeded tickets on the board but shows no write forms', async () => {
+    const owner = await ownerActor()
+    const [project] = await ctx.services.projects.list(owner)
+    await ctx.services.tickets.create(owner, { projectId: project!.id, title: 'Seeded ticket' })
+
+    const board = await app.request(`${base}/app/projects/${project!.id}`, { headers: { cookie } })
+    expect(board.status).toBe(200)
+    const html = await board.text()
+    expect(html).toContain('Seeded ticket') // data renders
+    // No mutation affordances anywhere on the board.
+    expect(html).not.toContain('<form method="post"')
+  })
+
+  it('renders a ticket detail with no status/assign/comment forms', async () => {
+    const owner = await ownerActor()
+    const [project] = await ctx.services.projects.list(owner)
+    const t = await ctx.services.tickets.create(owner, {
+      projectId: project!.id,
+      title: 'Detail ticket',
+    })
+    await ctx.services.comments.create(owner, { ticketId: t.id, body: 'a seeded note' })
+
+    const res = await app.request(`${base}/app/tickets/${t.key}`, { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('Detail ticket')
+    expect(html).toContain('a seeded note') // comments still shown (read)
+    expect(html).not.toContain('<form method="post"')
+  })
+
+  it('does not render write forms on the overview or members page', async () => {
+    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
+    expect(overview).not.toContain('<form method="post"')
+    const members = await (await app.request(`${base}/app/members`, { headers: { cookie } })).text()
+    expect(members).not.toContain('<form method="post"')
+  })
+
+  // --- mutations are gone (not routed) --------------------------------------
+
+  function post(path: string, fields: Record<string, string> = {}) {
+    return app.request(`${base}${path}`, {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(fields).toString(),
-    }
+    })
   }
 
-  it('creates a ticket, moves it, comments on it — all from the UI', async () => {
-    // discover the project id from the overview
-    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
-    const projectId = overview.match(/\/app\/projects\/([0-9a-f-]{36})/)?.[1]
-    expect(projectId).toBeTruthy()
-
-    const created = await app.request(`${base}/app/projects/${projectId}/tickets`, {
-      ...form({ title: 'Dashboard-made ticket', labels: 'ui, infra' }),
-    })
-    expect(created.status).toBe(302)
-
-    const board = await (
-      await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
-    ).text()
-    expect(board).toContain('Dashboard-made ticket')
-    // Ticket URLs use the human-readable key (e.g. ROOST-3), not the UUID.
-    const ticketKey = board.match(/\/app\/tickets\/([A-Z]+-\d+)/)?.[1]
-    expect(ticketKey).toBeTruthy()
-
-    const moved = await app.request(`${base}/app/tickets/${ticketKey}/status`, {
-      ...form({ status: 'todo' }),
-    })
-    expect(moved.status).toBe(302)
-    // The redirect keeps the key form.
-    expect(moved.headers.get('location')).toBe(`/app/tickets/${ticketKey}`)
-
-    const commented = await app.request(`${base}/app/tickets/${ticketKey}/comments`, {
-      ...form({ body: 'looks good' }),
-    })
-    expect(commented.status).toBe(302)
-
-    // Lower-cased key resolves too (case-insensitive).
-    const detail = await (
-      await app.request(`${base}/app/tickets/${ticketKey!.toLowerCase()}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain('To do') // status moved
-    expect(detail).toContain('looks good') // comment shown
-  })
-
-  it('rejects an illegal status move with a 400', async () => {
-    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
-    const projectId = overview.match(/\/app\/projects\/([0-9a-f-]{36})/)?.[1]
-    await app.request(`${base}/app/projects/${projectId}/tickets`, {
-      ...form({ title: 'Another ticket' }),
-    })
-    const board = await (
-      await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
-    ).text()
-    // newest ticket is first in each column; grab any ticket key
-    const ticketKey = board.match(/\/app\/tickets\/([A-Z]+-\d+)/)?.[1]
-    const res = await app.request(`${base}/app/tickets/${ticketKey}/status`, {
-      ...form({ status: 'done' }), // backlog -> done is illegal
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it('manages an agent (suspend + bind) from the registry', async () => {
-    // Register an agent in this tenant via the core services (owner actor).
-    const identity = await humanIdentityFromSessionEmail(ctx.db.repositories, 'ada@acme.test')
-    const owner = await ctx.services.resolveActor(identity ?? { orgId: '', principalId: '' })
-    const agent = await ctx.services.agents.register(owner, {
-      displayName: 'Registry Bot',
-      kind: 'custom',
-      scopes: ['ticket:read'],
-    })
-
-    const suspended = await app.request(`${base}/app/agents/${agent.id}/status`, {
-      ...form({ status: 'suspended' }),
-    })
-    expect(suspended.status).toBe(302)
-
-    const bound = await app.request(`${base}/app/agents/${agent.id}/bind`, {
-      ...form({ clientId: 'cf-client-123' }),
-    })
-    expect(bound.status).toBe(302)
-
-    const page = await (await app.request(`${base}/app/agents`, { headers: { cookie } })).text()
-    expect(page).toContain('Registry Bot')
-    expect(page).toContain('suspended')
-    expect(page).toContain('cf-client-123')
-  })
-
-  it('shows the members page and invites a teammate by email', async () => {
-    const page = await (await app.request(`${base}/app/members`, { headers: { cookie } })).text()
-    expect(page).toContain('Members')
-    const invited = await app.request(`${base}/app/members/invite`, {
-      ...form({ email: 'newbie@acme.test', role: 'member' }),
-    })
-    expect(invited.status).toBe(302)
-    const after = await (await app.request(`${base}/app/members`, { headers: { cookie } })).text()
-    expect(after).toContain('newbie@acme.test')
-  })
-
-  it('generates a shareable join code', async () => {
-    const res = await app.request(`${base}/app/members/code`, { ...form({ role: 'member' }) })
-    expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toContain('/app/members?code=')
-  })
-
-  it('edits a ticket (priority + due date + estimate), then finds it via search and my tickets', async () => {
-    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
-    const projectId = overview.match(/\/app\/projects\/([0-9a-f-]{36})/)?.[1]
-    await app.request(`${base}/app/projects/${projectId}/tickets`, {
-      ...form({ title: 'Editable ticket' }),
-    })
-    const board = await (
-      await app.request(`${base}/app/projects/${projectId}`, { headers: { cookie } })
-    ).text()
-    const ticketKey = board.match(/\/app\/tickets\/([A-Z]+-\d+)/)?.[1]
-
-    const edited = await app.request(`${base}/app/tickets/${ticketKey}/update`, {
-      ...form({
-        title: 'Editable ticket',
-        description: 'now with detail',
-        priority: 'high',
-        labels: 'urgent',
-        dueDate: '2026-09-01',
-        estimate: '5',
-      }),
-    })
-    expect(edited.status).toBe(302)
-
-    const detail = await (
-      await app.request(`${base}/app/tickets/${ticketKey}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain('high')
-    expect(detail).toContain('2026-09-01')
-    expect(detail).toContain('5 pts')
-
-    const search = await (
-      await app.request(`${base}/app/search?q=Editable`, { headers: { cookie } })
-    ).text()
-    expect(search).toContain('Editable ticket')
-
-    const mine = await app.request(`${base}/app/mine`, { headers: { cookie } })
-    expect(mine.status).toBe(200)
-    expect(await mine.text()).toContain('My tickets')
-  })
-
-  it('creates a team and a project from the overview', async () => {
-    const teamRes = await app.request(`${base}/app/teams`, {
-      ...form({ key: 'OPS', name: 'Operations' }),
-    })
-    expect(teamRes.status).toBe(302)
-
-    const overview = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
-    expect(overview).toContain('Operations')
-    const teamId = overview.match(/<option value="([0-9a-f-]{36})">Operations<\/option>/)?.[1]
-    expect(teamId).toBeTruthy()
-
-    const projRes = await app.request(`${base}/app/projects`, {
-      ...form({ teamId: teamId as string, key: 'RUN', name: 'Runbooks' }),
-    })
-    expect(projRes.status).toBe(302)
-    const after = await (await app.request(`${base}/app`, { headers: { cookie } })).text()
-    expect(after).toContain('Runbooks')
-  })
-
-  it('runs the CRM flow: create a customer, open + move a deal, log an interaction', async () => {
-    // Create a customer from the list page.
-    const created = await app.request(`${base}/app/customers`, {
-      ...form({ name: 'Villanyozzunk Kft', lifecycleStage: 'prospect', tags: 'hosting, retainer' }),
-    })
-    expect(created.status).toBe(302)
-    const customerId = created.headers
-      .get('location')
-      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
-    expect(customerId).toBeTruthy()
-
-    // It shows up on the list.
-    const list = await (await app.request(`${base}/app/customers`, { headers: { cookie } })).text()
-    expect(list).toContain('Villanyozzunk Kft')
-    expect(list).toContain('Prospect')
-
-    // Open a deal, then move it along the pipeline.
-    await app.request(`${base}/app/customers/${customerId}/deals`, {
-      ...form({ title: 'Hosting retainer', value: '120000', currency: 'eur' }),
-    })
-    let detail = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain('Hosting retainer')
-    expect(detail).toContain('EUR 1,200') // 120000 minor units → 1,200
-    const dealId = detail.match(/\/app\/deals\/([0-9a-f-]{36})\/stage/)?.[1]
-    expect(dealId).toBeTruthy()
-
-    const moved = await app.request(`${base}/app/deals/${dealId}/stage`, {
-      ...form({ stage: 'qualified' }),
-    })
-    expect(moved.status).toBe(302)
-    expect(moved.headers.get('location')).toBe(`/app/customers/${customerId}`)
-
-    // Add a contact and log an interaction.
-    await app.request(`${base}/app/customers/${customerId}/contacts`, {
-      ...form({ name: 'Béla', role: 'Owner', email: 'bela@villany.test', phone: '' }),
-    })
-    await app.request(`${base}/app/customers/${customerId}/interactions`, {
-      ...form({ kind: 'call', body: 'Agreed on the renewal scope.' }),
-    })
-
-    detail = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain('Qualified') // deal advanced
-    expect(detail).toContain('Béla') // contact listed
-    expect(detail).toContain('Agreed on the renewal scope.') // interaction logged
-  })
-
-  it('edits a customer and edits + removes a contact from the dashboard (ROO-59)', async () => {
-    const created = await app.request(`${base}/app/customers`, {
-      ...form({ name: 'Editable Co', lifecycleStage: 'lead', tags: 'old' }),
-    })
-    const customerId = created.headers
-      .get('location')
-      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
-    expect(customerId).toBeTruthy()
-
-    // Edit the customer's name + tags.
-    const edited = await app.request(`${base}/app/customers/${customerId}/update`, {
-      ...form({ name: 'Renamed Co', tags: 'vip, retainer' }),
-    })
-    expect(edited.status).toBe(302)
-
-    // Add a contact, then discover its id from the edit form on the detail page.
-    await app.request(`${base}/app/customers/${customerId}/contacts`, {
-      ...form({ name: 'Csaba', role: 'Dev', email: 'csaba@ed.test', phone: '' }),
-    })
-    let detail = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain('Renamed Co') // rename applied
-    expect(detail).toContain('vip')
-    expect(detail).toContain('Csaba')
-    const contactId = detail.match(/\/app\/contacts\/([0-9a-f-]{36})\/update/)?.[1]
-    expect(contactId).toBeTruthy()
-
-    // Edit the contact.
-    const cEdited = await app.request(`${base}/app/contacts/${contactId}/update`, {
-      ...form({
-        customerId: customerId as string,
-        name: 'Csaba Nagy',
-        role: 'Lead',
-        email: 'csaba@ed.test',
-        phone: '',
-      }),
-    })
-    expect(cEdited.status).toBe(302)
-    expect(cEdited.headers.get('location')).toBe(`/app/customers/${customerId}`)
-    detail = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain('Csaba Nagy')
-
-    // Remove the contact.
-    const removed = await app.request(`${base}/app/contacts/${contactId}/remove`, {
-      ...form({ customerId: customerId as string }),
-    })
-    expect(removed.status).toBe(302)
-    detail = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(detail).not.toContain('Csaba Nagy')
-    expect(detail).toContain('No contacts yet')
-  })
-
-  it('opens a deal detail page, edits it, moves its stage, and links delivery work (ROO-60)', async () => {
-    const created = await app.request(`${base}/app/customers`, { ...form({ name: 'Dealy Co' }) })
-    const customerId = created.headers
-      .get('location')
-      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
-    await app.request(`${base}/app/customers/${customerId}/deals`, {
-      ...form({ title: 'Retainer deal', value: '90000', currency: 'usd' }),
-    })
-
-    // The kanban card links to the deal detail page.
-    let cust = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    const dealId = cust.match(/\/app\/deals\/([0-9a-f-]{36})/)?.[1]
-    expect(dealId).toBeTruthy()
-
-    let deal = await (
-      await app.request(`${base}/app/deals/${dealId}`, { headers: { cookie } })
-    ).text()
-    expect(deal).toContain('Retainer deal')
-    expect(deal).toContain('USD 900') // 90000 minor units
-
-    // Edit deal fields.
-    const edited = await app.request(`${base}/app/deals/${dealId}/update`, {
-      ...form({
-        title: 'Retainer deal',
-        value: '120000',
-        currency: 'usd',
-        probability: '60',
-        tags: 'hot',
-      }),
-    })
-    expect(edited.status).toBe(302)
-
-    // Move stage, staying on the deal page.
-    const moved = await app.request(`${base}/app/deals/${dealId}/stage`, {
-      ...form({ stage: 'qualified', returnTo: 'deal' }),
-    })
-    expect(moved.headers.get('location')).toBe(`/app/deals/${dealId}`)
-
-    // Link the first available project via the link form. Capture its id AND
-    // its display name (the option label is "<KEY> · <Name>") so we assert on
-    // exactly the project we linked, not a hard-coded one.
-    deal = await (await app.request(`${base}/app/deals/${dealId}`, { headers: { cookie } })).text()
-    expect(deal).toContain('USD 1,200') // edit applied
-    expect(deal).toContain('60% likely')
-    expect(deal).toContain('Qualified') // stage moved
-    const opt = deal.match(
-      /name="projectId"[\s\S]*?<option value="([0-9a-f-]{36})">([^<]+)<\/option>/,
-    )
-    expect(opt).toBeTruthy()
-    const projectId = opt?.[1]
-    const projectName = (opt?.[2] ?? '').split('·').pop()?.trim() ?? ''
-    expect(projectName).not.toBe('')
-
-    const linked = await app.request(`${base}/app/deals/${dealId}/link`, {
-      ...form({ projectId: projectId as string }),
-    })
-    expect(linked.status).toBe(302)
-    deal = await (await app.request(`${base}/app/deals/${dealId}`, { headers: { cookie } })).text()
-    expect(deal).toContain(projectName) // linked project shows in delivery work
-
-    // And it surfaces on the customer's aggregate work view too.
-    cust = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(cust).toContain(projectName)
-  })
-
-  it('moves a customer through the lifecycle, rejecting illegal jumps (ROO-61)', async () => {
-    const created = await app.request(`${base}/app/customers`, {
-      ...form({ name: 'Lifecycle Co' }),
-    })
-    const customerId = created.headers
-      .get('location')
-      ?.match(/\/app\/customers\/([0-9a-f-]{36})/)?.[1]
-
-    // The detail page offers only the legal next stages from `lead`.
-    let detail = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain(`/app/customers/${customerId}/lifecycle`) // the form
-    expect(detail).toMatch(/<option value="prospect"/)
-    expect(detail).not.toMatch(/<option value="active"/) // lead → active is illegal
-
-    // An illegal jump (lead → active) is a 400.
-    const bad = await app.request(`${base}/app/customers/${customerId}/lifecycle`, {
-      ...form({ stage: 'active' }),
-    })
-    expect(bad.status).toBe(400)
-
-    // A legal move (lead → prospect) sticks.
-    const ok = await app.request(`${base}/app/customers/${customerId}/lifecycle`, {
-      ...form({ stage: 'prospect' }),
-    })
-    expect(ok.status).toBe(302)
-    detail = await (
-      await app.request(`${base}/app/customers/${customerId}`, { headers: { cookie } })
-    ).text()
-    expect(detail).toContain('Prospect') // badge advanced
-  })
-
-  it('redirects anonymous write attempts to login', async () => {
-    const res = await app.request(`${base}/app/tickets/whatever/comments`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ body: 'x' }).toString(),
-    })
-    expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/app/login')
+  it('has no domain-mutation POST routes (they 404)', async () => {
+    const owner = await ownerActor()
+    const [project] = await ctx.services.projects.list(owner)
+    for (const path of [
+      '/app/teams',
+      '/app/projects',
+      `/app/projects/${project!.id}/tickets`,
+      '/app/customers',
+    ]) {
+      const res = await post(path, { name: 'x', title: 'x', key: 'XXX' })
+      expect(res.status).toBe(404)
+    }
   })
 })

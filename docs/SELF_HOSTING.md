@@ -295,6 +295,21 @@ delivery, no sign-up form, no MCP required.
 - It runs on the **Node** entry. On serverless/edge, provision via `/onboard`
   (below) or seed the DB instead.
 
+## 5a. The dashboard is read-only (agents-first)
+
+Rooster is agents-first: agents do the work over **MCP**, where every mutation
+is scope-gated, rate-limited and audited. The human dashboard at `/app` is a
+**read-only** observation surface — boards, ticket/customer/deal detail, search,
+the agent registry and the append-only audit log. It has **no** create/edit/
+delete forms; there is nothing to mutate through the browser and no config knob
+to re-enable it.
+
+Sign-in / sign-out / password reset and the MCP OAuth **consent** screen are the
+only writes the browser performs — humans still log in and grant agents access.
+Everything else — creating projects and tickets, moving status, CRM changes,
+managing agents and members — is an MCP tool. Bootstrap a brand-new instance
+with the admin bootstrap (§5) + `/onboard` (§5b), then let the agent drive.
+
 ## 5b. Onboard the first tenant (agent-first)
 
 An agent (or you, on its behalf) can self-register a whole tenant in one call:

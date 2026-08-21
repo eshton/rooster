@@ -1,22 +1,6 @@
 import { humanIdentityFromSessionEmail, listUserOrgs } from '@rooster/auth'
-import {
-  type Actor,
-  allowedTransitions,
-  allowedTransitionsIn,
-  CoreError,
-  can,
-  getDefaultWorkflow,
-} from '@rooster/core'
-import type {
-  AgentStatus,
-  CustomerLifecycleStage,
-  DealPipelineStage,
-  EstimatePoints,
-  InteractionKind,
-  Role,
-  TicketPriority,
-  TicketStatus,
-} from '@rooster/schema'
+import { type Actor, CoreError } from '@rooster/core'
+import type { TicketStatus } from '@rooster/schema'
 import type { Context, Hono } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
 import type { ServerContext } from '../context.js'
@@ -216,8 +200,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         },
         recent,
         projectNames,
-        canCreateTeam: can(actor, 'team:write'),
-        canCreateProject: can(actor, 'project:write'),
       })
     }),
   )
@@ -233,17 +215,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       ? ctx.services.tickets.get(actor, ref)
       : ctx.services.tickets.getByKey(actor, ref.toUpperCase())
 
-  // Parse the estimate form field: blank → null (unsized), otherwise the number.
-  // The dashboard <select> only offers on-scale values; an off-scale value from a
-  // raw POST is left for the DTO/service to reject (the single enforcement point),
-  // so the cast here is safe — it isn't where the scale is validated.
-  const estimateOf = (raw: unknown): EstimatePoints | null => {
-    const s = String(raw ?? '').trim()
-    if (s === '') return null
-    const n = Number(s)
-    return (Number.isFinite(n) ? n : null) as EstimatePoints | null
-  }
-
   app.get('/app/projects/:id', (c) =>
     page(c, async (actor) => {
       const id = c.req.param('id')
@@ -257,7 +228,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         project,
         tickets,
         actor,
-        canWrite: can(actor, 'ticket:write'),
         names: toNames(members),
         status: status ?? null,
       })
@@ -277,8 +247,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         comments,
         attachments,
         actor,
-        canWrite: can(actor, 'ticket:write'),
-        allowedStatuses: allowedTransitions(ticket.status),
         members,
         names: toNames(members),
       })
@@ -290,7 +258,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       v.agentsList({
         agents: await ctx.services.agents.list(actor),
         actor,
-        canManage: can(actor, 'agent:write'),
       }),
     ),
   )
@@ -322,8 +289,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
       v.membersPage({
         members: await ctx.services.members.listOrg(actor),
         actor,
-        canManage: can(actor, 'team:write'),
-        inviteCode: c.req.query('code') ?? null,
       }),
     ),
   )
@@ -337,7 +302,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         customers: await ctx.services.customers.list(actor),
         label: crm.label,
         labelPlural: crm.labelPlural,
-        canWrite: can(actor, 'crm:write'),
       }),
     ),
   )
@@ -354,10 +318,6 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         ctx.services.members.listOrg(actor),
       ])
       const names = Object.fromEntries(members.map((m) => [m.principalId, m.displayName]))
-      const lifecycleNext = allowedTransitionsIn(
-        getDefaultWorkflow('customer'),
-        customer.lifecycleStage,
-      ) as CustomerLifecycleStage[]
       return v.customerDetail({
         actor,
         customer,
@@ -366,9 +326,7 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
         interactions,
         work,
         names,
-        lifecycleNext,
         label: crm.label,
-        canWrite: can(actor, 'crm:write'),
       })
     }),
   )
@@ -377,394 +335,20 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
     page(c, async (actor) => {
       const id = c.req.param('id')
       const deal = await ctx.services.deals.get(actor, id)
-      const [customer, work, projects] = await Promise.all([
+      const [customer, work] = await Promise.all([
         ctx.services.customers.get(actor, deal.customerId),
         ctx.services.deals.listWork(actor, { dealId: id }),
-        ctx.services.projects.list(actor),
       ])
       return v.dealDetail({
         actor,
         deal,
         customer,
         work,
-        projects,
         label: crm.label,
-        canWrite: can(actor, 'crm:write'),
       })
     }),
   )
 
-  // --- write actions (POST) -------------------------------------------------
-
-  // Run a mutation for the authenticated actor, then redirect. Domain errors
-  // render the friendly message page with the right status.
-  const action = async (c: Context, run: (actor: Actor) => Promise<string>) => {
-    const r = await resolveSession(ctx, c)
-    if (!r) return c.redirect('/app/login')
-    if ('noOrg' in r) return c.html(v.noOrgPage(null, r.noOrg))
-    try {
-      return c.redirect(await run(r.actor))
-    } catch (err) {
-      if (err instanceof CoreError) {
-        return c.html(
-          v.messagePage(r.actor, 'Action failed', err.message),
-          (STATUS_BY_CODE[err.code] ?? 500) as 400,
-        )
-      }
-      throw err
-    }
-  }
-
-  app.post('/app/projects/:id/tickets', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      const labels = String(body.labels ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-      await ctx.services.tickets.create(actor, {
-        projectId: id,
-        title: String(body.title ?? ''),
-        priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
-        labels,
-        dueDate: body.dueDate ? String(body.dueDate) : null,
-        startDate: body.startDate ? String(body.startDate) : null,
-        estimate: estimateOf(body.estimate),
-      })
-      return `/app/projects/${id}`
-    }),
-  )
-
-  app.post('/app/tickets/:id/update', (c) =>
-    action(c, async (actor) => {
-      const ticket = await resolveTicket(actor, c.req.param('id'))
-      const body = await c.req.parseBody()
-      const labels = String(body.labels ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-      await ctx.services.tickets.update(actor, ticket.id, {
-        title: String(body.title ?? ''),
-        description: body.description ? String(body.description) : null,
-        priority: (body.priority ? String(body.priority) : 'none') as TicketPriority,
-        labels,
-        dueDate: body.dueDate ? String(body.dueDate) : null,
-        startDate: body.startDate ? String(body.startDate) : null,
-        estimate: estimateOf(body.estimate),
-      })
-      return `/app/tickets/${ticket.key}`
-    }),
-  )
-
-  app.post('/app/tickets/:id/status', (c) =>
-    action(c, async (actor) => {
-      const ticket = await resolveTicket(actor, c.req.param('id'))
-      const body = await c.req.parseBody()
-      await ctx.services.tickets.changeStatus(actor, {
-        ticketId: ticket.id,
-        status: String(body.status) as TicketStatus,
-      })
-      return `/app/tickets/${ticket.key}`
-    }),
-  )
-
-  app.post('/app/tickets/:id/assign', (c) =>
-    action(c, async (actor) => {
-      const ticket = await resolveTicket(actor, c.req.param('id'))
-      const body = await c.req.parseBody()
-      const assigneeId = body.assigneeId ? String(body.assigneeId) : null
-      await ctx.services.tickets.assign(actor, { ticketId: ticket.id, assigneeId })
-      return `/app/tickets/${ticket.key}`
-    }),
-  )
-
-  app.post('/app/tickets/:id/comments', (c) =>
-    action(c, async (actor) => {
-      const ticket = await resolveTicket(actor, c.req.param('id'))
-      const body = await c.req.parseBody()
-      await ctx.services.comments.create(actor, {
-        ticketId: ticket.id,
-        body: String(body.body ?? ''),
-      })
-      return `/app/tickets/${ticket.key}`
-    }),
-  )
-
-  app.post('/app/tickets/:id/attachments', (c) =>
-    action(c, async (actor) => {
-      const ticket = await resolveTicket(actor, c.req.param('id'))
-      const body = await c.req.parseBody()
-      const label = String(body.label ?? '').trim()
-      await ctx.services.attachments.add(actor, {
-        ticketId: ticket.id,
-        url: String(body.url ?? ''),
-        label: label === '' ? undefined : label,
-      })
-      return `/app/tickets/${ticket.key}`
-    }),
-  )
-
-  app.post('/app/tickets/:id/attachments/:attachmentId/remove', (c) =>
-    action(c, async (actor) => {
-      const ticket = await resolveTicket(actor, c.req.param('id'))
-      await ctx.services.attachments.remove(actor, {
-        attachmentId: c.req.param('attachmentId'),
-      })
-      return `/app/tickets/${ticket.key}`
-    }),
-  )
-
-  app.post('/app/agents/:id/status', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      await ctx.services.agents.setStatus(actor, id, String(body.status) as AgentStatus)
-      return '/app/agents'
-    }),
-  )
-
-  app.post('/app/agents/:id/bind', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      await ctx.services.agents.bindOAuthClient(actor, id, String(body.clientId ?? ''))
-      return '/app/agents'
-    }),
-  )
-
-  app.post('/app/teams', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      const key = String(body.key ?? '')
-        .trim()
-        .toUpperCase()
-      await ctx.services.teams.create(actor, {
-        key: key === '' ? undefined : key,
-        name: String(body.name ?? ''),
-      })
-      return '/app'
-    }),
-  )
-
-  app.post('/app/projects', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      await ctx.services.projects.create(actor, {
-        teamId: String(body.teamId ?? ''),
-        key: String(body.key ?? '')
-          .trim()
-          .toUpperCase(),
-        name: String(body.name ?? ''),
-        description: body.description ? String(body.description) : undefined,
-      })
-      return '/app'
-    }),
-  )
-
-  app.post('/app/members/invite', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      await ctx.services.members.invite(actor, {
-        email: String(body.email ?? ''),
-        role: String(body.role ?? 'member') as 'viewer' | 'member' | 'admin',
-      })
-      return '/app/members'
-    }),
-  )
-
-  app.post('/app/members/role', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      await ctx.services.members.upsert(actor, {
-        principalId: String(body.principalId ?? ''),
-        teamId: null,
-        role: String(body.role ?? 'member') as Role,
-      })
-      return '/app/members'
-    }),
-  )
-
-  app.post('/app/members/code', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      const invite = await ctx.services.invites.create(actor, {
-        role: String(body.role ?? 'member') as 'viewer' | 'member' | 'admin',
-        maxUses: 1,
-      })
-      return `/app/members?code=${encodeURIComponent(invite.code)}`
-    }),
-  )
-
-  // --- CRM write actions ----------------------------------------------------
-
-  const tagsOf = (raw: unknown): string[] =>
-    String(raw ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-
-  app.post('/app/customers', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      const customer = await ctx.services.customers.create(actor, {
-        name: String(body.name ?? ''),
-        lifecycleStage: (body.lifecycleStage
-          ? String(body.lifecycleStage)
-          : 'lead') as CustomerLifecycleStage,
-        tags: tagsOf(body.tags),
-      })
-      return `/app/customers/${customer.id}`
-    }),
-  )
-
-  app.post('/app/customers/:id/contacts', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      await ctx.services.contacts.add(actor, {
-        customerId: id,
-        name: String(body.name ?? ''),
-        role: body.role ? String(body.role) : null,
-        email: body.email ? String(body.email) : null,
-        phone: body.phone ? String(body.phone) : null,
-      })
-      return `/app/customers/${id}`
-    }),
-  )
-
-  app.post('/app/customers/:id/deals', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      const rawValue = String(body.value ?? '').trim()
-      const value = rawValue === '' ? null : Number.parseInt(rawValue, 10)
-      const currency = String(body.currency ?? '')
-        .trim()
-        .toUpperCase()
-      await ctx.services.deals.create(actor, {
-        customerId: id,
-        title: String(body.title ?? ''),
-        value: value != null && Number.isFinite(value) ? value : null,
-        currency: currency === '' ? null : currency,
-        tags: [],
-      })
-      return `/app/customers/${id}`
-    }),
-  )
-
-  app.post('/app/deals/:id/stage', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      const deal = await ctx.services.deals.changeStage(actor, {
-        dealId: c.req.param('id'),
-        stage: String(body.stage) as DealPipelineStage,
-      })
-      // From the deal page, stay on it; from the customer kanban, return there.
-      return body.returnTo === 'deal'
-        ? `/app/deals/${deal.id}`
-        : `/app/customers/${deal.customerId}`
-    }),
-  )
-
-  app.post('/app/deals/:id/update', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      const intOrNull = (raw: unknown): number | null => {
-        const s = String(raw ?? '').trim()
-        if (s === '') return null
-        const n = Number.parseInt(s, 10)
-        return Number.isFinite(n) ? n : null
-      }
-      const currency = String(body.currency ?? '')
-        .trim()
-        .toUpperCase()
-      await ctx.services.deals.update(actor, id, {
-        title: String(body.title ?? ''),
-        value: intOrNull(body.value),
-        currency: currency === '' ? null : currency,
-        closeDate: body.closeDate ? String(body.closeDate) : null,
-        probability: intOrNull(body.probability),
-        tags: tagsOf(body.tags),
-      })
-      return `/app/deals/${id}`
-    }),
-  )
-
-  app.post('/app/deals/:id/link', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      await ctx.services.deals.linkWork(actor, {
-        dealId: id,
-        projectId: String(body.projectId ?? ''),
-      })
-      return `/app/deals/${id}`
-    }),
-  )
-
-  app.post('/app/customers/:id/interactions', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      await ctx.services.interactions.log(actor, {
-        targetType: 'customer',
-        targetId: id,
-        kind: String(body.kind ?? 'note') as InteractionKind,
-        body: String(body.body ?? ''),
-      })
-      return `/app/customers/${id}`
-    }),
-  )
-
-  app.post('/app/customers/:id/update', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      await ctx.services.customers.update(actor, id, {
-        name: String(body.name ?? ''),
-        tags: tagsOf(body.tags),
-      })
-      return `/app/customers/${id}`
-    }),
-  )
-
-  app.post('/app/customers/:id/lifecycle', (c) =>
-    action(c, async (actor) => {
-      const id = c.req.param('id')
-      const body = await c.req.parseBody()
-      await ctx.services.customers.changeLifecycleStage(actor, {
-        customerId: id,
-        stage: String(body.stage) as CustomerLifecycleStage,
-      })
-      return `/app/customers/${id}`
-    }),
-  )
-
-  // Contact edit/remove redirect back to the owning customer (passed as a hidden
-  // field, since remove() returns only a flag).
-  const contactReturn = (body: Record<string, unknown>) =>
-    `/app/customers/${String(body.customerId ?? '')}`
-
-  app.post('/app/contacts/:id/update', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      await ctx.services.contacts.update(actor, c.req.param('id'), {
-        name: String(body.name ?? ''),
-        role: body.role ? String(body.role) : null,
-        email: body.email ? String(body.email) : null,
-        phone: body.phone ? String(body.phone) : null,
-      })
-      return contactReturn(body)
-    }),
-  )
-
-  app.post('/app/contacts/:id/remove', (c) =>
-    action(c, async (actor) => {
-      const body = await c.req.parseBody()
-      await ctx.services.contacts.remove(actor, c.req.param('id'))
-      return contactReturn(body)
-    }),
-  )
+  // No write routes: the dashboard is read-only (agents-first). All mutations
+  // happen over MCP, where they are scope-gated, rate-limited and audited.
 }
