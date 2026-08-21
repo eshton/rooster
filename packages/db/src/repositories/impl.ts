@@ -422,6 +422,9 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
         if (!row) throw new Error(`Ticket ${id} not found in org ${orgId}`)
         return toTicket(row)
       },
+      async delete(orgId, id) {
+        await db.delete(s.tickets).where(and(eq(s.tickets.orgId, orgId), eq(s.tickets.id, id)))
+      },
       async updateIfMatches(orgId, id, patch, expectedUpdatedAt) {
         // Conditional on the unchanged updatedAt — atomic optimistic concurrency.
         // No matching row ⇒ the guard failed (concurrent write) or the ticket is
