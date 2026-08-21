@@ -497,6 +497,51 @@ describe('MCP server end-to-end', () => {
     expect(moved.key).toBe('DST-1')
   })
 
+  it('moves, archives and deletes projects through tools', async () => {
+    const from = await services.teams.create(owner, { key: 'FROM', name: 'From' })
+    const to = await services.teams.create(owner, { key: 'DEST', name: 'Dest' })
+    const proj = await services.projects.create(owner, { teamId: from.id, key: 'MVP', name: 'P' })
+    const t = payload((await call('create_ticket', { projectId: proj.id, title: 'keep' })) as never)
+    expect(t.key).toBe('MVP-1')
+
+    // Move to another team — ticket key/number/history preserved.
+    const moved = payload(
+      (await call('move_project', { projectId: proj.id, toTeamId: to.id })) as never,
+    )
+    expect(moved.teamId).toBe(to.id)
+    expect(payload((await call('get_ticket', { id: t.id })) as never).key).toBe('MVP-1')
+
+    // Archive is reversible.
+    expect(payload((await call('archive_project', { projectId: proj.id })) as never).archived).toBe(
+      true,
+    )
+    expect(
+      payload((await call('archive_project', { projectId: proj.id, archived: false })) as never)
+        .archived,
+    ).toBe(false)
+
+    // Delete is blocked while the project holds tickets.
+    const blocked = (await call('delete_project', { projectId: proj.id })) as {
+      isError?: boolean
+      content: Array<{ text?: string }>
+    }
+    expect(blocked.isError).toBe(true)
+    expect(blocked.content[0]?.text).toContain('still has tickets')
+
+    // An empty project deletes cleanly and drops off the listing.
+    const empty = await services.projects.create(owner, { teamId: to.id, key: 'EMP', name: 'E' })
+    expect(payload((await call('delete_project', { projectId: empty.id })) as never).deleted).toBe(
+      true,
+    )
+    const ids = (
+      payload((await call('list_projects', { teamId: to.id })) as never) as Array<{
+        id: string
+      }>
+    ).map((p) => p.id)
+    expect(ids).not.toContain(empty.id)
+    expect(ids).toContain(proj.id)
+  })
+
   it('registers, lists and suspends an agent', async () => {
     const reg = payload(
       (await call('register_agent', {

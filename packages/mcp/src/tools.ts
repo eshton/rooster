@@ -9,6 +9,7 @@ import {
   addAttachmentInput,
   agentStatusSchema,
   appendMessagesInput,
+  archiveProjectInput,
   assigneeRefInput,
   assignTicketInput,
   changeDealStageInput,
@@ -27,6 +28,7 @@ import {
   createTenantInput,
   createTicketInput,
   createTicketsInput,
+  deleteProjectInput,
   inviteMemberInput,
   joinTenantInput,
   linkDealWorkInput,
@@ -36,6 +38,7 @@ import {
   listDealWorkInput,
   listInteractionsInput,
   logInteractionInput,
+  moveProjectInput,
   moveTicketInput,
   ragSearchInput,
   recallContextInput,
@@ -308,6 +311,43 @@ export function registerTools(
       inputSchema: setProjectKeyInput.shape,
     },
     async (args) => runTool(() => services.projects.setKey(actor, args)),
+  )
+
+  server.registerTool(
+    'move_project',
+    {
+      title: 'Move project',
+      description:
+        'Move a project to another team in one call. Ticket keys, numbers and history ' +
+        '(status, comments, labels) are preserved — numbering is per-project, so team ' +
+        'membership is pure metadata. Use this instead of re-keying + moving tickets by hand.',
+      inputSchema: moveProjectInput.shape,
+    },
+    async (args) => runTool(() => services.projects.move(actor, args)),
+  )
+
+  server.registerTool(
+    'archive_project',
+    {
+      title: 'Archive project',
+      description:
+        'Archive (or, with `archived: false`, unarchive) a project. Reversible; keeps all ' +
+        'tickets and history. Use this for stale projects you want to hide but not lose.',
+      inputSchema: archiveProjectInput.shape,
+    },
+    async (args) => runTool(() => services.projects.archive(actor, args)),
+  )
+
+  server.registerTool(
+    'delete_project',
+    {
+      title: 'Delete project',
+      description:
+        'Permanently delete an EMPTY project (one with no tickets). Irreversible. If the ' +
+        'project still holds tickets, move or delete them first, or archive the project instead.',
+      inputSchema: deleteProjectInput.shape,
+    },
+    async (args) => runTool(() => services.projects.delete(actor, args)),
   )
 
   server.registerTool(
