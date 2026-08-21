@@ -121,8 +121,10 @@ not the client.
   (stemmed: "deploy" matches "deploying"; title matches rank highest). EXACT
   keyword match.
   find_similar_tickets — semantic (vector) search by meaning across all projects
-  in your workspace; use it to recall related prior work before starting. Needs
-  embeddings configured on the instance (else it returns an error).
+  in your workspace; use it to recall related prior work before starting. Pass
+  \`projectId\` to scope to one project (recommended in a multi-project workspace,
+  where cross-project matches can crowd out the one you mean). Needs embeddings
+  configured on the instance (else it returns an error).
   PREFERENCE: when semantic search is available (whoami.semanticSearch === true,
   also in /.well-known/rooster capabilities), prefer find_similar_tickets /
   rag_search / recall_context for MEANING-based recall — reach for search_tickets

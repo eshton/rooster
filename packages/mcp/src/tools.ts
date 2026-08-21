@@ -695,18 +695,21 @@ export function registerTools(
       title: 'Find similar tickets',
       description:
         'Semantic search: tickets across your workspace most similar in MEANING to a query ' +
-        '(vector embeddings), not just keyword matches — spans all projects in the org. Use it ' +
-        'to recall related prior work/decisions. Requires embeddings to be configured; otherwise ' +
-        'returns an error. Set `compact: true` for the trimmed shape.',
+        '(vector embeddings), not just keyword matches. Spans all projects by default; pass ' +
+        '`projectId` to scope to one project (recommended in a multi-project workspace, where ' +
+        'cross-project matches can otherwise crowd out the one you mean). Use it to recall ' +
+        'related prior work/decisions. Requires embeddings to be configured; otherwise returns ' +
+        'an error. Set `compact: true` for the trimmed shape.',
       inputSchema: {
         query: z.string().min(1).max(1000),
         limit: z.number().int().min(1).max(50).optional(),
+        projectId: z.uuid().optional(),
         compact: z.boolean().optional(),
       },
     },
-    async ({ query, limit, compact }) =>
+    async ({ query, limit, projectId, compact }) =>
       runTool(async () =>
-        maybeCompact(await services.tickets.findSimilar(actor, query, limit), compact),
+        maybeCompact(await services.tickets.findSimilar(actor, query, limit, projectId), compact),
       ),
   )
 

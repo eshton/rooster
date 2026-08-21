@@ -59,7 +59,7 @@ If your account belongs to several workspaces, send the target `orgId` in the
 | `change_status` | `ticket:write` | Move status (validated against the workflow) |
 | `claim_next` | `ticket:write` | Atomically claim & assign the next actionable unassigned ticket |
 | `search_tickets` | `ticket:read` | Ranked full-text search over titles + descriptions (stemmed) — exact keyword; prefer `find_similar_tickets` for meaning-based recall when semantic search is on |
-| `find_similar_tickets` | `ticket:read` | Semantic (vector) search by meaning across all projects; needs embeddings configured |
+| `find_similar_tickets` | `ticket:read` | Semantic (vector) search by meaning across all projects (pass `projectId` to scope to one); needs embeddings configured |
 | `backfill_embeddings` | `ticket:write` | Embed tickets that lack an embedding (e.g. created before embeddings were configured) |
 | `find_by_label` | `ticket:read` | Find related tickets across the workspace by tag |
 | `list_subtasks` | `ticket:read` | Direct children of a ticket |

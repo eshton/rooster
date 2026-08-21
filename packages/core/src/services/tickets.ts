@@ -153,7 +153,7 @@ export interface TicketService {
    * via vector embeddings. Org-scoped = cross-project. Requires a configured
    * embedder, else throws a clear "not configured" error.
    */
-  findSimilar(actor: Actor, query: string, limit?: number): Promise<Ticket[]>
+  findSimilar(actor: Actor, query: string, limit?: number, projectId?: Id): Promise<Ticket[]>
   /**
    * Embed any tickets that lack an embedding (e.g. created before embeddings were
    * configured, or whose embedding failed). Scope a single project or the whole
@@ -853,7 +853,7 @@ export function createTicketService(
       return { ticket, assigneeId: ticket.assigneeId }
     },
 
-    async findSimilar(actor, query, limit) {
+    async findSimilar(actor, query, limit, projectId) {
       authorize(actor, 'ticket:read')
       if (!embedder) {
         throw new ValidationError(
@@ -864,12 +864,15 @@ export function createTicketService(
       const n = Math.min(Math.max(limit ?? 10, 1), 50)
       const [vec] = await embedder.embed([q])
       if (!vec) return []
-      // Over-fetch the global ANN pool so the org filter still yields ~n results.
-      const hits = await repos.embeddings.search(actor.orgId, EMBED_SOURCE_TICKET, vec, n * 5)
+      // Over-fetch the global ANN pool so the org (and optional project) filter
+      // still yields ~n results. A wider pool when project-scoped keeps recall up
+      // in a multi-project workspace (ROO-69).
+      const pool = n * (projectId ? 10 : 5)
+      const hits = await repos.embeddings.search(actor.orgId, EMBED_SOURCE_TICKET, vec, pool)
       const results: Ticket[] = []
       for (const hit of hits) {
         const t = await repos.tickets.getById(actor.orgId, hit.sourceId)
-        if (t) results.push(t)
+        if (t && (!projectId || t.projectId === projectId)) results.push(t)
         if (results.length >= n) break
       }
       return results
