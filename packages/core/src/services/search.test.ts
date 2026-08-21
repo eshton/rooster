@@ -297,3 +297,36 @@ describe('rag_search — grounded retrieval (ROO-38)', () => {
     expect(hit?.chunk?.start).toBeGreaterThan(0)
   })
 })
+
+describe('find_similar_tickets project scoping (ROO-69)', () => {
+  it('scopes to one project when projectId is set, else spans the org', async () => {
+    const { org, owner } = await bootstrap()
+    // A second project in the same org, both with a "gamma" ticket.
+    const teamB = await services.teams.create(owner, { key: 'OTH', name: 'Other' })
+    const projectB = await services.projects.create(owner, {
+      teamId: teamB.id,
+      key: 'OTH',
+      name: 'Other',
+    })
+    // bootstrap()'s project is ROOST; reuse it for project A.
+    const projects = await services.projects.list(owner)
+    const projectA = projects.find((p) => p.key === 'ROOST')
+    if (!projectA) throw new Error('missing project A')
+
+    const a = await services.tickets.create(owner, { projectId: projectA.id, title: 'gamma alpha' })
+    const b = await services.tickets.create(owner, { projectId: projectB.id, title: 'gamma beta' })
+
+    // Org-wide: both projects' gamma tickets surface.
+    const orgWide = await services.tickets.findSimilar(owner, 'gamma', 10)
+    const orgIds = orgWide.map((t) => t.id)
+    expect(orgIds).toContain(a.id)
+    expect(orgIds).toContain(b.id)
+
+    // Scoped to project A: only A's ticket, never B's.
+    const scoped = await services.tickets.findSimilar(owner, 'gamma', 10, projectA.id)
+    expect(scoped.map((t) => t.id)).toContain(a.id)
+    expect(scoped.every((t) => t.projectId === projectA.id)).toBe(true)
+    expect(scoped.map((t) => t.id)).not.toContain(b.id)
+    expect(org.id).toBeDefined()
+  })
+})
