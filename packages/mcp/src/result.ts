@@ -5,6 +5,18 @@ export function jsonResult(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
 }
 
+/**
+ * Append a secondary text block (a hint/nudge) to a successful result — leaves
+ * the primary JSON payload untouched so typed consumers still parse content[0].
+ * A no-op on error results (never nudge over a failure).
+ */
+export function withHint<
+  T extends { content: Array<{ type: 'text'; text: string }>; isError?: boolean },
+>(result: T, hint: string): T {
+  if (result.isError) return result
+  return { ...result, content: [...result.content, { type: 'text' as const, text: hint }] }
+}
+
 /** An error tool result (isError) carrying a human-readable message. */
 export function errorResult(message: string, code?: string) {
   return {

@@ -27,6 +27,10 @@ export function discoveryDocument(ctx: ServerContext) {
     // the CRM customer entity (Customer / Client / Account) — the domain always
     // calls it a Customer; this is just branding an agent may mirror.
     dashboard: { endpoint: `${base}/app`, crmLabel: ctx.config.crm.label },
+    // Instance capabilities an agent can branch on (ROO-68). `semanticSearch`
+    // true = find_similar_tickets / rag_search / recall_context are available;
+    // prefer them over keyword search for recall.
+    capabilities: { semanticSearch: !!ctx.config.embedding },
     docs: `${base}/llms.txt`,
   }
 }
@@ -114,10 +118,15 @@ not the client.
 - my_tickets — list tickets assigned to you (primary OR co-assignee).
   find_by_label — by tag.
   search_tickets — relevance-ranked full-text search over titles + descriptions
-  (stemmed: "deploy" matches "deploying"; title matches rank highest).
+  (stemmed: "deploy" matches "deploying"; title matches rank highest). EXACT
+  keyword match.
   find_similar_tickets — semantic (vector) search by meaning across all projects
   in your workspace; use it to recall related prior work before starting. Needs
   embeddings configured on the instance (else it returns an error).
+  PREFERENCE: when semantic search is available (whoami.semanticSearch === true,
+  also in /.well-known/rooster capabilities), prefer find_similar_tickets /
+  rag_search / recall_context for MEANING-based recall — reach for search_tickets
+  / find_by_label only when you need an exact keyword or tag.
 - list_subtasks — list a ticket's children.
 - create_milestone / list_milestones — group tickets into a milestone / cycle
   (sprint). Scope a ticket via create_ticket/update_ticket \`milestoneId\`, and

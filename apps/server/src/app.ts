@@ -200,6 +200,8 @@ export function createApp(ctx: ServerContext): Hono {
       const clientInfo = await extractClientInfo(req)
       // A multi-workspace human can select which org to act in per request.
       const desiredOrgId = req.headers.get('x-rooster-org')
+      // Instance capability: is semantic search available? (ROO-68)
+      const semanticSearch = !!ctx.config.embedding
 
       // Local single-user mode: gate on the static bearer token (no OAuth) and
       // resolve to the bootstrapped local owner. Only active when configured,
@@ -238,6 +240,7 @@ export function createApp(ctx: ServerContext): Hono {
         const server = createRoosterMcpServer({
           services: ctx.services,
           actor: { ...actor, clientInfo },
+          semanticSearch,
         })
         return await handleStatelessMcpRequest(server, req)
       }
@@ -266,6 +269,7 @@ export function createApp(ctx: ServerContext): Hono {
           const server = createRoosterMcpServer({
             services: ctx.services,
             actor: { ...cached, clientInfo },
+            semanticSearch,
           })
           return await handleStatelessMcpRequest(server, req)
         }
@@ -322,7 +326,7 @@ export function createApp(ctx: ServerContext): Hono {
         const { clientInfo: _omit, ...cacheable } = actor
         await ctx.actorCache.set(cacheKey, cacheable, cacheTtlMs)
       }
-      const server = createRoosterMcpServer({ services: ctx.services, actor })
+      const server = createRoosterMcpServer({ services: ctx.services, actor, semanticSearch })
       return await handleStatelessMcpRequest(server, req)
     } catch (err) {
       return errorResponse(err)

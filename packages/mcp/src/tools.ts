@@ -54,7 +54,7 @@ import {
   watchTicketInput,
 } from '@rooster/schema'
 import { z } from 'zod'
-import { errorResult, jsonResult, runTool } from './result.js'
+import { errorResult, jsonResult, runTool, withHint } from './result.js'
 
 /**
  * The board-scan essentials of a ticket. `compact` list responses return these
@@ -79,7 +79,19 @@ function maybeCompact(tickets: Ticket[], compact: boolean | undefined) {
 export interface ToolDeps {
   services: Services
   actor: Actor
+  /**
+   * Whether this instance has an embeddings provider configured (semantic search
+   * on). Surfaced in `whoami` and used to nudge keyword-search tools toward the
+   * semantic ones (ROO-68). Defaults to false.
+   */
+  semanticSearch?: boolean
 }
+
+/** Nudge appended to keyword-search results when semantic search is available. */
+const SEMANTIC_HINT =
+  '💡 This was exact keyword search. Semantic search is configured on this instance — ' +
+  'for meaning-based recall (related prior work, similar issues, "what did we decide about X") ' +
+  'prefer find_similar_tickets, or rag_search / recall_context for grounded, cited answers.'
 
 export interface ProvisioningToolDeps {
   services: Services
@@ -174,13 +186,17 @@ export function registerProvisioningTools(
  * the core service — which enforces scope + writes the audit log — and returns
  * the result as JSON.
  */
-export function registerTools(server: McpServer, { services, actor }: ToolDeps): void {
+export function registerTools(
+  server: McpServer,
+  { services, actor, semanticSearch = false }: ToolDeps,
+): void {
   server.registerTool(
     'whoami',
     {
       title: 'Who am I',
       description:
-        "Return the calling agent's trusted identity (principal id, org, role) and granted scopes.",
+        "Return the calling agent's trusted identity (principal id, org, role), granted scopes, " +
+        'and instance capabilities (e.g. whether semantic search is available).',
       inputSchema: {},
     },
     async () =>
@@ -190,6 +206,9 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
         type: actor.type,
         role: actor.role,
         scopes: actor.scopes,
+        // Capability signal (ROO-68): when true, prefer find_similar_tickets /
+        // rag_search / recall_context over keyword search for recall.
+        semanticSearch,
       }),
   )
 
@@ -637,12 +656,17 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     {
       title: 'Find by tag',
       description:
-        'Find related tickets across the org that carry a given label/tag. Set `compact: true` ' +
-        'for the trimmed board-scan shape.',
+        'Find related tickets across the org that carry a given label/tag (exact tag match). ' +
+        'For meaning-based recall, prefer find_similar_tickets when semantic search is available. ' +
+        'Set `compact: true` for the trimmed board-scan shape.',
       inputSchema: { label: z.string().min(1).max(60), compact: z.boolean().optional() },
     },
-    async ({ label, compact }) =>
-      runTool(async () => maybeCompact(await services.tickets.findByLabel(actor, label), compact)),
+    async ({ label, compact }) => {
+      const res = await runTool(async () =>
+        maybeCompact(await services.tickets.findByLabel(actor, label), compact),
+      )
+      return semanticSearch ? withHint(res, SEMANTIC_HINT) : res
+    },
   )
 
   server.registerTool(
@@ -650,13 +674,19 @@ export function registerTools(server: McpServer, { services, actor }: ToolDeps):
     {
       title: 'Search tickets',
       description:
-        'Relevance-ranked full-text search across ticket titles and descriptions in your org. ' +
-        'Stemmed (e.g. "deploy" matches "deploying") and multi-term (any term may match); title ' +
-        'matches rank above description matches. Set `compact: true` for the trimmed board-scan shape.',
+        'Relevance-ranked full-text search across ticket titles and descriptions in your org — ' +
+        'EXACT keyword match (stemmed: "deploy" matches "deploying"; title matches rank highest). ' +
+        'For meaning-based recall (related work, similar issues, prior decisions), prefer ' +
+        'find_similar_tickets / rag_search when semantic search is configured. ' +
+        'Set `compact: true` for the trimmed board-scan shape.',
       inputSchema: { query: z.string().min(1).max(200), compact: z.boolean().optional() },
     },
-    async ({ query, compact }) =>
-      runTool(async () => maybeCompact(await services.tickets.search(actor, query), compact)),
+    async ({ query, compact }) => {
+      const res = await runTool(async () =>
+        maybeCompact(await services.tickets.search(actor, query), compact),
+      )
+      return semanticSearch ? withHint(res, SEMANTIC_HINT) : res
+    },
   )
 
   server.registerTool(
