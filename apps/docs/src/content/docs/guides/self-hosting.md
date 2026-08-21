@@ -87,18 +87,17 @@ pnpm --filter @rooster/server start
 
 ## Deploy targets
 
-- **Node / Docker / VPS** — `start` auto-migrates domain tables on boot;
-  persistent auth works out of the box on Postgres.
-- **Vercel** — deploy the Hono app as a function. Run `db:migrate` and
-  `auth:migrate` as a one-off (deploy hook), not on cold start. Use a hosted
-  Postgres (Neon / Vercel Postgres). better-auth uses a real connection pool on
-  Postgres — the in-memory adapter is dev/SQLite only and is **not** durable on
-  serverless.
+- **Node / Docker / VPS** — `start` auto-migrates the domain tables and creates
+  better-auth's tables on boot, so **sessions persist** on a SQLite/libSQL file
+  (or Turso) as well as Postgres.
+- **Vercel** — deploy the Hono app as a function. Run `db:migrate` and (on
+  Postgres) `auth:migrate` as a one-off (deploy hook), not on cold start. Use a
+  hosted Postgres (Neon / Vercel Postgres) — the in-memory adapter is **not**
+  durable on serverless.
 
-:::caution[Session durability on SQLite]
-On SQLite, better-auth uses an in-memory session store, so **OAuth logins reset
-when the process restarts** (your domain data in the volume is safe, and an
-admin is re-bootstrapped each boot). **Local mode is unaffected** — it
-auto-authenticates, no sessions. For durable OAuth sessions on a shared instance,
-use **Postgres**.
+:::note[Session durability]
+On a SQLite/libSQL **file** (or Turso), better-auth's tables are created on the
+same connection at boot, so OAuth logins persist across restarts. Only the
+ephemeral in-memory DB (`file::memory:`, dev/tests) and serverless resets
+sessions. Local mode has no sessions at all (it auto-authenticates).
 :::

@@ -176,9 +176,9 @@ Open **http://localhost:3000/app**, sign in, and agents connect at
 `http://localhost:3000/mcp` over OAuth (they read `/llms.txt` to connect).
 Compose: `docker compose -f docker-compose.sqlite.yml up`.
 
-Your tickets and CRM data persist in the `rooster-data` volume. On SQLite, login
-sessions live in memory, so they reset when the container restarts (data is
-safe — just sign in again); for durable sessions use the Postgres compose above.
+Everything — tickets, CRM data, and login sessions — persists in the
+`rooster-data` volume (on SQLite, better-auth's tables are created on the same
+connection at boot, so sessions survive a restart).
 
 ## How an agent uses Rooster
 

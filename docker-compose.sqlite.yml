@@ -8,10 +8,9 @@
 # Then open http://localhost:3000/app and sign in with those admin credentials.
 # On first boot the server creates your account + a starter workspace.
 #
-# Domain data (tickets, customers, …) persists in the `rooster-data` volume.
-# NOTE: on SQLite, login sessions use an in-memory store, so they reset when the
-# container restarts — your data is safe, just sign in again. For durable
-# sessions run the Postgres compose (docker-compose.yml) instead.
+# Everything persists in the `rooster-data` volume — tickets, CRM data, AND login
+# sessions (on SQLite, better-auth's tables are created on the same connection at
+# boot, so sessions survive a restart).
 
 services:
   server:

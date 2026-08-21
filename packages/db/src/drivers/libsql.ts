@@ -34,6 +34,15 @@ export async function createLibsqlDatabase(
   return {
     kind: config.database.kind,
     repositories: createRepositories(db, sqliteSchema),
+    // Expose the raw handle so the server can run better-auth durably on the
+    // same connection (ROO-66). `drizzle` feeds better-auth's drizzleAdapter;
+    // `execute` creates its tables.
+    libsql: {
+      drizzle: db,
+      execute: async (statement: string) => {
+        await client.execute(statement)
+      },
+    },
     async close() {
       client.close()
     },

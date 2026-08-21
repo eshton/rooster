@@ -67,8 +67,10 @@ Rooster uses **two** sets of tables in the same database:
    > a project's old prefix continues its numbering while a fresh key starts at 1.
    > Idempotent — already-keyed projects are skipped.
 
-2. **Auth tables** (user, session, account, oauth*, …) — owned and migrated by
-   **better-auth itself**. On Postgres:
+2. **Auth tables** (user, session, account, oauth*, …) — owned by **better-auth**.
+   On **SQLite/libSQL (a file or Turso)** they are created automatically on the
+   shared connection when the server boots — nothing to run. On **Postgres**,
+   apply them once with better-auth's CLI:
 
    ```bash
    DATABASE_URL=postgres://… pnpm --filter @rooster/server auth:migrate
@@ -111,10 +113,10 @@ Or via Compose: `docker compose -f docker-compose.sqlite.yml up` (reads
 `ROOSTER_AUTH_SECRET` / `ROOSTER_ADMIN_EMAIL` / `ROOSTER_ADMIN_PASSWORD` from your
 environment). Domain data persists in the `rooster-data` volume.
 
-**Session durability:** on SQLite, better-auth uses an in-memory session store,
-so logins reset on container restart (your data is safe; the admin is
-re-bootstrapped each boot, so just sign in again). For durable sessions use the
-Postgres path below.
+**Session durability:** on a SQLite/libSQL **file** (or Turso), better-auth's
+tables are created on the same connection at boot, so logins **persist across
+restarts** — no `auth:migrate` step needed. Only the ephemeral in-memory DB
+(`file::memory:`, dev/tests) and serverless (Vercel) are non-durable.
 
 Images are published to the GitHub Container Registry manually via the
 **Publish image** workflow (Actions tab → Run workflow → pick a tag); nothing is
