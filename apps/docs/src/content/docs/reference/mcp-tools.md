@@ -41,6 +41,9 @@ If your account belongs to several workspaces, send the target `orgId` in the
 | `list_projects` | `ticket:read` | Projects, optionally filtered to a team |
 | `create_project` | `project:write` | Create a project with its own ticket-key prefix |
 | `set_project_key` | `project:write` | Rename a project's prefix; re-keys all its tickets in lockstep |
+| `move_project` | `project:write` | Move a project to another team; ticket keys, numbers and history are preserved |
+| `archive_project` | `project:write` | Archive (or unarchive) a project; reversible, keeps all tickets |
+| `delete_project` | `project:write` | Permanently delete an empty project (no tickets) |
 | `create_milestone` | `ticket:write` | Create a milestone / cycle (sprint) |
 | `list_milestones` | `ticket:read` | Milestones in a project |
 

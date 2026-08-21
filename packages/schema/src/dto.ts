@@ -286,6 +286,29 @@ export const setProjectKeyInput = z.object({
 })
 export type SetProjectKeyInput = z.infer<typeof setProjectKeyInput>
 
+/**
+ * Move a project to another team. Ticket keys, numbers and history are
+ * untouched — numbering is per-project, so team membership is pure metadata.
+ */
+export const moveProjectInput = z.object({
+  projectId: idSchema,
+  toTeamId: idSchema,
+})
+export type MoveProjectInput = z.infer<typeof moveProjectInput>
+
+/** Archive (default) or unarchive a project. Reversible; keeps all tickets. */
+export const archiveProjectInput = z.object({
+  projectId: idSchema,
+  archived: z.boolean().default(true),
+})
+export type ArchiveProjectInput = z.infer<typeof archiveProjectInput>
+
+/** Permanently delete an empty project (one with no tickets). Irreversible. */
+export const deleteProjectInput = z.object({
+  projectId: idSchema,
+})
+export type DeleteProjectInput = z.infer<typeof deleteProjectInput>
+
 /** Move a ticket to another project (it gets a fresh key + number there). */
 export const moveTicketInput = z.object({
   ticketId: idSchema,

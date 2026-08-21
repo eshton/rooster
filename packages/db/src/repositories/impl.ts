@@ -227,6 +227,9 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
         if (!row) throw new Error(`Project ${id} not found in org ${orgId}`)
         return toProject(row)
       },
+      async delete(orgId, id) {
+        await db.delete(s.projects).where(and(eq(s.projects.orgId, orgId), eq(s.projects.id, id)))
+      },
       async linkWork(orgId, id, link) {
         const [row] = await db
           .update(s.projects)

@@ -61,6 +61,8 @@ export interface ProjectRepository {
   getById(orgId: Id, id: Id): Promise<Project | null>
   list(orgId: Id, teamId?: Id, opts?: ListOptions): Promise<Project[]>
   update(orgId: Id, id: Id, patch: Partial<Project>): Promise<Project>
+  /** Hard-delete a project by id (org-scoped). Caller ensures it holds no tickets. */
+  delete(orgId: Id, id: Id): Promise<void>
   /** Attach (or detach, with nulls) a project to a deal + customer (ROO-50). */
   linkWork(
     orgId: Id,

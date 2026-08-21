@@ -5,9 +5,15 @@ import { ConflictError, NotFoundError, ValidationError } from '../errors.js'
 import { authorize } from '../permissions.js'
 import { parse } from '../validate.js'
 import {
+  type ArchiveProjectInput,
+  archiveProjectInput,
   type CreateProjectInput,
   createProjectInput,
+  type DeleteProjectInput,
+  deleteProjectInput,
   type Id,
+  type MoveProjectInput,
+  moveProjectInput,
   type Project,
   type SetProjectKeyInput,
   setProjectKeyInput,
@@ -19,6 +25,12 @@ export interface ProjectService {
   get(actor: Actor, id: Id): Promise<Project>
   /** Rename a project's ticket-key prefix, re-keying all its tickets in lockstep. */
   setKey(actor: Actor, input: SetProjectKeyInput): Promise<Project>
+  /** Move a project to another team (metadata only; tickets/keys untouched). */
+  move(actor: Actor, input: MoveProjectInput): Promise<Project>
+  /** Archive or unarchive a project (reversible). */
+  archive(actor: Actor, input: ArchiveProjectInput): Promise<Project>
+  /** Permanently delete an empty project (no tickets). */
+  delete(actor: Actor, input: DeleteProjectInput): Promise<{ deleted: true; id: Id }>
 }
 
 export function createProjectService(repos: Repositories): ProjectService {
@@ -96,6 +108,84 @@ export function createProjectService(repos: Repositories): ProjectService {
         after: { key: input.key },
       })
       return updated
+    },
+
+    async move(actor, rawInput) {
+      authorize(actor, 'project:write')
+      const input = parse(moveProjectInput, rawInput)
+
+      const project = await repos.projects.getById(actor.orgId, input.projectId)
+      if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
+      if (project.teamId === input.toTeamId) {
+        throw new ValidationError('Project is already in that team')
+      }
+
+      const team = await repos.teams.getById(actor.orgId, input.toTeamId)
+      if (!team) throw new NotFoundError(`Team ${input.toTeamId} not found`)
+
+      // Numbering is per-project, so team membership is pure metadata — no
+      // re-keying, no ticket touches. Just swap the column.
+      const updated = await repos.projects.update(actor.orgId, project.id, {
+        teamId: input.toTeamId,
+      })
+      await recordAudit(repos, actor, {
+        action: 'project.move',
+        targetType: 'project',
+        targetId: project.id,
+        before: { teamId: project.teamId },
+        after: { teamId: input.toTeamId },
+      })
+      return updated
+    },
+
+    async archive(actor, rawInput) {
+      authorize(actor, 'project:write')
+      const input = parse(archiveProjectInput, rawInput)
+
+      const project = await repos.projects.getById(actor.orgId, input.projectId)
+      if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
+      if (project.archived === input.archived) {
+        throw new ValidationError(`Project is already ${input.archived ? 'archived' : 'active'}`)
+      }
+
+      const updated = await repos.projects.update(actor.orgId, project.id, {
+        archived: input.archived,
+      })
+      await recordAudit(repos, actor, {
+        action: 'project.archive',
+        targetType: 'project',
+        targetId: project.id,
+        before: { archived: project.archived },
+        after: { archived: input.archived },
+      })
+      return updated
+    },
+
+    async delete(actor, rawInput) {
+      authorize(actor, 'project:write')
+      const input = parse(deleteProjectInput, rawInput)
+
+      const project = await repos.projects.getById(actor.orgId, input.projectId)
+      if (!project) throw new NotFoundError(`Project ${input.projectId} not found`)
+
+      // Only empty projects are deletable — tickets carry projectId with no DB
+      // cascade, so a delete with tickets present would orphan them. Move or
+      // delete the tickets first (or archive the project instead).
+      const tickets = await repos.tickets.list(actor.orgId, project.id, { limit: 1 })
+      if (tickets.length > 0) {
+        throw new ConflictError(
+          'Project still has tickets — move or delete them first, or archive the project instead',
+        )
+      }
+
+      await repos.projects.delete(actor.orgId, project.id)
+      await recordAudit(repos, actor, {
+        action: 'project.delete',
+        targetType: 'project',
+        targetId: project.id,
+        before: project,
+      })
+      return { deleted: true, id: project.id }
     },
   }
 }
