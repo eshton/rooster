@@ -95,6 +95,11 @@ export interface TicketRepository {
   listChildren(orgId: Id, parentId: Id, opts?: ListOptions): Promise<Ticket[]>
   update(orgId: Id, id: Id, patch: Partial<Ticket>): Promise<Ticket>
   /**
+   * Hard-delete a ticket by id (org-scoped). Used to compensate a failed
+   * idempotent create so a retried batch never leaves a duplicate (ROO-54).
+   */
+  delete(orgId: Id, id: Id): Promise<void>
+  /**
    * Optimistic-concurrency update: apply `patch` only if the ticket's current
    * `updatedAt` still equals `expectedUpdatedAt` (a single conditional
    * `UPDATE … RETURNING`, no transaction). Returns the updated ticket, or `null`

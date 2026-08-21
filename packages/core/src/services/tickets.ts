@@ -323,12 +323,15 @@ export function createTicketService(
    * is retried in place rather than surfacing as a partial commit.
    */
   async function createOneTicket(actor: Actor, input: CreateTicketInput): Promise<Ticket> {
+    const key = input.idempotencyKey
     // Idempotency: a repeat with a previously-seen key returns the original
     // ticket (no new row, no new audit) — making a retried/flaky call safe.
-    if (input.idempotencyKey) {
-      const seen = await repos.idempotency.lookup(actor.orgId, input.idempotencyKey)
+    // Every DB op here is retried (ROO-54): an un-retried blip on the lookup or
+    // the key-bind used to leave a keyless orphan that duplicated on the retry.
+    if (key) {
+      const seen = await withRetry(() => repos.idempotency.lookup(actor.orgId, key))
       if (seen) {
-        const existing = await repos.tickets.getById(actor.orgId, seen.ticketId)
+        const existing = await withRetry(() => repos.tickets.getById(actor.orgId, seen.ticketId))
         if (existing) return existing
         // Mapping points at a vanished ticket (shouldn't happen): fall through
         // and recreate, re-binding the key below.
@@ -338,7 +341,7 @@ export function createTicketService(
     const project = await precheckCreatable(actor, input)
 
     // Ticket numbering is per-project, so keys read "<project key>-<n>".
-    const number = await repos.tickets.nextNumber(actor.orgId, project.id)
+    const number = await withRetry(() => repos.tickets.nextNumber(actor.orgId, project.id))
     const ticket = await withRetry(() =>
       repos.tickets.create(actor.orgId, {
         projectId: input.projectId,
@@ -358,29 +361,40 @@ export function createTicketService(
       }),
     )
 
-    // recordAudit self-retries the append (ROO-33) — the audit insert is what
-    // failed *after* the ticket persisted, so it must not surface as a hard error
-    // on a transient blip.
+    // Bind the idempotency key BEFORE the audit, so once we return the key is
+    // durably mapped. If binding can't be made durable, COMPENSATE by deleting
+    // the just-created row — a retried batch then recreates cleanly instead of
+    // duplicating a keyless orphan (ROO-54).
+    if (key) {
+      let won: boolean
+      try {
+        won = await withRetry(() => repos.idempotency.record(actor.orgId, key, ticket.id))
+      } catch (bindErr) {
+        await withRetry(() => repos.tickets.delete(actor.orgId, ticket.id)).catch(() => {})
+        throw bindErr
+      }
+      if (!won) {
+        // Lost a concurrent race for the same key: another create bound it first.
+        // Return that winner and remove our orphan so the key maps to one ticket.
+        const winner = await withRetry(() => repos.idempotency.lookup(actor.orgId, key))
+        if (winner && winner.ticketId !== ticket.id) {
+          const original = await withRetry(() =>
+            repos.tickets.getById(actor.orgId, winner.ticketId),
+          )
+          await withRetry(() => repos.tickets.delete(actor.orgId, ticket.id)).catch(() => {})
+          if (original) return original
+        }
+      }
+    }
+
+    // Audit AFTER the key is bound: recordAudit self-retries the append (ROO-33);
+    // a blip here is safe because the durable key already dedupes a retry.
     await recordAudit(repos, actor, {
       action: 'ticket.create',
       targetType: 'ticket',
       targetId: ticket.id,
       after: ticket,
     })
-
-    // Bind the idempotency key to this new ticket. If we lost a concurrent race
-    // (another create recorded the same key first), return that winner instead —
-    // the ticket we just made is a rare, harmless orphan.
-    if (input.idempotencyKey) {
-      const won = await repos.idempotency.record(actor.orgId, input.idempotencyKey, ticket.id)
-      if (!won) {
-        const winner = await repos.idempotency.lookup(actor.orgId, input.idempotencyKey)
-        if (winner && winner.ticketId !== ticket.id) {
-          const original = await repos.tickets.getById(actor.orgId, winner.ticketId)
-          if (original) return original
-        }
-      }
-    }
     // Index for semantic search (best-effort; covers create + createMany).
     await embedTicket(actor.orgId, ticket)
     return ticket
