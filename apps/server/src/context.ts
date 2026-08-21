@@ -1,8 +1,10 @@
-import { createAuth, memoryAdapter, type RoosterAuth } from '@rooster/auth'
+import { createAuth, drizzleAdapter, memoryAdapter, type RoosterAuth } from '@rooster/auth'
 import type { RoosterConfig } from '@rooster/config'
 import { type ActorCache, createServices, type Services } from '@rooster/core'
 import { createDatabase, type Database } from '@rooster/db'
 import pg from 'pg'
+import * as authSchema from './auth-schema.js'
+import { ensureAuthTables } from './auth-store.js'
 import { webhookCrowNotifier } from './crow-webhook.js'
 import { emailSenderFor } from './email.js'
 import { embedderFor } from './embedder-http.js'
@@ -11,27 +13,34 @@ import { rerankerFor } from './reranker-http.js'
 type AuthDatabase = Parameters<typeof createAuth>[0]['database']
 
 /**
- * Choose better-auth's storage. Postgres deploys get a real connection pool
- * (better-auth owns its own tables there — applied via its CLI; see the
- * self-host setup docs). Dev / SQLite / tests use the in-memory adapter, which
- * is fine for a single process but not for serverless.
+ * Choose better-auth's storage. Postgres gets a real connection pool (better-auth
+ * owns its own tables there — applied via its CLI). A durable SQLite/libSQL DB
+ * (a file or Turso) runs better-auth through the drizzle adapter on the SAME
+ * connection, so logins persist across restarts (ROO-66). Only the in-memory
+ * test DB (`file::memory:`) falls back to the in-memory adapter.
  */
-function authDatabaseFor(config: RoosterConfig): AuthDatabase {
+async function resolveAuthDatabase(config: RoosterConfig, db: Database): Promise<AuthDatabase> {
   if (config.database.kind === 'postgres') {
     return new pg.Pool({ connectionString: config.database.url })
   }
-  // The in-memory adapter needs its model tables pre-declared (it doesn't
-  // create them on read). These are better-auth's core + OAuth/MCP models.
-  return memoryAdapter({
-    user: [],
-    session: [],
-    account: [],
-    verification: [],
-    oauthApplication: [],
-    oauthAccessToken: [],
-    oauthConsent: [],
-    jwks: [],
-  })
+  // In-memory test/dev DB, or a driver without a durable handle: the in-memory
+  // adapter needs its model tables pre-declared (it doesn't create them on read).
+  if (config.database.url === 'file::memory:' || !db.libsql) {
+    return memoryAdapter({
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      oauthApplication: [],
+      oauthAccessToken: [],
+      oauthConsent: [],
+      jwks: [],
+    })
+  }
+  // Durable: create better-auth's tables on the shared libSQL connection, then
+  // let it run through the drizzle adapter (parity with the Cloudflare Worker).
+  await ensureAuthTables(db.libsql.execute)
+  return drizzleAdapter(db.libsql.drizzle as never, { provider: 'sqlite', schema: authSchema })
 }
 
 /** The assembled runtime: config + connected DB + domain services + auth. */
@@ -75,7 +84,7 @@ export async function createServerContext(
   })
   const auth = createAuth({
     config,
-    database: opts.authDatabase ?? authDatabaseFor(config),
+    database: opts.authDatabase ?? (await resolveAuthDatabase(config, db)),
     sendEmail: emailSenderFor(config),
   })
   return { config, db, services, auth }

@@ -7,6 +7,17 @@ import type { Repositories } from './repositories.js'
 export interface Database {
   readonly kind: DbKind
   readonly repositories: Repositories
+  /**
+   * The underlying libSQL handle, present only for the sqlite/libsql kinds. Lets
+   * the server layer wire a **durable** better-auth drizzle adapter over the SAME
+   * connection (one client, no file-lock contention) instead of the in-memory
+   * adapter. Absent for Postgres. `drizzle` is typed loosely so this package
+   * needn't depend on better-auth; `execute` runs raw DDL (for the auth tables).
+   */
+  readonly libsql?: {
+    drizzle: unknown
+    execute(sql: string): Promise<void>
+  }
   close(): Promise<void>
 }
 
