@@ -15,6 +15,7 @@ import type {
   TicketStatus,
 } from '@rooster/schema'
 import {
+  CUSTOMER_LIFECYCLE_STAGES,
   DEAL_PIPELINE_STAGES,
   ESTIMATE_POINTS,
   TICKET_PRIORITIES,
@@ -232,6 +233,17 @@ fieldset legend{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;c
 .md-body hr{border:0;border-top:1px solid var(--line);margin:1rem 0}
 .md-body table{margin:.6rem 0;font-size:.88rem}
 .md-body th{font-weight:700;background:var(--soft)}
+.stat .n.hot{color:#b91c1c}
+.mini{font-size:.8rem;color:var(--muted)}
+.prow{padding:.5rem 0;border-top:1px solid var(--line)}
+.prow:first-child{border-top:0}
+.pbar{height:.5rem;background:#f4f4f5;border-radius:999px;overflow:hidden}
+.pbar>i{display:block;height:100%;background:var(--amber);border-radius:999px}
+.seg{display:flex;height:.7rem;border-radius:999px;overflow:hidden;background:#f4f4f5}
+.seg>span{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-top:.6rem;font-size:.78rem;color:var(--muted)}
+.legend .lg{display:inline-flex;align-items:center;gap:.3rem}
+.legend .lg i{width:.6rem;height:.6rem;border-radius:2px;display:inline-block}
 @media (max-width:640px){
   .grid-2{grid-template-columns:1fr !important}
   header.top{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.6rem 1rem}
@@ -458,64 +470,281 @@ export function switchWorkspacePage(
   )
 }
 
-export function orgOverview(data: {
+/** A ticket is "open" (in-flight) unless it's done or canceled. */
+const isOpenTicket = (t: Ticket) => t.status !== 'done' && t.status !== 'canceled'
+const isOverdue = (t: Ticket) =>
+  isOpenTicket(t) && t.dueDate != null && t.dueDate.slice(0, 10) < today()
+
+/** Per-project rollup used by the overview. */
+type ProjectRollup = {
+  project: Project
+  total: number
+  done: number
+  open: number
+  urgent: number
+  overdue: number
+}
+
+/** The computed view-model for the overview (pure — testable without HTTP). */
+export type OverviewModel = {
+  org: Org
+  teams: Team[]
+  names: Record<string, string>
+  projectNames: Record<string, string>
+  kpi: {
+    projects: number
+    total: number
+    open: number
+    urgent: number
+    overdue: number
+    unassigned: number
+    inProgress: number
+    openPoints: number
+  }
+  statusCounts: Record<TicketStatus, number>
+  rollups: ProjectRollup[]
+  workload: Array<{ id: string | null; name: string; open: number }>
+  needsAttention: Ticket[]
+  agents: { active: number; suspended: number; revoked: number; total: number }
+  customers: { total: number; byStage: Array<{ stage: string; count: number }> }
+  activity: AuditLog[] | null
+}
+
+/**
+ * Fold the raw org data into the overview view-model — all workspace-wide
+ * rollups computed once from the single `allTickets` query (ROO-74). Pure.
+ */
+export function buildOverview(raw: {
   org: Org
   teams: Team[]
   projects: Project[]
-  actor: Actor
-  stats: { tickets: number; open: number; people: number; agents: number }
-  recent: Ticket[]
-  projectNames: Record<string, string>
-}): string {
-  const teams = data.teams.length
-    ? data.teams
-        .map((t) => {
-          const projects = data.projects.filter((p) => p.teamId === t.id)
-          const items = projects.length
-            ? projects
-                .map(
-                  (p) =>
-                    `<div class="row"><span class="key">${esc(p.key)}</span><a href="/app/projects/${esc(p.id)}">${esc(p.name)}</a>${p.archived ? '<span class="badge">archived</span>' : ''}</div>`,
-                )
-                .join('')
-            : '<div class="empty">🪹 No projects</div>'
-          return `<div class="card"><div class="row"><strong>${esc(t.name)}</strong>${t.key ? `<span class="key">${esc(t.key)}</span>` : ''}</div><div style="margin-top:.5rem">${items}</div></div>`
+  members: OrgMember[]
+  agents: Agent[]
+  allTickets: Ticket[]
+  customers: Customer[]
+  activity: AuditLog[] | null
+}): OverviewModel {
+  const names = Object.fromEntries(raw.members.map((m) => [m.principalId, m.displayName]))
+  const projectNames = Object.fromEntries(raw.projects.map((p) => [p.id, p.name]))
+  const t = raw.allTickets
+
+  const statusCounts = Object.fromEntries(TICKET_STATUSES.map((s) => [s, 0])) as Record<
+    TicketStatus,
+    number
+  >
+  for (const tk of t) statusCounts[tk.status]++
+
+  const open = t.filter(isOpenTicket)
+  const isUrgent = (tk: Ticket) => tk.priority === 'urgent' || tk.priority === 'high'
+
+  // Per-project rollups.
+  const byProject = new Map<string, ProjectRollup>()
+  for (const p of raw.projects)
+    byProject.set(p.id, { project: p, total: 0, done: 0, open: 0, urgent: 0, overdue: 0 })
+  for (const tk of t) {
+    const r = byProject.get(tk.projectId)
+    if (!r) continue
+    r.total++
+    if (tk.status === 'done') r.done++
+    if (isOpenTicket(tk)) {
+      r.open++
+      if (isUrgent(tk)) r.urgent++
+      if (isOverdue(tk)) r.overdue++
+    }
+  }
+  const rollups = [...byProject.values()].sort((a, b) => b.open - a.open || b.total - a.total)
+
+  // Workload: open tickets per assignee (+ an unassigned bucket), busiest first.
+  const load = new Map<string | null, number>()
+  for (const tk of open) load.set(tk.assigneeId, (load.get(tk.assigneeId) ?? 0) + 1)
+  const workload = [...load.entries()]
+    .map(([id, n]) => ({ id, name: id ? (names[id] ?? id) : 'Unassigned', open: n }))
+    .sort((a, b) => b.open - a.open)
+
+  // Needs-attention ranking: overdue > urgent > unassigned > newest.
+  const rank = (tk: Ticket) =>
+    (isOverdue(tk) ? 4 : 0) +
+    (isOpenTicket(tk) && isUrgent(tk) ? 2 : 0) +
+    (isOpenTicket(tk) && !tk.assigneeId ? 1 : 0)
+  const needsAttention = [...t]
+    .sort((a, b) => rank(b) - rank(a) || b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 8)
+
+  const agents = {
+    active: raw.agents.filter((a) => a.status === 'active').length,
+    suspended: raw.agents.filter((a) => a.status === 'suspended').length,
+    revoked: raw.agents.filter((a) => a.status === 'revoked').length,
+    total: raw.agents.length,
+  }
+
+  const stageCount = new Map<string, number>()
+  for (const cu of raw.customers)
+    stageCount.set(cu.lifecycleStage, (stageCount.get(cu.lifecycleStage) ?? 0) + 1)
+  const customers = {
+    total: raw.customers.length,
+    byStage: CUSTOMER_LIFECYCLE_STAGES.filter((s) => stageCount.get(s)).map((s) => ({
+      stage: s,
+      count: stageCount.get(s) ?? 0,
+    })),
+  }
+
+  return {
+    org: raw.org,
+    teams: raw.teams,
+    names,
+    projectNames,
+    kpi: {
+      projects: raw.projects.length,
+      total: t.length,
+      open: open.length,
+      urgent: open.filter(isUrgent).length,
+      overdue: t.filter(isOverdue).length,
+      unassigned: open.filter((tk) => !tk.assigneeId).length,
+      inProgress: statusCounts.in_progress,
+      openPoints: open.reduce((sum, tk) => sum + (tk.estimate ?? 0), 0),
+    },
+    statusCounts,
+    rollups,
+    workload,
+    needsAttention,
+    agents,
+    customers,
+    activity: raw.activity,
+  }
+}
+
+/** Colors for the cross-project status bar (one hue per status). */
+const STATUS_COLOR: Record<TicketStatus, string> = {
+  backlog: '#a8a29e',
+  todo: '#60a5fa',
+  in_progress: '#f59e0b',
+  in_review: '#a78bfa',
+  done: '#34d399',
+  canceled: '#d6d3d1',
+}
+
+export function orgOverview(m: OverviewModel, actor: Actor): string {
+  const stat = (n: number | string, label: string, tone = '') =>
+    `<div class="stat"><div class="n${tone}">${esc(String(n))}</div><div class="l">${esc(label)}</div></div>`
+  const kpis = `<div class="stats">
+    ${stat(m.kpi.open, 'Open')}
+    ${stat(m.kpi.inProgress, 'In progress')}
+    ${stat(m.kpi.urgent, 'Urgent / high', m.kpi.urgent ? ' hot' : '')}
+    ${stat(m.kpi.overdue, 'Overdue', m.kpi.overdue ? ' hot' : '')}
+    ${stat(m.kpi.unassigned, 'Unassigned')}
+    ${stat(m.kpi.openPoints, 'Open points')}
+    ${stat(m.kpi.projects, 'Projects')}
+    ${stat(m.kpi.total, 'Total tickets')}
+  </div>`
+
+  // Cross-project status distribution — a single segmented bar + legend.
+  const totalForBar = TICKET_STATUSES.reduce((s, k) => s + m.statusCounts[k], 0)
+  const segs = TICKET_STATUSES.filter((k) => m.statusCounts[k] > 0)
+    .map(
+      (k) =>
+        `<span title="${esc(STATUS_LABEL[k])}: ${m.statusCounts[k]}" style="width:${((m.statusCounts[k] / totalForBar) * 100).toFixed(2)}%;background:${STATUS_COLOR[k]}"></span>`,
+    )
+    .join('')
+  const legend = TICKET_STATUSES.filter((k) => m.statusCounts[k] > 0)
+    .map(
+      (k) =>
+        `<span class="lg"><i style="background:${STATUS_COLOR[k]}"></i>${esc(STATUS_LABEL[k])} ${m.statusCounts[k]}</span>`,
+    )
+    .join('')
+  const statusBar = totalForBar
+    ? `<div class="card"><div class="seg">${segs}</div><div class="legend">${legend}</div></div>`
+    : ''
+
+  // Per-project progress, grouped by team.
+  const projectRow = (r: ProjectRollup) => {
+    const pct = r.total ? Math.round((r.done / r.total) * 100) : 0
+    const flags = [
+      r.urgent ? `<span class="due">${r.urgent} urgent</span>` : '',
+      r.overdue ? `<span class="due over">${r.overdue} overdue</span>` : '',
+    ].join('')
+    return `<div class="prow">
+      <div class="row" style="margin-bottom:.25rem">
+        <div><span class="key">${esc(r.project.key)}</span> <a href="/app/projects/${esc(r.project.id)}">${esc(r.project.name)}</a>${r.project.archived ? ' <span class="badge">archived</span>' : ''}</div>
+        <div class="mini">${r.open} open · ${r.done}/${r.total} done${flags ? ` · ${flags}` : ''}</div>
+      </div>
+      <div class="pbar" title="${pct}% done"><i style="width:${pct}%"></i></div>
+    </div>`
+  }
+  const teamBlocks = m.teams.length
+    ? m.teams
+        .map((tm) => {
+          const rows = m.rollups
+            .filter((r) => r.project.teamId === tm.id)
+            .map(projectRow)
+            .join('')
+          return `<div class="card"><div class="row"><strong>${esc(tm.name)}</strong>${tm.key ? `<span class="key">${esc(tm.key)}</span>` : ''}</div><div style="margin-top:.6rem">${rows || '<div class="empty">🪹 No projects</div>'}</div></div>`
         })
         .join('')
     : '<div class="empty">🪹 No teams yet.</div>'
+  // Any project whose team is missing/unknown still gets shown.
+  const orphanRows = m.rollups
+    .filter((r) => !m.teams.some((tm) => tm.id === r.project.teamId))
+    .map(projectRow)
+    .join('')
+  const orphanBlock = orphanRows ? `<div class="card">${orphanRows}</div>` : ''
 
-  const stat = (n: number, label: string) =>
-    `<div class="stat"><div class="n">${n}</div><div class="l">${label}</div></div>`
-  const stats = `<div class="stats">
-    ${stat(data.teams.length, 'Teams')}
-    ${stat(data.projects.length, 'Projects')}
-    ${stat(data.stats.open, 'Open tickets')}
-    ${stat(data.stats.tickets, 'Total tickets')}
-    ${stat(data.stats.people, 'People')}
-    ${stat(data.stats.agents, 'Agents')}
-  </div>`
+  // Needs-attention tickets, enriched.
+  const attn = m.needsAttention.length
+    ? `<div class="card">${m.needsAttention
+        .map((t) => {
+          const who = t.assigneeId
+            ? avatar(m.names[t.assigneeId] ?? '?')
+            : '<span class="badge">unassigned</span>'
+          return `<div class="row" style="padding:.4rem 0;border-top:1px solid var(--line)">
+            <div>${t.priority !== 'none' ? `<span class="prio ${esc(t.priority)}" title="${esc(t.priority)}"></span> ` : ''}<span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.key)}">${esc(t.title)}</a>
+              <span class="mini">· ${esc(m.projectNames[t.projectId] ?? '')}</span></div>
+            <div class="row" style="gap:.4rem;align-items:center">${dueChip(t.dueDate)}${estimateChip(t.estimate)}<span class="badge${t.status === 'done' ? '' : ' amber'}">${esc(STATUS_LABEL[t.status])}</span>${who}</div>
+          </div>`
+        })
+        .join('')}</div>`
+    : '<div class="empty">🪹 No tickets yet.</div>'
 
-  const recent = data.recent.length
-    ? `<div class="card">${data.recent
+  // Workload by assignee.
+  const workload = m.workload.length
+    ? `<div class="card">${m.workload
         .map(
-          (t) =>
-            `<div class="row" style="padding:.35rem 0">
-              <div><span class="key">${esc(t.key)}</span> <a href="/app/tickets/${esc(t.key)}">${esc(t.title)}</a>
-                <span class="muted" style="font-size:.82rem">· ${esc(data.projectNames[t.projectId] ?? '')}</span></div>
-              <span class="badge${t.status === 'done' ? '' : ' amber'}">${esc(STATUS_LABEL[t.status])}</span>
-            </div>`,
+          (w) =>
+            `<div class="row" style="padding:.3rem 0"><div>${w.id ? avatar(w.name) : ''} ${esc(w.name)}</div><div class="mini">${w.open} open</div></div>`,
         )
         .join('')}</div>`
-    : '<div class="empty">🪹 No tickets yet — open one from a project board.</div>'
+    : ''
 
-  return chrome(
-    data.org.name,
-    data.actor,
-    `<h1>${esc(data.org.name)}</h1><p class="muted">${esc(data.org.slug)}</p>
-    ${stats}
-    <h2>Recent tickets</h2>${recent}
-    <h2>Teams &amp; projects</h2>${teams}`,
-  )
+  // Agents.
+  const agents = `<div class="card"><div class="row"><strong>Agents</strong><a class="mini" href="/app/agents">registry →</a></div>
+    <div class="row" style="margin-top:.4rem"><span class="badge amber">${m.agents.active} active</span><span class="mini">${m.agents.suspended} suspended · ${m.agents.revoked} revoked · ${m.agents.total} total</span></div></div>`
+
+  // CRM snapshot.
+  const crm = m.customers.total
+    ? `<div class="card"><div class="row"><strong>${esc(CRM_LABEL_PLURAL)}</strong><a class="mini" href="/app/customers">all →</a></div>
+      <div class="row" style="margin-top:.4rem;flex-wrap:wrap;gap:.4rem">${m.customers.byStage.map((s) => `<span class="badge">${esc(titleCase(s.stage))} ${s.count}</span>`).join('')}<span class="mini">${m.customers.total} total</span></div></div>`
+    : ''
+
+  // Recent activity (admin-only; null when the actor can't read the audit log).
+  const activity = m.activity?.length
+    ? `<div class="card feed">${m.activity
+        .map(
+          (e) =>
+            `<div class="row" style="padding:.3rem 0"><div><span class="key">${esc(e.action)}</span> <span class="mini">${esc(e.targetType)} · ${esc(m.names[e.principalId] ?? e.principalId)}</span></div><span class="mini ts">${esc(e.createdAt)}</span></div>`,
+        )
+        .join('')}</div>`
+    : ''
+
+  const body = `<h1>${esc(m.org.name)}</h1><p class="muted">${esc(m.org.slug)}</p>
+    ${kpis}
+    <h2>Pipeline</h2>${statusBar}
+    <h2>Needs attention</h2>${attn}
+    <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start">
+      <div><h2>Workload</h2>${workload || '<div class="empty">🪹 Nothing assigned.</div>'}</div>
+      <div><h2>Status</h2>${agents}${crm}${activity ? `<h2>Recent activity</h2>${activity}` : ''}</div>
+    </div>
+    <h2>Projects</h2>${teamBlocks}${orphanBlock}`
+
+  return chrome(m.org.name, actor, body)
 }
 
 const STATUS_LABEL: Record<TicketStatus, string> = {

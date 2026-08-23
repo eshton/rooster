@@ -31,6 +31,93 @@ describe('dashboard views (pure)', () => {
     expect(v.loginPage({ providers: ['github'] })).toContain('Continue with github')
   })
 
+  it('buildOverview aggregates workspace-wide rollups from all tickets', () => {
+    const org = { name: 'Acme', slug: 'acme' } as never
+    const teams = [{ id: 't1', key: 'ENG', name: 'Eng' }] as never
+    const projects = [
+      { id: 'p1', teamId: 't1', key: 'AAA', name: 'Alpha', archived: false },
+    ] as never
+    const members = [
+      { principalId: 'u1', displayName: 'Ann', email: null, type: 'user', role: 'owner' },
+    ] as never
+    const agents = [{ status: 'active' }, { status: 'suspended' }] as never
+    const customers = [{ lifecycleStage: 'lead' }] as never
+    const allTickets = [
+      {
+        id: 'a',
+        projectId: 'p1',
+        key: 'AAA-1',
+        title: 'urgent overdue',
+        status: 'in_progress',
+        priority: 'urgent',
+        assigneeId: 'u1',
+        dueDate: '2020-01-01',
+        estimate: 5,
+        labels: [],
+        createdAt: '2026-01-02',
+      },
+      {
+        id: 'b',
+        projectId: 'p1',
+        key: 'AAA-2',
+        title: 'done',
+        status: 'done',
+        priority: 'none',
+        assigneeId: null,
+        dueDate: null,
+        estimate: 3,
+        labels: [],
+        createdAt: '2026-01-01',
+      },
+      {
+        id: 'c',
+        projectId: 'p1',
+        key: 'AAA-3',
+        title: 'open unassigned',
+        status: 'todo',
+        priority: 'low',
+        assigneeId: null,
+        dueDate: null,
+        estimate: null,
+        labels: [],
+        createdAt: '2026-01-03',
+      },
+    ] as never
+
+    const m = v.buildOverview({
+      org,
+      teams,
+      projects,
+      members,
+      agents,
+      allTickets,
+      customers,
+      activity: null,
+    })
+    expect(m.kpi).toMatchObject({
+      total: 3,
+      open: 2,
+      urgent: 1,
+      overdue: 1,
+      unassigned: 1,
+      inProgress: 1,
+      openPoints: 5,
+    })
+    expect(m.statusCounts.done).toBe(1)
+    expect(m.rollups[0]).toMatchObject({ total: 3, done: 1, open: 2, urgent: 1, overdue: 1 })
+    expect(m.workload).toContainEqual({ id: 'u1', name: 'Ann', open: 1 })
+    expect(m.workload).toContainEqual({ id: null, name: 'Unassigned', open: 1 })
+    expect(m.agents).toMatchObject({ active: 1, suspended: 1, total: 2 })
+    expect(m.customers).toMatchObject({ total: 1, byStage: [{ stage: 'lead', count: 1 }] })
+
+    // The renderer surfaces the sections and stays form-free (read-only).
+    const html = v.orgOverview(m, actor)
+    expect(html).toContain('Needs attention')
+    expect(html).toContain('Pipeline')
+    expect(html).toContain('Alpha') // project rollup
+    expect(html).not.toContain('<form method="post"')
+  })
+
   describe('renderMarkdown', () => {
     it('renders headings, bold, inline code and lists', () => {
       const h = v.renderMarkdown('## Title\n\nSome **bold** and `code`.\n\n- one\n- two')
@@ -142,6 +229,10 @@ describe('dashboard (authenticated)', () => {
     const html = await res.text()
     expect(html).toContain('Acme')
     expect(html).toContain('ROOST')
+    // The richer overview surfaces its aggregate sections (ROO-74).
+    expect(html).toContain('Pipeline')
+    expect(html).toContain('Needs attention')
+    expect(html).toContain('Projects')
   })
 
   it('renders the agent registry', async () => {
