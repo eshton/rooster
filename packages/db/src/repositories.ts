@@ -85,6 +85,13 @@ export interface TicketRepository {
     opts?: ListOptions & { status?: string; assigneeId?: Id; milestoneId?: Id },
   ): Promise<Ticket[]>
   /**
+   * Every ticket in the org (across all projects), newest first — the single
+   * query that backs the dashboard overview's workspace-wide rollups, replacing
+   * a per-project fan-out. Uses a higher cap than the per-project `list` so the
+   * aggregates aren't silently truncated (ROO-74).
+   */
+  listAllForOrg(orgId: Id, opts?: ListOptions): Promise<Ticket[]>
+  /**
    * Tickets across the org assigned to a principal — as the primary
    * (`assigneeId`) OR a co-assignee (the `ticket_assignees` join).
    */

@@ -171,36 +171,24 @@ export function mountDashboard(app: Hono, ctx: ServerContext): void {
 
   app.get('/app', (c) =>
     page(c, async (actor) => {
-      const [org, teams, projects, members, agents] = await Promise.all([
+      const [org, teams, projects, members, agents, allTickets, customers] = await Promise.all([
         ctx.services.orgs.get(actor),
         ctx.services.teams.list(actor),
         ctx.services.projects.list(actor),
         ctx.services.members.listOrg(actor),
         ctx.services.agents.list(actor),
+        // One org-wide query instead of a per-project fan-out (ROO-74).
+        ctx.services.tickets.listAllForOrg(actor),
+        ctx.services.customers.list(actor).catch(() => []),
       ])
-      const ticketLists = await Promise.all(
-        projects.map((p) => ctx.services.tickets.list(actor, p.id, { limit: 200 })),
-      )
-      const allTickets = ticketLists.flat()
-      const open = allTickets.filter((t) => t.status !== 'done' && t.status !== 'canceled').length
-      const recent = [...allTickets]
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .slice(0, 6)
-      const projectNames = Object.fromEntries(projects.map((p) => [p.id, p.name]))
-      return v.orgOverview({
-        org,
-        teams,
-        projects,
+
+      // Recent org-wide activity — admin-only (audit:read); degrade to none.
+      const activity = await ctx.services.audit.list(actor, { limit: 8 }).catch(() => null)
+
+      return v.orgOverview(
+        v.buildOverview({ org, teams, projects, members, agents, allTickets, customers, activity }),
         actor,
-        stats: {
-          tickets: allTickets.length,
-          open,
-          people: members.filter((m) => m.type === 'user').length,
-          agents: agents.length,
-        },
-        recent,
-        projectNames,
-      })
+      )
     }),
   )
 

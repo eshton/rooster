@@ -115,6 +115,8 @@ export interface TicketService {
   getContext(actor: Actor, id: Id): Promise<TicketContext>
   getByKey(actor: Actor, key: string): Promise<Ticket>
   list(actor: Actor, projectId: Id, opts?: ListOptions & TicketListFilter): Promise<Ticket[]>
+  /** Every ticket in the org (all projects), newest first — backs the dashboard overview. */
+  listAllForOrg(actor: Actor, opts?: ListOptions): Promise<Ticket[]>
   /** Tickets across the org assigned to the calling principal. */
   myTickets(actor: Actor, opts?: ListOptions): Promise<Ticket[]>
   /** Find related tickets across the org that carry a given tag. */
@@ -500,6 +502,11 @@ export function createTicketService(
     async list(actor, projectId, opts) {
       authorize(actor, 'ticket:read')
       return repos.tickets.list(actor.orgId, projectId, opts)
+    },
+
+    async listAllForOrg(actor, opts) {
+      authorize(actor, 'ticket:read')
+      return repos.tickets.listAllForOrg(actor.orgId, opts)
     },
 
     async myTickets(actor, opts) {

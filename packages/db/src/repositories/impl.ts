@@ -312,6 +312,19 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
             .limit(limitOf(opts))
         ).map(toTicket)
       },
+      async listAllForOrg(orgId, opts) {
+        // Higher cap than per-project `list` (limitOf's 200) so overview rollups
+        // aren't undercounted. One org-scoped query, newest first.
+        const cap = Math.min(Math.max(opts?.limit ?? 5000, 1), 20_000)
+        return (
+          await db
+            .select()
+            .from(s.tickets)
+            .where(eq(s.tickets.orgId, orgId))
+            .orderBy(desc(s.tickets.createdAt))
+            .limit(cap)
+        ).map(toTicket)
+      },
       async listAssigned(orgId, assigneeId, opts) {
         // Primary assignee OR a co-assignee via the join table.
         return (
