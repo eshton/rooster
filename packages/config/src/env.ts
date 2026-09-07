@@ -253,12 +253,15 @@ export interface RoosterConfig {
     emailFrom?: string
   }
   /**
-   * Optional embeddings provider for semantic search. Present only when both the
-   * URL and API key are configured; otherwise semantic search is unconfigured.
+   * Optional embeddings provider for semantic search. Present whenever the URL
+   * is configured; otherwise semantic search is unconfigured. The API key is
+   * optional — a local embedder (Ollama, LM Studio, llama.cpp) needs no key, so
+   * a bare `ROOSTER_EMBEDDING_URL` is enough to turn semantic search on.
    */
   embedding?: {
     url: string
-    apiKey: string
+    /** Bearer token; omitted for keyless local embedders. */
+    apiKey?: string
     /** Embedding model name (default `text-embedding-3-small`). */
     model: string
   }
@@ -353,24 +356,27 @@ export function loadConfig(
         }
       : undefined
 
-  // Embeddings are an OPTIONAL feature. A half-set pair is a mistake worth
-  // flagging, but must NOT be fatal — a thrown config error here crashes the
-  // whole server (all routes, healthz included), which is far worse than semantic
-  // search being off. So warn and disable, don't throw.
-  if (Boolean(env.ROOSTER_EMBEDDING_URL) !== Boolean(env.ROOSTER_EMBEDDING_API_KEY)) {
+  // Embeddings are an OPTIONAL feature. The URL alone enables it: hosted
+  // providers (OpenAI, Cloudflare) also need ROOSTER_EMBEDDING_API_KEY, but a
+  // local embedder (Ollama, LM Studio, llama.cpp) is keyless, so we don't force
+  // a key. A key set WITHOUT a URL is a no-op mistake worth flagging — but never
+  // fatal, since a thrown config error here would crash the whole server (all
+  // routes, healthz included), far worse than semantic search being off.
+  if (env.ROOSTER_EMBEDDING_API_KEY && !env.ROOSTER_EMBEDDING_URL) {
     console.warn(
-      '[config] ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY must be set together; ' +
-        'only one is set, so semantic search is DISABLED. Set both to enable it.',
+      '[config] ROOSTER_EMBEDDING_API_KEY is set but ROOSTER_EMBEDDING_URL is not, ' +
+        'so semantic search is DISABLED. Set ROOSTER_EMBEDDING_URL to enable it.',
     )
   }
-  const embedding =
-    env.ROOSTER_EMBEDDING_URL && env.ROOSTER_EMBEDDING_API_KEY
-      ? {
-          url: env.ROOSTER_EMBEDDING_URL,
-          apiKey: env.ROOSTER_EMBEDDING_API_KEY,
-          model: env.ROOSTER_EMBEDDING_MODEL ?? 'text-embedding-3-small',
-        }
-      : undefined
+  const embedding = env.ROOSTER_EMBEDDING_URL
+    ? {
+        url: env.ROOSTER_EMBEDDING_URL,
+        // Optional: keyless for local embedders. `embedderFor` only sends an
+        // Authorization header when this is present.
+        apiKey: env.ROOSTER_EMBEDDING_API_KEY,
+        model: env.ROOSTER_EMBEDDING_MODEL ?? 'text-embedding-3-small',
+      }
+    : undefined
 
   // Same for the optional reranker — warn + disable, never fatal.
   if (Boolean(env.ROOSTER_RERANK_URL) !== Boolean(env.ROOSTER_RERANK_API_KEY)) {

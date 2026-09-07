@@ -95,6 +95,28 @@ You should see the MCP endpoint and agent docs URLs logged. Check:
 
 ## 4. Deploy targets
 
+### All-in-one — everything on your machine, batteries included (recommended)
+
+One command, no API keys, no external services, no cloud:
+
+```bash
+docker compose -f docker-compose.allinone.yml up
+```
+
+This brings up Rooster (local single-user mode, SQLite) **and** a local
+[Ollama](https://ollama.com) running the `nomic-embed-text` embedder (pulled on
+first boot), with **semantic search wired on out of the box** — every ticket,
+conversation and context file is embedded locally, so `find_similar_tickets`,
+`recall_conversations` and `recall_context` all work and **your data never leaves
+the box** (no OpenAI, no Cloudflare, no key). Point your agent at
+`http://localhost:3000/mcp` with `Authorization: Bearer local-dev-token-change-me`
+and open `http://localhost:3000/app` — you're already signed in as the owner.
+
+The defaults are dev conveniences; override `ROOSTER_LOCAL_TOKEN` /
+`ROOSTER_AUTH_SECRET` if the box isn't just yours (see the security note under
+**Local mode** below — Rooster is bound to `127.0.0.1` regardless). Domain data
+persists in the `rooster-data` volume, pulled models in `ollama-models`.
+
 ### Published image — zero dependencies (SQLite)
 
 The fastest way to a personal instance: pull the published image, no clone or
@@ -362,7 +384,30 @@ stored and searched with **libSQL native vectors**, so this needs a
 libSQL/Turso (or local SQLite) `DATABASE_URL` — not the frozen Postgres path; no
 separate vector database.
 
-It's opt-in. Point Rooster at any OpenAI-compatible `/embeddings` endpoint:
+It's opt-in. Point Rooster at any OpenAI-compatible `/embeddings` endpoint.
+**The `docker-compose.allinone.yml` path sets all of this up for you** with a
+bundled local Ollama — reach for the manual config below only to use a different
+model or a hosted provider.
+
+**Local, keyless (Ollama, LM Studio, llama.cpp).** A local embedder needs no API
+key, so `ROOSTER_EMBEDDING_URL` **alone** turns semantic search on — your data
+never leaves the machine:
+
+```bash
+# Ollama (run `ollama pull nomic-embed-text` first; 768 dims)
+ROOSTER_EMBEDDING_URL=http://localhost:11434/v1/embeddings
+ROOSTER_EMBEDDING_MODEL=nomic-embed-text
+ROOSTER_EMBEDDING_DIMS=768
+# No ROOSTER_EMBEDDING_API_KEY needed.
+```
+
+> **From inside Docker → host Ollama:** a container can't reach the host's
+> `localhost`. Use `http://host.docker.internal:11434/v1/embeddings` (add
+> `extra_hosts: ["host.docker.internal:host-gateway"]` to the service on Linux),
+> or run Ollama as a compose service and use `http://ollama:11434/...` — which is
+> exactly what `docker-compose.allinone.yml` does.
+
+**Hosted providers** need a key alongside the URL:
 
 ```bash
 # OpenAI (text-embedding-3-small → 1536 dims, the defaults)
@@ -382,8 +427,11 @@ ROOSTER_EMBEDDING_MODEL=@cf/baai/bge-large-en-v1.5
 ROOSTER_EMBEDDING_DIMS=1024
 ```
 
-The URL and key must be set together (set only one and startup fails fast); with
-neither set the recall tools report that semantic search is unconfigured.
+Setting `ROOSTER_EMBEDDING_URL` enables semantic search; the API key is optional
+(hosted providers need it, local embedders don't). A key set **without** a URL is
+ignored with a startup warning, and with neither set the recall tools report that
+semantic search is unconfigured. None of these crash the server — semantic search
+is an optional feature that fails soft.
 
 **`ROOSTER_EMBEDDING_DIMS` must match your model's output size.** It sizes the
 `embedding F32_BLOB(<dims>)` column of the runtime `embeddings` table. If they
