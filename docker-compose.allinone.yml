@@ -63,10 +63,11 @@ services:
       ROOSTER_BASE_URL: http://localhost:3000
       PORT: '3000'
       # --- semantic search via the local Ollama embedder -------------------
-      # Keyless: a local embedder needs no API key (ROO change: URL alone enables it).
+      # Keyless: a local embedder needs no API key (URL alone enables it).
+      # ROOSTER_EMBEDDING_DIMS is inferred from the model name (nomic-embed-text
+      # is 768), so it's omitted here — set it only for an unlisted model.
       ROOSTER_EMBEDDING_URL: http://ollama:11434/v1/embeddings
       ROOSTER_EMBEDDING_MODEL: nomic-embed-text
-      ROOSTER_EMBEDDING_DIMS: '768' # must match the model — nomic-embed-text is 768
     ports:
       # Loopback on purpose — local mode is single-user, token-only auth.
       - '127.0.0.1:3000:3000'

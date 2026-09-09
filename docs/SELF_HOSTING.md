@@ -394,10 +394,10 @@ key, so `ROOSTER_EMBEDDING_URL` **alone** turns semantic search on — your data
 never leaves the machine:
 
 ```bash
-# Ollama (run `ollama pull nomic-embed-text` first; 768 dims)
+# Ollama (run `ollama pull nomic-embed-text` first)
 ROOSTER_EMBEDDING_URL=http://localhost:11434/v1/embeddings
 ROOSTER_EMBEDDING_MODEL=nomic-embed-text
-ROOSTER_EMBEDDING_DIMS=768
+# ROOSTER_EMBEDDING_DIMS is inferred from the model (nomic-embed-text → 768).
 # No ROOSTER_EMBEDDING_API_KEY needed.
 ```
 
@@ -433,13 +433,16 @@ ignored with a startup warning, and with neither set the recall tools report tha
 semantic search is unconfigured. None of these crash the server — semantic search
 is an optional feature that fails soft.
 
-**`ROOSTER_EMBEDDING_DIMS` must match your model's output size.** It sizes the
-`embedding F32_BLOB(<dims>)` column of the runtime `embeddings` table. If they
-disagree, every embed insert fails on a dimension mismatch — Rooster logs a loud
-`[embeddings] table is F32_BLOB(x) but ROOSTER_EMBEDDING_DIMS=y …` at startup so
-it's not silent, but no vectors are stored until you fix it.
+**`ROOSTER_EMBEDDING_DIMS` is inferred from the model name** for the models
+below — you only set it explicitly for a model not in the table (an explicit
+value always wins), or to override. It sizes the `embedding F32_BLOB(<dims>)`
+column of the runtime `embeddings` table, so it must match the model's output
+size. If they disagree, every embed insert fails on a dimension mismatch —
+Rooster logs a loud `[embeddings] table is F32_BLOB(x) but
+ROOSTER_EMBEDDING_DIMS=y …` at startup so it's not silent, but no vectors are
+stored until you fix it (an unlisted model defaults to 1536).
 
-| Model | `ROOSTER_EMBEDDING_DIMS` |
+| Model | dims (inferred) |
 | ----- | ----------------------- |
 | OpenAI `text-embedding-3-small` | 1536 |
 | OpenAI `text-embedding-3-large` | 3072 |

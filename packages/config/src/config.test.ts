@@ -235,4 +235,48 @@ describe('loadConfig', () => {
       /environment configuration/,
     )
   })
+
+  it('infers embeddingDims from the model name when DIMS is unset', () => {
+    // A local Ollama embedder, no explicit DIMS → inferred from the model (768).
+    const ollama = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'nomic-embed-text',
+    })
+    expect(ollama.embeddingDims).toBe(768)
+
+    // Ollama `:tag` suffixes are stripped before lookup.
+    const tagged = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'nomic-embed-text:latest',
+    })
+    expect(tagged.embeddingDims).toBe(768)
+
+    // Default model (text-embedding-3-small) → 1536.
+    const openai = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings',
+      ROOSTER_EMBEDDING_API_KEY: 'sk-test',
+    })
+    expect(openai.embeddingDims).toBe(1536)
+
+    // Unknown model → falls back to 1536.
+    const unknown = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'some-custom-model',
+    })
+    expect(unknown.embeddingDims).toBe(1536)
+  })
+
+  it('lets an explicit ROOSTER_EMBEDDING_DIMS override model inference', () => {
+    const cfg = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'nomic-embed-text', // would infer 768
+      ROOSTER_EMBEDDING_DIMS: '512',
+    })
+    expect(cfg.embeddingDims).toBe(512)
+  })
 })

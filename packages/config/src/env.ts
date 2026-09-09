@@ -139,8 +139,12 @@ const envSchema = z.object({
    * is read even when no embedder is configured. Changing it on an existing
    * database requires dropping the `embeddings` table (it then recreates;
    * re-embed via `backfill_embeddings`).
+   *
+   * Optional: when unset, it's inferred from the model name (see
+   * {@link MODEL_EMBEDDING_DIMS}), so most local/hosted models need no explicit
+   * value. Falls back to 1536 for an unknown model. An explicit value always wins.
    */
-  ROOSTER_EMBEDDING_DIMS: z.coerce.number().int().min(1).max(65_536).default(1536),
+  ROOSTER_EMBEDDING_DIMS: z.coerce.number().int().min(1).max(65_536).optional(),
 
   /**
    * Text chunking for embeddings/RAG (character counts, ~4 chars/token). Long
@@ -299,6 +303,49 @@ export interface RoosterConfig {
 
 function provider(id?: string, secret?: string): OAuthProvider | undefined {
   return id && secret ? { clientId: id, clientSecret: secret } : undefined
+}
+
+/**
+ * Known embedding models → their output dimensionality, so `ROOSTER_EMBEDDING_DIMS`
+ * can be inferred from the model name and self-hosters don't have to look it up.
+ * Keyed by the lowercased model name with any Ollama `:tag` suffix stripped
+ * (see {@link embeddingDimsFor}). An explicit `ROOSTER_EMBEDDING_DIMS` always
+ * overrides this; an unknown model falls back to {@link DEFAULT_EMBEDDING_DIMS}.
+ */
+export const MODEL_EMBEDDING_DIMS: Readonly<Record<string, number>> = {
+  // OpenAI
+  'text-embedding-3-small': 1536,
+  'text-embedding-3-large': 3072,
+  'text-embedding-ada-002': 1536,
+  // Ollama / local (OpenAI-compatible /v1/embeddings)
+  'nomic-embed-text': 768,
+  embeddinggemma: 768,
+  'mxbai-embed-large': 1024,
+  'all-minilm': 384,
+  'snowflake-arctic-embed': 1024,
+  // Cloudflare Workers AI (BGE family)
+  '@cf/baai/bge-m3': 1024,
+  '@cf/baai/bge-large-en-v1.5': 1024,
+  '@cf/baai/bge-base-en-v1.5': 768,
+  '@cf/baai/bge-small-en-v1.5': 384,
+}
+
+/** Fallback embedding width when the model is unknown (OpenAI's default size). */
+export const DEFAULT_EMBEDDING_DIMS = 1536
+
+/**
+ * Resolve the embeddings table width: an explicit `ROOSTER_EMBEDDING_DIMS` wins;
+ * otherwise infer it from the model name; otherwise fall back to the default.
+ * The lookup lowercases and strips an Ollama `:tag` (e.g. `nomic-embed-text:latest`).
+ */
+export function embeddingDimsFor(explicit: number | undefined, model: string | undefined): number {
+  if (explicit !== undefined) return explicit
+  const key = model?.toLowerCase().split(':')[0]
+  if (key) {
+    const known = MODEL_EMBEDDING_DIMS[key]
+    if (known !== undefined) return known
+  }
+  return DEFAULT_EMBEDDING_DIMS
 }
 
 /**
@@ -495,7 +542,8 @@ export function loadConfig(
       emailFrom: env.ROOSTER_EMAIL_FROM,
     },
     embedding,
-    embeddingDims: env.ROOSTER_EMBEDDING_DIMS,
+    // Explicit env wins; else inferred from the model name; else the default.
+    embeddingDims: embeddingDimsFor(env.ROOSTER_EMBEDDING_DIMS, embedding?.model),
     chunking,
     ragOverfetch: env.ROOSTER_RAG_OVERFETCH,
     rerank,
