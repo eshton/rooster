@@ -7,16 +7,24 @@ import { parse } from '../validate.js'
 import { type Id, type RagSearchInput, ragSearchInput } from './deps.js'
 
 /** Embedding `source_type` discriminators (mirror the per-service constants). */
-export const RAG_SOURCE_TYPES = ['ticket', 'message', 'context_file', 'interaction'] as const
+export const RAG_SOURCE_TYPES = [
+  'ticket',
+  'comment',
+  'message',
+  'context_file',
+  'interaction',
+] as const
 export type RagSourceType = (typeof RAG_SOURCE_TYPES)[number]
 
 /**
- * The permission each source requires to appear in results. Tickets ride the
- * base `ticket:read`; transcripts/context need `conversation:read`; CRM
- * interactions need `crm:read`. A source is included only if the actor holds it.
+ * The permission each source requires to appear in results. Tickets and comments
+ * ride the base `ticket:read` (comments are plain ticket discussion); transcripts
+ * /context need `conversation:read`; CRM interactions need `crm:read`. A source
+ * is included only if the actor holds it.
  */
 const SOURCE_PERMISSION: Record<RagSourceType, Permission> = {
   ticket: 'ticket:read',
+  comment: 'ticket:read',
   message: 'conversation:read',
   context_file: 'conversation:read',
   interaction: 'crm:read',
@@ -229,6 +237,21 @@ export function createSearchService(
             ticketId: m.ticketId,
             score: h.score,
             ...passageOf(m.body, h),
+          }
+        }
+        if (h.sourceType === 'comment') {
+          const c = await repos.comments.getById(actor.orgId, h.sourceId)
+          if (!c) return null
+          if (input.ticketId && c.ticketId !== input.ticketId) return null
+          const t = await repos.tickets.getById(actor.orgId, c.ticketId)
+          if (input.projectId && t?.projectId !== input.projectId) return null
+          return {
+            sourceType: 'comment',
+            sourceKey: t ? `${t.key}#comment` : c.id,
+            projectKey: t ? await projectKeyOf(t.projectId) : '',
+            ticketId: c.ticketId,
+            score: h.score,
+            ...passageOf(c.body, h),
           }
         }
         if (h.sourceType === 'context_file') {

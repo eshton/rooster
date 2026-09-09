@@ -88,8 +88,8 @@ clear "not configured" error and everything else still works.
 | `recall_conversations` | `conversation:read` | Semantic recall over conversation traces across all projects; filter by `stage` / `role` |
 | `save_context_file` | `project:write` | Save (or update) a named context document on a project; text is stored and embedded |
 | `list_context_files` | `ticket:read` | A project's context documents (optionally only those pinned to a ticket) |
-| `recall_context` | `conversation:read` | Unified semantic recall across tickets, conversation traces and context files |
-| `rag_search` | `ticket:read` | Grounded RAG retrieval: hybrid keyword+semantic search over the corpus, returning ranked cited hits + a ready-to-ground `contextBlock` (message/context_file hits need `conversation:read`) |
+| `recall_context` | `conversation:read` | Unified semantic recall across tickets, ticket comments, conversation traces and context files |
+| `rag_search` | `ticket:read` | Grounded RAG retrieval: hybrid keyword+semantic search over the corpus (tickets, comments, messages, context files, interactions), returning ranked cited hits + a ready-to-ground `contextBlock` (comment hits ride `ticket:read`; message/context_file hits need `conversation:read`) |
 
 ## Assignees, comments & attachments
 

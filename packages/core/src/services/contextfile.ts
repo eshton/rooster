@@ -24,10 +24,19 @@ import {
 
 const EMBED_SOURCE_CONTEXT_FILE = 'context_file'
 const EMBED_SOURCE_INTERACTION = 'interaction'
+const EMBED_SOURCE_COMMENT = 'comment'
 
 /** A unified recall hit, discriminated by which kind of source matched. */
 export type RecallContextHit =
   | { source: 'ticket'; ticketId: Id; ticketKey: string; snippet: string; score: number }
+  | {
+      source: 'comment'
+      commentId: Id
+      ticketId: Id
+      ticketKey: string
+      snippet: string
+      score: number
+    }
   | {
       source: 'message'
       messageId: Id
@@ -186,6 +195,21 @@ export function createContextFileService(
             ticketId: t.id,
             ticketKey: t.key,
             snippet: snippetOf(`${t.title}\n${t.description ?? ''}`),
+            score,
+          })
+        } else if (hit.sourceType === EMBED_SOURCE_COMMENT) {
+          // Comments are plain ticket discussion (readable with ticket:read),
+          // but recall_context's own gate is conversation:read, so no extra check.
+          const c = await repos.comments.getById(actor.orgId, hit.sourceId)
+          if (!c) continue
+          const t = await repos.tickets.getById(actor.orgId, c.ticketId)
+          if (!t) continue
+          results.push({
+            source: 'comment',
+            commentId: c.id,
+            ticketId: t.id,
+            ticketKey: t.key,
+            snippet: snippetOf(c.body),
             score,
           })
         } else if (hit.sourceType === 'message') {
