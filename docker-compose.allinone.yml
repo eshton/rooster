@@ -1,0 +1,79 @@
+# Rooster — the whole thing on your machine, batteries included.
+#
+#   docker compose -f docker-compose.allinone.yml up
+#
+# That's it. No API keys, no external services, no cloud. You get:
+#   • Rooster in local single-user mode (no OAuth, no login) on SQLite
+#   • A local Ollama running the `nomic-embed-text` embedder (pulled on first boot)
+#   • Semantic search wired on out of the box — every ticket, conversation and
+#     context file is embedded locally, so "find me tickets like this" and
+#     "what did we promise this customer?" work with your data never leaving the box.
+#
+# Then point your agent's MCP client at http://localhost:3000/mcp with header
+#   Authorization: Bearer local-dev-token-change-me
+# and open http://localhost:3000/app — you're already signed in as the owner.
+#
+# SECURITY: local mode is token-only auth for a single trusted user on your own
+# machine. Rooster is bound to 127.0.0.1 below (never exposed to your network)
+# and refuses to run local mode on a non-localhost base URL. The defaults below
+# are dev conveniences — override ROOSTER_LOCAL_TOKEN / ROOSTER_AUTH_SECRET (e.g.
+# `ROOSTER_LOCAL_TOKEN=$(openssl rand -base64 24) docker compose -f … up`) if this
+# box isn't just yours. Data persists in the `rooster-data` volume; pulled models
+# in `ollama-models`.
+
+services:
+  # Local embedder — OpenAI-compatible /v1/embeddings, keyless, on your machine.
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-models:/root/.ollama
+    # `ollama list` talks to the local daemon; once it answers, serve is up.
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published to the host — only Rooster (same compose network) reaches it.
+
+  # One-shot: pull the embedding model, then exit. Server waits for this to
+  # complete so the first embed request can't race an unpulled model.
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ['ollama', 'pull', 'nomic-embed-text']
+    restart: 'no'
+
+  server:
+    image: ghcr.io/eshton/rooster:latest
+    # Build locally instead of pulling? Swap the line above for:
+    # build: { context: ., dockerfile: apps/server/Dockerfile }
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+    environment:
+      # --- frictionless local mode (no login) -------------------------------
+      ROOSTER_LOCAL_MODE: '1'
+      ROOSTER_LOCAL_TOKEN: ${ROOSTER_LOCAL_TOKEN:-local-dev-token-change-me}
+      ROOSTER_AUTH_SECRET: ${ROOSTER_AUTH_SECRET:-change-me-min-16-chars-dev-only}
+      DATABASE_URL: file:/data/rooster.db
+      ROOSTER_BASE_URL: http://localhost:3000
+      PORT: '3000'
+      # --- semantic search via the local Ollama embedder -------------------
+      # Keyless: a local embedder needs no API key (URL alone enables it).
+      # ROOSTER_EMBEDDING_DIMS is inferred from the model name (nomic-embed-text
+      # is 768), so it's omitted here — set it only for an unlisted model.
+      ROOSTER_EMBEDDING_URL: http://ollama:11434/v1/embeddings
+      ROOSTER_EMBEDDING_MODEL: nomic-embed-text
+    ports:
+      # Loopback on purpose — local mode is single-user, token-only auth.
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - rooster-data:/data
+
+volumes:
+  rooster-data:
+  ollama-models:

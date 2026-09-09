@@ -32,7 +32,9 @@ export function embedderFor(config: RoosterConfig): Embedder | undefined {
       const res = await fetch(cfg.url, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${cfg.apiKey}`,
+          // Keyless local embedders (Ollama, LM Studio, llama.cpp) need no
+          // Authorization header; only send one when a key is configured.
+          ...(cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ model: cfg.model, input: texts }),

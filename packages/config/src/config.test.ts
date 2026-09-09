@@ -189,7 +189,7 @@ describe('loadConfig', () => {
     )
   })
 
-  it('builds the embedding config all-or-nothing, defaulting the model', () => {
+  it('builds the embedding config from the URL, defaulting the model', () => {
     expect(loadConfig(baseEnv).embedding).toBeUndefined()
     const cfg = loadConfig({
       ...baseEnv,
@@ -201,16 +201,28 @@ describe('loadConfig', () => {
       apiKey: 'sk-test',
       model: 'text-embedding-3-small',
     })
-    // Only one of the pair set → NOT fatal (an optional feature must never crash
-    // the server): warn + disable, don't throw.
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const partial = loadConfig({
+  })
+
+  it('enables a keyless local embedder from the URL alone (Ollama etc.)', () => {
+    const cfg = loadConfig({
       ...baseEnv,
-      ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings',
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'nomic-embed-text',
     })
+    expect(cfg.embedding).toEqual({
+      url: 'http://ollama:11434/v1/embeddings',
+      apiKey: undefined,
+      model: 'nomic-embed-text',
+    })
+  })
+
+  it('warns and disables when a key is set without a URL', () => {
+    // An optional feature must never crash the server: warn + disable, don't throw.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const partial = loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_API_KEY: 'sk-test' })
     expect(partial.embedding).toBeUndefined()
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('ROOSTER_EMBEDDING_URL and ROOSTER_EMBEDDING_API_KEY'),
+      expect.stringContaining('ROOSTER_EMBEDDING_API_KEY is set but ROOSTER_EMBEDDING_URL'),
     )
     warn.mockRestore()
   })
@@ -222,5 +234,49 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...baseEnv, ROOSTER_EMBEDDING_DIMS: '0' })).toThrow(
       /environment configuration/,
     )
+  })
+
+  it('infers embeddingDims from the model name when DIMS is unset', () => {
+    // A local Ollama embedder, no explicit DIMS → inferred from the model (768).
+    const ollama = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'nomic-embed-text',
+    })
+    expect(ollama.embeddingDims).toBe(768)
+
+    // Ollama `:tag` suffixes are stripped before lookup.
+    const tagged = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'nomic-embed-text:latest',
+    })
+    expect(tagged.embeddingDims).toBe(768)
+
+    // Default model (text-embedding-3-small) → 1536.
+    const openai = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'https://api.openai.com/v1/embeddings',
+      ROOSTER_EMBEDDING_API_KEY: 'sk-test',
+    })
+    expect(openai.embeddingDims).toBe(1536)
+
+    // Unknown model → falls back to 1536.
+    const unknown = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'some-custom-model',
+    })
+    expect(unknown.embeddingDims).toBe(1536)
+  })
+
+  it('lets an explicit ROOSTER_EMBEDDING_DIMS override model inference', () => {
+    const cfg = loadConfig({
+      ...baseEnv,
+      ROOSTER_EMBEDDING_URL: 'http://ollama:11434/v1/embeddings',
+      ROOSTER_EMBEDDING_MODEL: 'nomic-embed-text', // would infer 768
+      ROOSTER_EMBEDDING_DIMS: '512',
+    })
+    expect(cfg.embeddingDims).toBe(512)
   })
 })
