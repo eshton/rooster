@@ -541,6 +541,17 @@ export function createRepositories(db: DB, s: Schema, dialect: Dialect = 'sqlite
           .returning()
         return toComment(row!)
       },
+      async getById(orgId, id) {
+        return first(
+          (
+            await db
+              .select()
+              .from(s.comments)
+              .where(and(eq(s.comments.orgId, orgId), eq(s.comments.id, id)))
+              .limit(1)
+          ).map(toComment),
+        )
+      },
       async listForTicket(orgId, ticketId, opts) {
         return (
           await db

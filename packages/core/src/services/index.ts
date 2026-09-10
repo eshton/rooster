@@ -56,7 +56,7 @@ export function createServices(repos: Repositories, deps: ServiceDeps = {}): Ser
     teams: createTeamService(repos),
     projects: createProjectService(repos),
     tickets: createTicketService(repos, deps.crowNotifier, deps.embedder, deps.chunkConfig),
-    comments: createCommentService(repos, deps.crowNotifier),
+    comments: createCommentService(repos, deps.crowNotifier, deps.embedder, deps.chunkConfig),
     conversation: createConversationService(repos, deps.embedder, deps.chunkConfig),
     contextFiles: createContextFileService(repos, deps.embedder, deps.chunkConfig),
     search: createSearchService(repos, deps.embedder, deps.ragOverfetch, deps.reranker),

@@ -223,7 +223,13 @@ export const recallContextInput = z.object({
 export type RecallContextInput = z.infer<typeof recallContextInput>
 
 /** The kinds of source `rag_search` can retrieve and cite. */
-export const ragSourceTypeSchema = z.enum(['ticket', 'message', 'context_file', 'interaction'])
+export const ragSourceTypeSchema = z.enum([
+  'ticket',
+  'comment',
+  'message',
+  'context_file',
+  'interaction',
+])
 export type RagSourceTypeDto = z.infer<typeof ragSourceTypeSchema>
 
 /**

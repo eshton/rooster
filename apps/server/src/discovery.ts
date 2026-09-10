@@ -157,9 +157,10 @@ not the client.
 - rag_search — grounded retrieval for RAG. Hybrid keyword+semantic search over
   the whole corpus, returning ranked, cited hits PLUS a ready-to-ground
   \`contextBlock\` you paste straight into a prompt. Narrow with \`projectId\`,
-  \`ticketId\` or \`sourceTypes\`. Retrieval only — YOU write the answer from the
-  returned context. Works keyword-only without embeddings; message/context_file
-  hits need conversation:read.
+  \`ticketId\` or \`sourceTypes\` (ticket, comment, message, context_file,
+  interaction). Retrieval only — YOU write the answer from the returned context.
+  Works keyword-only without embeddings; comment hits ride ticket:read, while
+  message/context_file hits need conversation:read.
 - link_tickets / unlink_tickets / list_links — relate tickets beyond the
   parent/subtask hierarchy: "blocks" (and its derived "blocked_by"),
   "duplicates" (↔ "duplicated_by"), or symmetric "relates". blocks links can't

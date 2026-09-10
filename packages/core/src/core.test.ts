@@ -1836,6 +1836,48 @@ describe('semantic search', () => {
     expect(res).toEqual({ embedded: 0, failed: 0, failedProjects: [project.id] })
     list.mockRestore()
   })
+
+  it('embeds ticket comments and surfaces them in rag_search + recall_context (ROO-45)', async () => {
+    const { owner } = await bootstrap()
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const team = await svc.teams.create(owner, { key: 'CMT', name: 'C' })
+    const project = await svc.projects.create(owner, { teamId: team.id, key: 'CMT', name: 'C' })
+    const ticket = await svc.tickets.create(owner, {
+      projectId: project.id,
+      title: 'Investigate deploy flakiness',
+    })
+    const comment = await svc.comments.create(owner, {
+      ticketId: ticket.id,
+      body: 'The rollback procedure hangs when the migration lock is already held.',
+    })
+
+    // rag_search: the comment is a ticket:read source, cited as `<ticketKey>#comment`.
+    const rag = await svc.search.rag(owner, { query: 'rollback migration lock hangs' })
+    const commentHit = rag.hits.find((h) => h.sourceType === 'comment')
+    expect(commentHit?.sourceKey).toBe(`${ticket.key}#comment`)
+    expect(commentHit?.ticketId).toBe(ticket.id)
+
+    // recall_context: unified recall surfaces it with the comment id.
+    const recalled = await svc.contextFiles.recall(owner, {
+      query: 'rollback migration lock hangs',
+    })
+    const rc = recalled.find((r) => r.source === 'comment')
+    expect(rc).toMatchObject({ source: 'comment', commentId: comment.id, ticketId: ticket.id })
+  })
+
+  it('skips embedding a trivially short comment (ROO-45 min length)', async () => {
+    const { owner } = await bootstrap()
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const { project } = await makeProject(owner)
+    const ticket = await svc.tickets.create(owner, { projectId: project.id, title: 'x' })
+    const comment = await svc.comments.create(owner, { ticketId: ticket.id, body: '+1 lgtm' })
+
+    // No embedding row stored for the short comment.
+    const stored = await db.repositories.embeddings.existingFor(owner.orgId, 'comment', [
+      comment.id,
+    ])
+    expect(stored).toEqual([])
+  })
 })
 
 // --- cross-project conversation recall --------------------------------------

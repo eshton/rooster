@@ -201,6 +201,8 @@ export interface ContactRepository {
 
 export interface CommentRepository {
   create(orgId: Id, input: Omit<Comment, keyof TimestampedId | 'orgId'>): Promise<Comment>
+  /** Fetch one comment by id (used to resolve a semantic-search hit). */
+  getById(orgId: Id, id: Id): Promise<Comment | null>
   listForTicket(orgId: Id, ticketId: Id, opts?: ListOptions): Promise<Comment[]>
 }
 
