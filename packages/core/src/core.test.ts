@@ -1878,6 +1878,77 @@ describe('semantic search', () => {
     ])
     expect(stored).toEqual([])
   })
+
+  it('recall_context surfaces messages, context files and interactions by meaning', async () => {
+    const { owner } = await bootstrap()
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const team = await svc.teams.create(owner, { key: 'RCX', name: 'R' })
+    const project = await svc.projects.create(owner, { teamId: team.id, key: 'RCX', name: 'R' })
+    const ticket = await svc.tickets.create(owner, { projectId: project.id, title: 'work item' })
+
+    // A distinctive shared token so the mock embedder ranks all three together.
+    await svc.conversation.append(owner, {
+      ticketId: ticket.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'quokka rollout plan for the launch' }],
+    })
+    await svc.contextFiles.save(owner, {
+      projectId: project.id,
+      name: 'Quokka doc',
+      body: 'quokka onboarding conventions and glossary',
+    })
+    const customer = await svc.customers.create(owner, { name: 'Quokka Co' })
+    await svc.interactions.log(owner, {
+      targetType: 'customer',
+      targetId: customer.id,
+      kind: 'note',
+      body: 'quokka call: promised a Q2 delivery',
+    })
+
+    const hits = await svc.contextFiles.recall(owner, { query: 'quokka', limit: 50 })
+    const sources = new Set(hits.map((h) => h.source))
+    expect(sources.has('message')).toBe(true)
+    expect(sources.has('context_file')).toBe(true)
+    expect(sources.has('interaction')).toBe(true)
+  })
+
+  it('rag_search retrieves + cites every source type with a ready contextBlock', async () => {
+    const { owner } = await bootstrap()
+    const svc = createServices(db.repositories, { embedder: mockEmbedder() })
+    const team = await svc.teams.create(owner, { key: 'RAG', name: 'R' })
+    const project = await svc.projects.create(owner, { teamId: team.id, key: 'RAG', name: 'R' })
+    const ticket = await svc.tickets.create(owner, {
+      projectId: project.id,
+      title: 'quokka ticket',
+      description: 'quokka in the title and body',
+    })
+    await svc.comments.create(owner, { ticketId: ticket.id, body: 'quokka comment with rationale' })
+    await svc.conversation.append(owner, {
+      ticketId: ticket.id,
+      stage: 'plan',
+      messages: [{ role: 'human', body: 'quokka message in the trace' }],
+    })
+    await svc.contextFiles.save(owner, {
+      projectId: project.id,
+      name: 'Quokka doc',
+      body: 'quokka context document',
+    })
+    const customer = await svc.customers.create(owner, { name: 'Quokka Co' })
+    await svc.interactions.log(owner, {
+      targetType: 'customer',
+      targetId: customer.id,
+      kind: 'note',
+      body: 'quokka interaction note',
+    })
+
+    const { hits, contextBlock } = await svc.search.rag(owner, { query: 'quokka', limit: 50 })
+    const types = new Set(hits.map((h) => h.sourceType))
+    for (const t of ['ticket', 'comment', 'message', 'context_file', 'interaction']) {
+      expect(types.has(t as (typeof hits)[number]['sourceType'])).toBe(true)
+    }
+    // The context block cites each hit with its source key.
+    expect(contextBlock).toContain(`${ticket.key}#comment`)
+  })
 })
 
 // --- cross-project conversation recall --------------------------------------
