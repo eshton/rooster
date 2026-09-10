@@ -1858,7 +1858,9 @@ describe('semantic search', () => {
     expect(commentHit?.ticketId).toBe(ticket.id)
 
     // recall_context: unified recall surfaces it with the comment id.
-    const recalled = await svc.contextFiles.recall(owner, { query: 'rollback migration lock hangs' })
+    const recalled = await svc.contextFiles.recall(owner, {
+      query: 'rollback migration lock hangs',
+    })
     const rc = recalled.find((r) => r.source === 'comment')
     expect(rc).toMatchObject({ source: 'comment', commentId: comment.id, ticketId: ticket.id })
   })
@@ -1871,7 +1873,9 @@ describe('semantic search', () => {
     const comment = await svc.comments.create(owner, { ticketId: ticket.id, body: '+1 lgtm' })
 
     // No embedding row stored for the short comment.
-    const stored = await db.repositories.embeddings.existingFor(owner.orgId, 'comment', [comment.id])
+    const stored = await db.repositories.embeddings.existingFor(owner.orgId, 'comment', [
+      comment.id,
+    ])
     expect(stored).toEqual([])
   })
 })
