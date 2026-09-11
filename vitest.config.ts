@@ -42,14 +42,14 @@ export default defineConfig({
       ],
       // Ratchet: a floor the current suite clears. Raise as coverage grows;
       // never lower it below what the suite actually achieves — a drop below
-      // these means new code arrived untested. (The statements floor was 85 but
-      // the suite has long sat at ~84.5, so `pnpm check` failed on a clean tree;
-      // realigned to a floor the current suite clears — ROO-79 tracks raising it.)
+      // these means new code arrived untested. (ROO-79 covered the 0% edge
+      // modules — actor-cache-kv, provisioning, embedder-http, reranker-http —
+      // lifting the suite past the original 85 and letting these ratchet up.)
       thresholds: {
-        statements: 84,
-        branches: 69,
-        functions: 80,
-        lines: 87,
+        statements: 85,
+        branches: 71,
+        functions: 81,
+        lines: 89,
       },
     },
   },
