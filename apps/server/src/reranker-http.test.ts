@@ -30,7 +30,16 @@ describe('rerankerFor', () => {
   })
 
   it('maps ranked {id,score} back to per-document scores by index', async () => {
-    stubFetch(() => json({ result: { response: [{ id: 1, score: 0.9 }, { id: 0, score: 0.2 }] } }))
+    stubFetch(() =>
+      json({
+        result: {
+          response: [
+            { id: 1, score: 0.9 },
+            { id: 0, score: 0.2 },
+          ],
+        },
+      }),
+    )
     const reranker = rerankerFor(loadConfig(withRerank))
     const scores = await reranker?.rerank('q', ['doc-a', 'doc-b'])
     expect(scores).toEqual([0.2, 0.9])

@@ -43,7 +43,10 @@ describe('embedderFor', () => {
   })
 
   it('embeds text and returns vectors ordered by index', async () => {
-    const data = [{ embedding: vec(2), index: 1 }, { embedding: vec(1), index: 0 }]
+    const data = [
+      { embedding: vec(2), index: 1 },
+      { embedding: vec(1), index: 0 },
+    ]
     stubFetch(() => json({ data }))
     const embedder = embedderFor(loadConfig(withKey))
     const out = await embedder?.embed(['a', 'b'])
